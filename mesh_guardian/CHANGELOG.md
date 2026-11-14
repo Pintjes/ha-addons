@@ -4,6 +4,18 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.1] - 2026-11-14
+
+### Changed
+
+- Beta view: status and role in one column (*Status · Role*), shorter role names
+  (*Sleepy end*, *End*…).
+
+### Fixed
+
+- Beta view: the column button no longer covers the last header; with many
+  columns the table scrolls sideways instead of overflowing the card.
+
 ## [1.5.0] - 2026-11-14
 
 ### Added
