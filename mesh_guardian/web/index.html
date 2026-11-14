@@ -106,7 +106,7 @@ const I18N = {
        network:"Network", brs:"Border routers", partitions:"Partitions", omr:"OMR prefix", leader:"Leader",
        unavailable:"Unavailable nodes", recovery:"Automatic recovery", on:"on", off:"off", none:"none",
        live:"live values", polling:"live link down: values read on demand", loading:"loading…", error:"error",
-       updated:"updated", thread_shown:"Nodes shown",
+       updated:"updated", shown_net:"{net} nodes shown",
        storm:"⛈️ Thread storm in progress: pings are spaced out and the hourly sweep is paused.",
        detached24:"detached ×{n} in 24h", other_subnet:"other subnet than Home Assistant", offline:"offline",
        available:"available", unav_short:"unavailable", unav_since:"unavailable since {t}", battery:"battery", mains:"mains",
@@ -146,7 +146,7 @@ const I18N = {
        network:"Réseau", brs:"Border routers", partitions:"Partitions", omr:"Préfixe OMR", leader:"Leader",
        unavailable:"Nodes indisponibles", recovery:"Récupération automatique", on:"activée", off:"désactivée", none:"aucun",
        live:"valeurs en direct", polling:"lien direct coupé : valeurs lues à la demande", loading:"chargement…", error:"erreur",
-       updated:"mis à jour", thread_shown:"Nodes affichées",
+       updated:"mis à jour", shown_net:"Nodes {net} affichées",
        storm:"⛈️ Tempête Thread en cours : les pings sont espacés et le balayage horaire est suspendu.",
        detached24:"détaché ×{n} en 24h", other_subnet:"autre sous-réseau que Home Assistant", offline:"hors ligne",
        available:"disponible", unav_short:"indisponible", unav_since:"indisponible depuis {t}", battery:"pile", mains:"secteur",
@@ -307,7 +307,9 @@ function renderHeader() {
     [L("omr"), (n.omr || []).length ? (n.omr.length > 1 ? `<span class="bad">${n.omr.map(esc).join("<br>")}</span>` : esc(n.omr[0])) : L("none")],
     [L("leader"), esc(n.leader)],
     [L("unavailable"), `<span class="${n.unavailable ? "bad" : "good"}">${n.unavailable}</span> / ${n.nodes}`],
-    [L("thread_shown"), `<span id="shown"></span>`],
+    ...[["thread", "Thread"], ["wifi", "Wi-Fi"], ["ethernet", "Ethernet"]]
+      .filter(([k]) => (D.rows || []).some(r => (r.network || "thread") === k))
+      .map(([k, lab]) => [L("shown_net").replace("{net}", lab), `<span id="shown_${k}"></span>`]),
     [L("recovery"), n.auto_recovery ? L("on") : `<span class="mid">${L("off")}</span>`],
   ];
   $("#net").innerHTML = rows.map(([k, v]) => `<span>${k}</span><span>${v}</span>`).join("");
@@ -365,7 +367,10 @@ function render() {
     ths[1].style.setProperty("--l", w);
     $("#body").querySelectorAll("tr").forEach(tr => tr.children[1].style.setProperty("--l", w));
   }
-  $("#shown").textContent = `${rows.length}/${D.rows.length}`;
+  for (const k of ["thread", "wifi", "ethernet"]) {
+    const el = $("#shown_" + k);
+    if (el) el.textContent = `${rows.filter(r => (r.network || "thread") === k).length}/${D.rows.length}`;
+  }
   status();
 }
 
