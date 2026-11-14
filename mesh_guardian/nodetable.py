@@ -209,11 +209,14 @@ def routes_to_br(thread, labels, br_exts, rlocs, parents):
 
     def link_cost(e):
         """Cost of a direct link, from the link quality in both directions (Thread)."""
-        if not e or not e.get("9"):
+        if not e:
             return None
-        return lq_cost.get(min(e.get("5") or 0, e.get("6") or 0))
+        lq = min(e.get("5") or 0, e.get("6") or 0)
+        return lq_cost.get(lq) if e.get("9") or lq else None
 
     for nid, v in thread.items():
+        if nid in parents:
+            continue   # an end device sends through its parent (its own route table is stale)
         table = {rt["2"]: rt for rt in v["attrs"].get("0/53/8") or []
                  if isinstance(rt, dict) and rt.get("2") is not None}
         best = None
@@ -227,8 +230,10 @@ def routes_to_br(thread, labels, br_exts, rlocs, parents):
             if direct is not None:
                 options.append((direct, None))
             hop = rt.get("3")
-            if hop not in (None, 63, rid) and rt.get("4") is not None and link_cost(table.get(hop)) is not None:
-                options.append((rt["4"] + link_cost(table[hop]), hop))
+            if hop not in (None, 63, rid) and rt.get("4") is not None:
+                first = link_cost(table.get(hop))
+                # link quality to the next hop not published: count it as one good hop
+                options.append((rt["4"] + (first if first is not None else 1), hop))
             for cost, via in options:
                 if cost < 16 and (best is None or cost < best[1]):
                     best = (dest, cost, via)
@@ -236,8 +241,6 @@ def routes_to_br(thread, labels, br_exts, rlocs, parents):
             out[nid] = {"br": best[0], "via": name_of(best[2]) if best[2] is not None else None, "cost": best[1]}
     by_name = {v["name"]: k for k, v in thread.items()}
     for nid, p in parents.items():   # end devices: their parent, then the parent's path
-        if nid in out:
-            continue
         if p[0] in br_names:
             out[nid] = {"br": p[0], "via": None, "cost": 0, "parent": p[0]}
         elif by_name.get(p[0]) in out:
