@@ -21,6 +21,7 @@ LOG = logging.getLogger("mg.web")
 PORT = 8790
 ALLOWED = {"172.30.32.2", "127.0.0.1", "::1"}
 PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "index.html")
+BETA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "beta.html")
 
 
 class WebUI:
@@ -55,9 +56,9 @@ class WebUI:
                     return
                 path, _, query = self.path.partition("?")
                 path = path.rstrip("/")
-                if path in ("", "/index.html"):
+                if path in ("", "/index.html", "/beta.html"):
                     try:
-                        with open(PAGE, "rb") as f:
+                        with open(BETA if path == "/beta.html" else PAGE, "rb") as f:
                             self._send(200, f.read(), "text/html; charset=utf-8")
                     except OSError:
                         self._send(500, '{"error": "page not found"}')
