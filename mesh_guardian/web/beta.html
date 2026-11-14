@@ -104,9 +104,25 @@
   .chip[aria-pressed="true"] { background: var(--acc-soft); border-color: var(--acc); color: var(--acc-txt); font-weight: 600; }
   .chip .n { color: var(--mut); margin-left: 4px; }
 
-  .list { overflow: hidden; }
+  .list { overflow: visible; }
+  .list .row:last-child { border-radius: 0 0 var(--r) var(--r); }
   .cols, .row { display: grid; gap: 12px; align-items: center; padding: 0 16px;
-    grid-template-columns: minmax(190px, 2fr) 128px minmax(190px, 1.7fr) 150px 92px 118px minmax(150px, 1.8fr); }
+    grid-template-columns: var(--gt, minmax(190px, 2fr) 128px minmax(190px, 1.7fr) 150px 92px 118px minmax(150px, 1.8fr)); }
+  .list { position: relative; }
+  .colset { position: absolute; top: 4px; right: 6px; width: 30px; height: 30px; border-radius: 8px; border: 0; background: none;
+    color: var(--mut); cursor: pointer; display: grid; place-items: center; z-index: 2; }
+  .colset:hover, .colset[aria-expanded="true"] { background: var(--acc-soft); color: var(--acc-txt); }
+  .colmenu { position: absolute; top: 38px; right: 6px; z-index: 3; background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 8px 4px; min-width: 230px; max-height: 60vh; overflow: auto; display: none; }
+  .colmenu.on { display: block; }
+  .colmenu label { display: flex; align-items: center; gap: 10px; padding: 6px 12px; min-height: 34px; cursor: pointer; border-radius: 6px; }
+  .colmenu label:hover { background: var(--acc-soft); }
+  .colmenu label.fixed { opacity: .55; cursor: default; }
+  .colmenu hr { border: 0; border-top: 1px solid var(--line); margin: 6px 8px; }
+  .colmenu .reset { all: unset; cursor: pointer; display: block; padding: 6px 12px; color: var(--acc-txt); font-size: 13px; }
+  body.narrow .colset, body.narrow .colmenu { display: none; }
+  .row > .x0 { font-variant-numeric: tabular-nums; }
+  body.narrow .row > .x0 { display: none; }
   .cols { min-height: 38px; font-size: 12px; font-weight: 600; color: var(--mut); border-bottom: 1px solid var(--line); }
   .cols button { all: unset; cursor: pointer; display: inline-flex; gap: 4px; align-items: center; min-height: 38px; border-radius: 4px; }
   .cols button:hover, .cols button.on { color: var(--txt); }
@@ -191,6 +207,8 @@
     <div class="chips" id="chips"></div>
   </div>
   <div class="card list">
+    <button class="colset" id="colset" aria-haspopup="true" aria-expanded="false"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>
+    <div class="colmenu" id="colmenu" role="menu"></div>
     <div class="cols" id="cols"></div>
     <div id="rows"></div>
   </div>
@@ -219,7 +237,7 @@ const T = {
     best_tip:"Router: it has no parent, ↔ is the neighbor router it hears best", link_tip:"End device: its parent. Router (↔): the neighbor router it hears best",
     to_ha:"Path to Home Assistant", r_direct:"{br} directly", r_via:"{br} via {via}", r_parent:"parent {p}, then ", r_cost:"cost {c}",
     r_cost_tip:"Path cost: 1 per good hop, up to 4 for a weak link. The nearest border router is the one with the lowest cost.", r_unknown:"unknown (no route table published yet)", no_parent:"Unknown parent (probably a border router)",
-    sig:["weak", "fair", "good"], new_parent:"new parent", none_match:"No node matches.", sort_tip:"Click to sort: ascending, descending, then problems first",
+    sig:["weak", "fair", "good"], new_parent:"new parent", none_match:"No node matches.", columns:"Columns", cols_reset:"Default columns", t_out24:"Outages 24h", t_out7:"Outages 7d", sort_tip:"Click to sort: ascending, descending, then problems first",
     ago_s:"{n}s ago", ago_m:"{n} min ago", ago_h:"{n} h ago", ago_d:"{n} d ago", never:"never",
     d_net:"Network", d_role:"Role", d_parent:"Parent", d_best:"Best link", d_signal:"Signal", d_lqi:"Link quality (0–3)", d_resp:"Response · average",
     d_power:"Power", mains:"mains", battery:"battery", bat_level:["ok", "low", "critical"], d_last:"Last contact",
@@ -248,7 +266,7 @@ const T = {
     best_tip:"Routeur : il n'a pas de parent, ↔ est le voisin routeur qu'il capte le mieux", link_tip:"Appareil final : son parent. Routeur (↔) : le voisin routeur qu'il capte le mieux",
     to_ha:"Chemin vers Home Assistant", r_direct:"{br} en direct", r_via:"{br} via {via}", r_parent:"parent {p}, puis ", r_cost:"coût {c}",
     r_cost_tip:"Coût du chemin : 1 par bon saut, jusqu'à 4 pour un lien faible. Le border router le plus proche est celui de plus bas coût.", r_unknown:"inconnu (table de routage pas encore publiée)", no_parent:"Parent inconnu (probablement un border router)",
-    sig:["faible", "moyen", "bon"], new_parent:"nouveau parent", none_match:"Aucune node ne correspond.", sort_tip:"Cliquer pour trier : croissant, décroissant, puis problèmes d'abord",
+    sig:["faible", "moyen", "bon"], new_parent:"nouveau parent", none_match:"Aucune node ne correspond.", columns:"Colonnes", cols_reset:"Colonnes par défaut", t_out24:"Coupures 24 h", t_out7:"Coupures 7 j", sort_tip:"Cliquer pour trier : croissant, décroissant, puis problèmes d'abord",
     ago_s:"il y a {n} s", ago_m:"il y a {n} min", ago_h:"il y a {n} h", ago_d:"il y a {n} j", never:"jamais",
     d_net:"Réseau", d_role:"Rôle", d_parent:"Parent", d_best:"Meilleur lien", d_signal:"Signal", d_lqi:"Qualité du lien (0–3)", d_resp:"Réponse · moyenne",
     d_power:"Alimentation", mains:"secteur", battery:"pile", bat_level:["ok", "faible", "critique"], d_last:"Dernier contact",
@@ -448,20 +466,49 @@ P.filter = P.filter || "all"; P.q = P.q || "";
 // sort: null = problems first; otherwise {k: column, d: 1 ascending / -1 descending}. Empty values always last.
 const SORT = {
   node: r => r.name.toLowerCase(),
-  status: r => sev(r),
-  link: r => (linkName(r) || "").toLowerCase() || null,
+  status: r => r.available ? 1 : 0,
+  link: r => linkRssi(r),
   resp: r => r.rtt_fail ? Infinity : r.rtt_ms,
   bat: r => r.battery_pct ?? (r.battery_level != null ? 100 - r.battery_level * 50 : null),
   last: r => r.last_report ? -r.last_report : null,
   adv: r => r.advice ? sev(r) : null,
 };
-const COLKEYS = [["node", "h_node"], ["status", "h_status"], ["link", "h_link"], ["resp", "h_resp"], ["bat", "h_bat"], ["last", "h_last"], ["adv", "h_adv"]];
+// columns: main ones (shown by default, also used by the phone cards) and extra ones (desktop only)
+const n0 = v => v == null ? `<span class="mut">—</span>` : v;
+const COLS = [
+  {k:"node", lab:"h_node", w:"minmax(190px, 2fr)", fixed:true},
+  {k:"status", lab:"h_status", w:"128px"},
+  {k:"link", lab:"h_link", w:"minmax(190px, 1.7fr)"},
+  {k:"resp", lab:"h_resp", w:"150px", r:true},
+  {k:"bat", lab:"h_bat", w:"92px"},
+  {k:"last", lab:"h_last", w:"118px"},
+  {k:"adv", lab:"h_adv", w:"minmax(150px, 1.8fr)"},
+  {k:"role", lab:"d_role", w:"150px", x:true, h:r => r.role ? esc(L("roles")[r.role] || r.role) : n0(null), s:r => r.role ? (L("roles")[r.role] || r.role) : null},
+  {k:"route", lab:"to_ha", w:"minmax(170px, 1.5fr)", x:true, h:r => esc(route(r) || "—"), s:r => r.route ? r.route.cost : null},
+  {k:"lqi", lab:"d_lqi", w:"90px", r:true, x:true, h:r => n0(linkLqi(r)), s:r => linkLqi(r)},
+  {k:"nb", lab:"t_nb", w:"80px", r:true, x:true, h:r => n0(r.neighbors), s:r => r.neighbors},
+  {k:"weak", lab:"t_weak", w:"90px", r:true, x:true, h:r => n0(r.weak), s:r => r.weak},
+  {k:"det", lab:"t_det", w:"100px", r:true, x:true, h:r => n0(r.detaches_24h), s:r => r.detaches_24h},
+  {k:"pch", lab:"t_pch", w:"110px", r:true, x:true, h:r => n0(r.parent_changes_24h), s:r => r.parent_changes_24h},
+  {k:"out24", lab:"t_out24", w:"95px", r:true, x:true, h:r => n0(r.outages_24h), s:r => r.outages_24h},
+  {k:"out7", lab:"t_out7", w:"95px", r:true, x:true, h:r => n0(r.outages_7d), s:r => r.outages_7d},
+  {k:"down7", lab:"t_down", w:"105px", r:true, x:true, h:r => dur(r.downtime_7d_min), s:r => r.downtime_7d_min},
+  {k:"reb", lab:"t_reb", w:"120px", r:true, x:true, h:r => `${r.reboots ?? "—"} · ${r.reboots_24h ?? "—"}`, s:r => r.reboots_24h},
+  {k:"up", lab:"t_up", w:"105px", r:true, x:true, h:r => r.uptime_h == null ? n0(null) : dur(Math.round(r.uptime_h * 60)), s:r => r.uptime_h},
+  {k:"rloc", lab:"t_rloc", w:"90px", x:true, h:r => n0(r.rloc16 ? esc(r.rloc16) : null), s:r => r.rloc16 || null},
+  {k:"id", lab:"t_id", w:"80px", x:true, h:r => esc(r.id), s:r => parseInt(r.id, 16)},
+];
+const COLKEYS = COLS.filter(c => !c.x).map(c => [c.k, c.lab]);
+for (const c of COLS) if (c.s) SORT[c.k] = c.s;
+P.cols = Array.isArray(P.cols) ? P.cols : COLS.filter(c => !c.x).map(c => c.k);
+const shown = () => COLS.filter(c => c.fixed || P.cols.includes(c.k));
 function sorter() {
   const s = P.sort && SORT[P.sort.k];
   if (!s) return (a, b) => sev(a) - sev(b) || a.name.localeCompare(b.name);
   return (a, b) => {
     const x = s(a), y = s(b);
-    if (x == null || y == null) return x == null && y == null ? a.name.localeCompare(b.name) : x == null ? 1 : -1;
+    if (x == null || y == null) return x == null && y == null ? a.name.localeCompare(b.name, LANG) : x == null ? 1 : -1;
+    if (typeof x === "string") return x.localeCompare(y, LANG, {sensitivity: "base"}) * P.sort.d || a.name.localeCompare(b.name, LANG);
     return (x < y ? -1 : x > y ? 1 : 0) * P.sort.d || a.name.localeCompare(b.name);
   };
 }
@@ -477,11 +524,15 @@ function renderList() {
   if (!fl.some(x => x[0] === P.filter)) P.filter = "all";
   $("#nodesTitle").textContent = L("nodes");
   $("#chips").innerHTML = fl.map(([k, lab, f]) => `<button class="chip" data-f="${k}" aria-pressed="${k === P.filter}">${lab}<span class="n num">${rows.filter(f).length}</span></button>`).join("");
-  $("#cols").innerHTML = COLKEYS.map(([k, lab], i) => {
-    const on = P.sort && P.sort.k === k, arrow = on ? (P.sort.d > 0 ? " ▲" : " ▼") : "";
-    return `<span class="${i === 3 ? "r" : ""}"><button data-sort="${k}" class="${on ? "on" : ""}" aria-sort="${on ? (P.sort.d > 0 ? "ascending" : "descending") : "none"}"
-      title="${esc((i === 2 ? L("link_tip") + "\n" : "") + L("sort_tip"))}">${L(lab)}${arrow}</button></span>`;
+  const narrow = document.body.classList.contains("narrow");
+  const cols = narrow ? COLS.filter(c => !c.x) : shown();
+  $("#rows").parentNode.style.setProperty("--gt", cols.map(c => c.w).join(" ") + (narrow ? "" : " 30px"));
+  $("#cols").innerHTML = cols.map(c => {
+    const k = c.k, on = P.sort && P.sort.k === k, arrow = on ? (P.sort.d > 0 ? " ▲" : " ▼") : "";
+    return `<span class="${c.r ? "r" : ""}"><button data-sort="${k}" class="${on ? "on" : ""}" aria-sort="${on ? (P.sort.d > 0 ? "ascending" : "descending") : "none"}"
+      title="${esc((k === "link" ? L("link_tip") + "\n" : "") + L("sort_tip"))}">${L(c.lab)}${arrow}</button></span>`;
   }).join("");
+  $("#colset").title = L("columns"); $("#colset").setAttribute("aria-label", L("columns"));
   const q = P.q.trim().toLowerCase(), f = fl.find(x => x[0] === P.filter)[2];
   const list = rows.filter(f).filter(r => !q || [r.name, r.area, r.model, r.id, linkName(r)].some(x => (x || "").toLowerCase().includes(q)))
     .sort(sorter());
@@ -490,16 +541,43 @@ function renderList() {
     const meta = [r.area, r.model, NETS[net(r)]].filter(Boolean).map(esc).join(" · ");
     const resp = r.rtt_fail ? `<span class="st bad">${IC.bad}${L("no_answer")}</span>` : `<span class="num">${ms(r.rtt_ms)}</span>`;
     const last = r.last_report ? `<span title="${esc(new Date(r.last_report * 1000).toLocaleString(LANG) + (r.contact_src ? " · " + (L("csrc")[r.contact_src] || r.contact_src) : ""))}">${ago(r.last_report)}</span>` : `<span class="mut">${L("never")}</span>`;
-    return `<button class="row ${r.available ? "" : "down"}" data-id="${esc(r.id)}">
-      <span class="nm"><b>${esc(r.name)}</b><small>${meta}</small></span>
-      <span>${status(r)}</span>
-      <span class="lk">${link(r)}${signal(r)}</span>
-      <span class="rt r">${resp}<br><small class="num">${F("avg", {v: ms(r.rtt_avg_ms)})}</small></span>
-      <span class="bt">${battery(r)}</span>
-      <span class="lc"><span class="lab">${L("contact")}</span>${last}</span>
-      ${adv}</button>`;
+    const cell = {
+      node: `<span class="nm"><b>${esc(r.name)}</b><small>${meta}</small></span>`,
+      status: `<span>${status(r)}</span>`,
+      link: `<span class="lk">${link(r)}${signal(r)}</span>`,
+      resp: `<span class="rt r">${resp}<br><small class="num">${F("avg", {v: ms(r.rtt_avg_ms)})}</small></span>`,
+      bat: `<span class="bt">${battery(r)}</span>`,
+      last: `<span class="lc"><span class="lab">${L("contact")}</span>${last}</span>`,
+      adv,
+    };
+    return `<button class="row ${r.available ? "" : "down"}" data-id="${esc(r.id)}">${cols.map(c => cell[c.k] ??
+      `<span class="x0 ${c.r ? "r" : ""}">${c.h(r)}</span>`).join("")}</button>`;
   }).join("") || `<p class="empty">${L("none_match")}</p>`;
 }
+
+function renderColMenu() {
+  $("#colmenu").innerHTML = COLS.map((c, i) => (i === 7 ? "<hr>" : "") +
+    `<label class="${c.fixed ? "fixed" : ""}"><input type="checkbox" data-col="${c.k}" ${c.fixed || P.cols.includes(c.k) ? "checked" : ""} ${c.fixed ? "disabled" : ""}>${esc(L(c.lab))}</label>`).join("") +
+    `<hr><button class="reset" id="colreset">${L("cols_reset")}</button>`;
+}
+function toggleColMenu(open) {
+  const on = open ?? !$("#colmenu").classList.contains("on");
+  if (on) renderColMenu();
+  $("#colmenu").classList.toggle("on", on);
+  $("#colset").setAttribute("aria-expanded", on);
+}
+$("#colset").addEventListener("click", e => { e.stopPropagation(); toggleColMenu(); });
+$("#colmenu").addEventListener("click", e => e.stopPropagation());
+$("#colmenu").addEventListener("change", e => {
+  const k = e.target.dataset.col; if (!k) return;
+  P.cols = e.target.checked ? [...new Set([...P.cols, k])] : P.cols.filter(x => x !== k);
+  save(); renderList();
+});
+$("#colmenu").addEventListener("click", e => {
+  if (e.target.id !== "colreset") return;
+  P.cols = COLS.filter(c => !c.x).map(c => c.k); save(); renderColMenu(); renderList();
+});
+document.addEventListener("click", () => toggleColMenu(false));
 
 // ------------------------------------------------------------ detail sheet
 function chart(pts, unit, color, warn) {
@@ -643,7 +721,11 @@ $("#refresh").addEventListener("click", () => load(true));
 $("#report").addEventListener("click", openReport);
 $("#classic").addEventListener("click", () => { try { localStorage.setItem("mesh_guardian_ui", "classic"); } catch (e) { /* storage unavailable */ } });
 try { localStorage.setItem("mesh_guardian_ui", "beta"); } catch (e) { /* storage unavailable */ }
-const layout = () => document.body.classList.toggle("narrow", window.innerWidth <= 760);
+const layout = () => {
+  const was = document.body.classList.contains("narrow");
+  document.body.classList.toggle("narrow", window.innerWidth <= 760);
+  if (D && was !== document.body.classList.contains("narrow")) renderList();
+};
 window.addEventListener("resize", layout);
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", theme);
 layout(); theme(); texts();

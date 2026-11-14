@@ -4,6 +4,20 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-11-14
+
+### Added
+
+- Beta view: column picker (small button at the right of the column headers):
+  role, path to Home Assistant, link quality, neighbors, weak links, detaches,
+  parent changes, outages, downtime, reboots, uptime, RLOC16, id. Remembered per
+  browser; the phone cards keep their fixed layout.
+
+### Changed
+
+- Beta view sorting: *Status* sorts available / unavailable, *Attachment ·
+  signal* sorts by signal strength, names sort alphabetically (accents ignored).
+
 ## [1.3.5] - 2026-11-14
 
 ### Changed
