@@ -4,6 +4,19 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.5] - 2026-11-14
+
+### Changed
+
+- Beta view: the 24h quality score is shown next to the trend, and each part of
+  the score has a mark at its 24h value (exact values on hover).
+
+### Fixed
+
+- Response time: after a failed read (node switched off…), the node is read again
+  2 minutes after it is back, then with a growing delay, instead of showing
+  "no answer" until the next regular read (15 min, 60 min on battery).
+
 ## [1.3.4] - 2026-11-14
 
 ### Added

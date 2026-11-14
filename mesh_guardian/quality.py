@@ -31,6 +31,7 @@ STATE_FILE = "/data/quality.json"
 
 PROBE_MAINS_S = 15 * 60
 PROBE_BATTERY_S = 60 * 60
+PROBE_RETRY_S = 2 * 60   # first new try after a failed read
 PROBE_GAP_S = 5            # between two reads
 RTT_KEEP = 20              # answers kept for the average
 
@@ -118,7 +119,12 @@ class Quality:
         with self.lock:
             for k, n in nodes:
                 every = PROBE_BATTERY_S if n.get("battery") else PROBE_MAINS_S
-                last = (self.rtt.get(k) or {}).get("t") or 0
+                r = self.rtt.get(k) or {}
+                last = r.get("t") or 0
+                if r.get("streak"):
+                    # last read failed (node switched off, out of reach…): retry soon once it is
+                    # available again, then back off (2, 4, 8… min) so a node that keeps failing costs little
+                    every = min(every, PROBE_RETRY_S * 2 ** (r["streak"] - 1))
                 if now - last >= every and (best is None or last < best[1]):
                     best = (k, last, bool(n.get("battery")))
         return best
@@ -139,11 +145,12 @@ class Quality:
             if ok:
                 if isinstance(value, (int, float)):
                     r["up"], r["up_t"] = value, r["t"]
-                r["last"] = timing["ms"]
+                r["last"], r["streak"] = timing["ms"], 0
                 r["ok"] = (r.get("ok") or [])[-(RTT_KEEP - 1):] + [timing["ms"]]
             else:
                 r["last"] = None
                 r["fails"] = r.get("fails", 0) + 1
+                r["streak"] = r.get("streak", 0) + 1
         if ok:
             self.live.note_contact(nid, src="read")
             if isinstance(value, (int, float)):

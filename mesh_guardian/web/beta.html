@@ -65,7 +65,11 @@
   .score .trend { font-size: 12px; color: var(--mut); }
   .parts { margin-top: 10px; display: grid; gap: 5px; }
   .part { display: grid; grid-template-columns: 96px 1fr 52px; gap: 8px; align-items: center; font-size: 12px; }
-  .part .bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .part .bar { position: relative; height: 6px; border-radius: 3px; background: var(--line); }
+  .part .bar i { position: absolute; left: 0; top: 0; }
+  .part .bar u { position: absolute; top: -3px; width: 2px; height: 12px; margin-left: -1px; background: var(--txt); opacity: .55; border-radius: 1px; }
+  .legend24 { display: inline-flex; align-items: center; gap: 5px; }
+  .legend24 u { display: inline-block; width: 2px; height: 11px; background: var(--txt); opacity: .55; }
   .part .bar i { display: block; height: 100%; border-radius: 3px; background: var(--acc); }
   .part.low .bar i { background: var(--warn); }
   .part span:last-child { text-align: right; }
@@ -203,7 +207,7 @@ const T = {
     all_ok:"All good", all_ok_sub:"All nodes are available.", n_down:"{n} node unavailable", n_down_pl:"{n} nodes unavailable", n_act:"{n} action advised", n_act_pl:"{n} actions advised",
     down_sub:"{name} has not answered since {t}.", down_sub_pl:"{name} and {n} others are not answering.", act_sub:"Nothing is down: see the advice below.",
     f_avail:"Available nodes", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Automatic recovery", on:"on", off:"off",
-    quality:"Network quality · last {n} min", q_lab:["poor", "to watch", "good", "excellent"], q_trend:"{d} vs 24h", q_scale:"≥ 95 excellent · 90–95 good · 80–90 to watch",
+    quality:"Network quality · last {n} min", q_lab:["poor", "to watch", "good", "excellent"], q_trend:"{d} vs 24h", q_24h:"24h: {v} %", part_tip:"Last hour {v} % · 24h {v24} % (mark) · weight {n} %", q_scale:"≥ 95 excellent · 90–95 good · 80–90 to watch",
     q_capped:"capped: partitioned network", q_wait:"The score starts after a few minutes.", q_parts:{availability:"Availability", radio:"Radio", outages:"Outages", backbone:"Backbone", partition:"Partition"}, weight:"Weight {n} %",
     todo:"To handle ({n})", todo_none:"Nothing to handle", w_down:"Unavailable", w_warn:"Action advised", w_info:"Good to know", w_net:"Network",
     down_do:"Since {t}. Check its power or batteries and its distance to a router.",
@@ -232,7 +236,7 @@ const T = {
     all_ok:"Tout va bien", all_ok_sub:"Toutes les nodes sont disponibles.", n_down:"{n} node indisponible", n_down_pl:"{n} nodes indisponibles", n_act:"{n} action conseillée", n_act_pl:"{n} actions conseillées",
     down_sub:"{name} ne répond plus depuis {t}.", down_sub_pl:"{name} et {n} autres ne répondent plus.", act_sub:"Rien n'est coupé : voir les conseils ci-dessous.",
     f_avail:"Nodes disponibles", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Récupération auto.", on:"activée", off:"désactivée",
-    quality:"Qualité du réseau · dernières {n} min", q_lab:["mauvais", "à surveiller", "bon", "excellent"], q_trend:"{d} par rapport à 24 h", q_scale:"≥ 95 excellent · 90–95 bon · 80–90 à surveiller",
+    quality:"Qualité du réseau · dernières {n} min", q_lab:["mauvais", "à surveiller", "bon", "excellent"], q_trend:"{d} par rapport à 24 h", q_24h:"24 h : {v} %", part_tip:"Dernière heure {v} % · 24 h {v24} % (repère) · poids {n} %", q_scale:"≥ 95 excellent · 90–95 bon · 80–90 à surveiller",
     q_capped:"plafonnée : réseau partitionné", q_wait:"La note démarre après quelques minutes.", q_parts:{availability:"Disponibilité", radio:"Radio", outages:"Coupures", backbone:"Ossature", partition:"Partition"}, weight:"Poids {n} %",
     todo:"À traiter ({n})", todo_none:"Rien à traiter", w_down:"Indisponible", w_warn:"Action conseillée", w_info:"À savoir", w_net:"Réseau",
     down_do:"Depuis {t}. Vérifier son alimentation ou ses piles et sa distance à un routeur.",
@@ -386,12 +390,14 @@ function renderHero() {
   if (q && q.score != null) {
     const lab = L("q_lab")[q.score >= 95 ? 3 : q.score >= 90 ? 2 : q.score >= 80 ? 1 : 0];
     const d = q.score_24h != null && q.minutes >= 30 ? q.score - q.score_24h : null;
-    const trend = d != null && Math.abs(d) >= .1 ? F("q_trend", {d: (d > 0 ? "▲ +" : "▼ ") + dec(d)}) + " · " : "";
+    const trend = q.score_24h == null || q.minutes < 30 ? "" : (Math.abs(d) >= .1 ? (d > 0 ? "▲ +" : "▼ ") + dec(d) + " pts · " : "") +
+      `<span class="legend24"><u></u>${F("q_24h", {v: dec(q.score_24h)})}</span>`;
+    const p24 = q.parts_24h || {};
     score = `<span class="mut" style="font-size:12px">${F("quality", {n: q.minutes})}</span>
-      <div class="big"><b class="num">${dec(q.score)} %</b><span class="lab">${lab}</span>${q.capped ? `<span class="st bad">${IC.warn}${L("q_capped")}</span>` : ""}</div>
-      <div class="trend">${trend}${L("q_scale")}</div>
-      <div class="parts">${Object.entries(q.parts || {}).map(([k, v]) => `<div class="part ${v < 90 ? "low" : ""}" title="${esc(F("weight", {n: WEIGHTS[k] ?? "?"}))}">
-        <span>${esc(L("q_parts")[k] || k)}</span><span class="bar"><i style="width:${Math.max(0, Math.min(100, v))}%"></i></span><span class="num">${dec(v)} %</span></div>`).join("")}</div>`;
+      <div class="big" title="${esc(L("q_scale"))}"><b class="num">${dec(q.score)} %</b><span class="lab">${lab}</span>${q.capped ? `<span class="st bad">${IC.warn}${L("q_capped")}</span>` : ""}</div>
+      <div class="trend">${trend}</div>
+      <div class="parts">${Object.entries(q.parts || {}).map(([k, v]) => `<div class="part ${v < 90 ? "low" : ""}" title="${esc(F("part_tip", {v: dec(v), v24: p24[k] != null ? dec(p24[k]) : "—", n: WEIGHTS[k] ?? "?"}))}">
+        <span>${esc(L("q_parts")[k] || k)}</span><span class="bar"><i style="width:${Math.max(0, Math.min(100, v))}%"></i>${p24[k] != null ? `<u style="left:${Math.max(0, Math.min(100, p24[k]))}%"></u>` : ""}</span><span class="num">${dec(v)} %</span></div>`).join("")}</div>`;
   }
   $("#hero").innerHTML = `<div><div class="verdict ${cls}"><span class="badge">${cls === "ok" ? IC.ok : cls === "bad" ? IC.bad : IC.warn}</span>
       <div><h3>${title}</h3><p>${sub}</p></div></div>
