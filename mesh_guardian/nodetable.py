@@ -121,6 +121,13 @@ def router_of(attrs, rloc):
         routers = [nb for nb in nbs if nb.get("5") and nb.get("2") is not None and not nb["2"] & 0x3FF]
         if len(routers) >= 2:
             return True
+    if by_rloc is False and nbs and role not in (2, 3):   # never for (sleepy) end devices: their table is not refreshed
+        # said to be a child, but its (fresh) neighbor table has no link with that parent and
+        # established links with several routers: the role and the address are out of date
+        prloc = rloc & 0xFC00
+        routers = [nb for nb in nbs if nb.get("5") and nb.get("2") is not None and not nb["2"] & 0x3FF]
+        if not any(nb.get("2") == prloc for nb in nbs) and len(routers) >= 2:
+            return True
     if by_role is None or by_rloc is None or by_role == by_rloc:
         return by_role if by_role is not None else bool(by_rloc)
     links = [nb for nb in attrs.get("0/53/7") or [] if isinstance(nb, dict) and (nb.get("5") or nb.get("13"))]
@@ -389,6 +396,9 @@ class NodeTable:
             # node has left the parent it was about (weak link fixed, unstable parent left)
             adv = advice.get(v["name"])
             if adv and p and adv[3] and p[0] != adv[3] and (adv[2] == "low" or p[1] is None or p[1] > WEAK_PARENT):
+                adv = None
+            # weak-link advice: shown only while the link shown is still weak
+            if adv and adv[2] == "high" and p and p[0] == adv[3] and p[1] is not None and p[1] > WEAK_PARENT:
                 adv = None
             new_parent = None
             if p and hist and hist.get("since") and now - hist["since"] <= NEW_PARENT_S and hist.get("prev"):
