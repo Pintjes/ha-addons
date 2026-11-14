@@ -20,7 +20,7 @@ import time
 from i18n import lang, t
 
 LOG = logging.getLogger("mg.table")
-from advice import WEAK_PARENT  # noqa: E402
+from advice import lowest, weak_link  # noqa: E402
 
 ROLE = {0: "unspecified", 1: "unassigned", 2: "sleepy_end_device", 3: "end_device", 4: "reed",
         5: "router", 6: "leader"}
@@ -28,7 +28,8 @@ BOOT_REASON = {0: "unspecified", 1: "power_on", 2: "brown_out", 3: "software_wat
                4: "hardware_watchdog", 5: "software_update", 6: "software_reset"}
 COUNTERS = {"detached": "0/53/14", "partition_changes": "0/53/19", "parent_changes": "0/53/21"}
 # signal colors, shared with the page (sent in every answer)
-THRESHOLDS = {"rssi_good": -75, "rssi_bad": -85, "lqi_good": 3, "lqi_bad": 1}
+# (link quality 3 and 2 = good and fair, 1 = weak; the RSSI only when it is not known)
+THRESHOLDS = {"rssi_good": -80, "rssi_bad": -90, "lqi_good": 3, "lqi_bad": 1}
 NEW_PARENT_S = 30 * 60
 BACKGROUND_S = 20
 
@@ -147,12 +148,14 @@ def router_of(attrs, rloc):
 
 
 def find_parents(thread, labels):
-    """Parent of every child node, and best link of every router.
+    """Parent of every child node, with the weakest direction of their link.
 
     thread: node hex -> {"name", "attrs"}; labels: extended address -> name
-    (Matter nodes and border routers). Returns (parents, rlocs, best):
-    parents: node hex -> (parent name, rssi, lqi, stable key of the parent); rlocs: node hex -> RLOC16;
-    best: node hex -> (name, rssi, lqi) of the strongest established link.
+    (Matter nodes and border routers). Returns (parents, rlocs):
+    parents: node hex -> (parent name, rssi, lqi, stable key of the parent); rlocs: node hex -> RLOC16.
+    A link only works as well as its weakest direction: rssi and lqi are the lowest of what
+    the child hears from its parent and what the parent hears from the child (one direction
+    only when the parent is a border router: it is not a Matter node, its table cannot be read).
 
     1. RLOC16: a child's RLOC16 is its parent's router RLOC16 plus a child id
        (rloc & 0x03FF != 0), so the parent is the router with rloc & 0xFC00.
@@ -172,7 +175,7 @@ def find_parents(thread, labels):
         for rt in v["attrs"].get("0/53/8") or []:
             if isinstance(rt, dict) and rt.get("0") and rt.get("1") is not None:
                 rloc_ext.setdefault(rt["1"], rt["0"])
-    parents, best = {}, {}
+    parents = {}
     for nid, v in thread.items():
         nbs = [nb for nb in v["attrs"].get("0/53/7") or [] if isinstance(nb, dict)]
         rloc = rlocs.get(nid)
@@ -183,10 +186,6 @@ def find_parents(thread, labels):
             name = match(ext, labels) if ext else None
             name = name or f"router {prloc >> 10} (0x{prloc:04x})"
             parents[nid] = (name, nb_rssi(own[0]) if own else None, own[0].get("5") if own else None, ext or prloc)
-        linked = [nb for nb in nbs if nb.get("5") and nb_rssi(nb) is not None and not nb.get("13")]
-        if linked and router[nid]:
-            nb = max(linked, key=nb_rssi)
-            best[nid] = (match(nb.get("0"), labels) or f"0x{(nb.get('2') or 0):04x}", nb_rssi(nb), nb.get("5"))
     for nid, v in thread.items():   # seen from the parent side
         for nb in v["attrs"].get("0/53/7") or []:
             if isinstance(nb, dict) and nb.get("13"):
@@ -195,11 +194,9 @@ def find_parents(thread, labels):
                     continue   # router since: stale entry
                 cur = parents.get(child)
                 if cur is None or cur[0] == v["name"] or cur[0].startswith("router "):
-                    rssi = nb_rssi(nb)
-                    if rssi is None and cur and cur[0] == v["name"]:
-                        rssi = cur[1]   # the parent does not give it: keep the one read on the child side
-                    parents[child] = (v["name"], rssi, nb.get("5") or (cur[2] if cur else None),
-                                      ext_of(v["attrs"]) or nid)   # signal heard by the parent
+                    # weakest of the two directions (cur: what the child hears from this parent)
+                    parents[child] = (v["name"], lowest(nb_rssi(nb), cur[1] if cur else None),
+                                      lowest(nb.get("5"), cur[2] if cur else None), ext_of(v["attrs"]) or nid)
     for nid, v in thread.items():   # an end device only keeps its parent in its table
         if nid in parents or v["attrs"].get("0/53/1") not in (2, 3):
             continue
@@ -209,7 +206,42 @@ def find_parents(thread, labels):
                             nb_rssi(nbs[0]), nbs[0].get("5"), nbs[0].get("0"))
     for nid in [k for k in parents if router[k]]:
         del parents[nid]   # a router has no parent (stale "is child" entry in a neighbor table)
-    return parents, rlocs, best
+    return parents, rlocs
+
+
+def hop_links(thread, routes, parents, rlocs):
+    """Link every router really sends through: the first hop of its route to the border
+    router. Returns node hex -> (name, rssi, lqi), weakest direction of the link: what the
+    router hears from the hop, what the hop hears from it (when the hop is a Matter node),
+    and the link quality in and out of its route table. No route known: no link shown."""
+    by_name = {v["name"]: k for k, v in thread.items()}
+    out = {}
+    for nid, r in routes.items():
+        hop = r.get("hop_rid")
+        if nid in parents or hop is None or nid not in thread:
+            continue
+        a = thread[nid]["attrs"]
+        name = r.get("via") or r.get("br")
+        rssi = lqi = None
+        for nb in a.get("0/53/7") or []:
+            if isinstance(nb, dict) and nb.get("2") is not None and nb["2"] >> 10 == hop and not nb["2"] & 0x3FF:
+                rssi, lqi = nb_rssi(nb), nb.get("5")
+                break
+        for rt in a.get("0/53/8") or []:
+            if isinstance(rt, dict) and rt.get("2") == hop:
+                lqi = lowest(lqi, rt.get("5"), rt.get("6"))
+                break
+        peer, rloc, ext = by_name.get(name), rlocs.get(nid), ext_of(a)
+        for nb in (thread[peer]["attrs"].get("0/53/7") or []) if peer and peer != nid else []:
+            if not isinstance(nb, dict):
+                continue
+            if (rloc is not None and nb.get("2") == rloc) or \
+                    (ext is not None and nb.get("0") is not None and abs(nb["0"] - ext) <= 4096):
+                rssi, lqi = lowest(rssi, nb_rssi(nb)), lowest(lqi, nb.get("5"))
+                break
+        if rssi is not None or lqi:
+            out[nid] = (name, rssi, lqi)
+    return out
 
 
 def routes_to_br(thread, labels, br_exts, rlocs, parents):
@@ -364,7 +396,7 @@ class NodeTable:
             ext = ext_of(attrs)
             if ext is not None:
                 labels[ext] = thread[nid]["name"]
-        parent_of, rlocs, best = find_parents(thread, labels)
+        parent_of, rlocs = find_parents(thread, labels)
         with self.w.lock:
             br_exts = [b["xa"] for b in self.w.br.values() if b.get("xa") is not None]
         try:
@@ -372,18 +404,8 @@ class NodeTable:
         except Exception as err:  # noqa: BLE001 - never break the table for this extra
             LOG.debug("route to border router: %s", err)
             routes = {}
-        # a router has no parent: show the link it really sends through, the first hop of its
-        # route to the border router (the strongest neighbor is kept when the route is unknown)
-        for nid, r in routes.items():
-            hop = r.get("hop_rid")
-            if nid in parent_of or hop is None:
-                continue
-            for nb in thread[nid]["attrs"].get("0/53/7") or []:
-                if isinstance(nb, dict) and nb.get("2") is not None and nb["2"] >> 10 == hop and not nb["2"] & 0x3FF:
-                    rssi = nb_rssi(nb)
-                    if rssi is not None:
-                        best[nid] = (r["via"] or r["br"], rssi, nb.get("5"))
-                    break
+        # a router has no parent: the link shown is the one it really sends through
+        best = hop_links(thread, routes, parent_of, rlocs)
         named = bool(meta)
         leader = None
         if self.radio and self.radio.leader_name and time.time() - self.radio.leader_t < 2400:
@@ -426,25 +448,22 @@ class NodeTable:
             # advice is computed at the radio survey (every 30 min): drop it as soon as the
             # node has left the parent it was about (weak link fixed, unstable parent left)
             adv = advice.get(v["name"])
-            if adv and p and adv[3] and p[0] != adv[3] and (adv[2] == "low" or p[1] is None or p[1] > WEAK_PARENT):
+            strong = bool(p) and (p[1] is not None or bool(p[2])) and not weak_link(p[1], p[2])   # known and not weak
+            if adv and p and adv[3] and p[0] != adv[3] and (adv[2] == "low" or not weak_link(p[1], p[2])):
                 adv = None
-            elif adv and p and adv[2] == "high" and p[1] is not None and p[1] > WEAK_PARENT:
-                adv = None   # weak-link advice, but the link is no longer weak
-            if not adv and not p and bl and bl[1] is not None and bl[1] <= WEAK_PARENT and v["meta"].get("available", True):
-                # a router has no parent to change: its best link is weak, it needs a closer router
+            elif adv and adv[2] == "high" and strong:
+                adv = None   # weak-link advice, but the link shown is no longer weak
+            if not adv and not p and bl and weak_link(bl[1], bl[2]) and v["meta"].get("available", True):
+                # a router has no parent to change: the link it sends through is weak, it needs a closer router
                 adv = (t("Add a router near {area}", area=m.get("area") or "?"),
-                       t("best link {rssi}dBm: add a mains-powered Thread router (e.g. a Matter smart plug) between this node and the rest of the mesh",
-                         rssi=bl[1]), "high", None)
-            # weak-link advice: shown only while the link shown is still weak
-            if adv and adv[2] == "high" and p and p[0] == adv[3] and p[1] is not None and p[1] > WEAK_PARENT:
-                adv = None
+                       t("weak link with {peer}: add a mains-powered Thread router (e.g. a Matter smart plug) between them",
+                         peer=bl[0]), "high", None)
             new_parent = None
             if p and hist and hist.get("since") and now - hist["since"] <= NEW_PARENT_S and hist.get("prev"):
                 new_parent = {"before": hist["prev"], "before_rssi": hist["prev_rssi"], "at": hist["since"]}
             # neighbors
             nbs = [nb for nb in a.get("0/53/7") or [] if isinstance(nb, dict) and (nb.get("5") or nb.get("13"))]
-            weak = [nb for nb in nbs if (nb_rssi(nb) is not None and nb_rssi(nb) <= THRESHOLDS["rssi_bad"])
-                    or nb.get("5") == 1]
+            weak = [nb for nb in nbs if weak_link(nb_rssi(nb), nb.get("5"))]
             # instability over 24h (difference with the survey of about 24h ago)
             old = ref.get(nid)
             uptime, reboots = a.get("0/51/2"), a.get("0/51/1")

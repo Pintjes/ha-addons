@@ -10,7 +10,7 @@ can choose a parent remotely; an end device can only be asked to attach again
 (reattach.py), which makes it pick one among the routers it hears.
 
 Called after every radio survey, this module:
-- lists the nodes whose parent is weak (signal <= -85dBm) or unstable (parent
+- lists the nodes whose parent link is weak (link quality 1) or unstable (parent
   rebooted / detached), with the recommended action;
 - follows the parent of every node from one survey to the next and reports each
   change, saying whether it is better or worse and why it happened (node
@@ -26,12 +26,26 @@ from i18n import t, tn
 
 LOG = logging.getLogger("mg.advice")
 STATE_FILE = "/data/advice_state.json"
-WEAK_PARENT = -85      # dBm: below this, the node would gain from a new parent
+WEAK_RSSI = -90        # dBm: weak link when the link quality is not known
 GOOD_GAIN = 6          # dB: gain from which a change counts as "better"
 UNSTABLE_DETACHES = 3  # detaches over about 24h from which a parent counts as unstable
 UNSTABLE_REBOOTS = 2   # reboots over about 24h (software updates excluded) from which a parent counts as unstable
 SETTLE_S = 86400       # s: no "Unstable parent" during this time after a move to a better parent
 FORCED_S = 7200        # s: a parent change this long after a requested parent search is not spontaneous
+
+
+def weak_link(rssi, lqi):
+    """One rule everywhere (colors, advice, parent search, score): a link is weak when its
+    Thread link quality is 1; the RSSI only decides when the link quality is not known."""
+    if lqi:
+        return lqi <= 1
+    return rssi is not None and rssi <= WEAK_RSSI
+
+
+def lowest(*values):
+    """Weakest direction of a link: the lowest known value (None and 0 = not known)."""
+    known = [v for v in values if v]
+    return min(known) if known else None
 
 
 def dbm(v):
@@ -161,7 +175,7 @@ class Advisor:
             n = by_name.get(child)
             if not n:
                 continue
-            weak = p["rssi"] is not None and p["rssi"] <= WEAK_PARENT
+            weak = weak_link(p["rssi"], p.get("lqi"))
             since = self.prev.get(child, {}).get("since")
             # just moved to a better parent: the past of that parent is not this node's problem
             settling = bool(since and self.prev[child].get("better") and now - since < SETTLE_S)

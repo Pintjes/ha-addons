@@ -126,7 +126,7 @@ minute, border routers browsed again every 5 minutes.
 
 | Entity | State and role | Updated | Reset |
 |---|---|---|---|
-| `sensor.mesh_guardian_weak_radio_links` | links in use (child → parent, router → its best link) at or below -85dBm or LQI 1 | every survey | current |
+| `sensor.mesh_guardian_weak_radio_links` | weak links among the links in use (child → parent, router → its first hop to the border router): link quality 1 | every survey | current |
 | `sensor.mesh_guardian_thread_parents` | number of children; parent and signal of each | every survey | current |
 | `button.mesh_guardian_find_better_parents` | reads the parent link of every end device and asks those with a poor link to attach again (see [Find better parents](#find-better-parents)) | when pressed | — |
 | `sensor.mesh_guardian_parent_search` | date of the last parent search; `checked`, `poor_links`, `better`, `nodes` | after each search | kept until the next search |
@@ -198,8 +198,8 @@ In Thread, a device picks its parent when it joins the network. Some firmwares
 look for a better parent when the signal drops; many stay on a weak parent as
 long as the link holds, and nobody can force a parent remotely.
 
-After each radio survey, Mesh Guardian lists the nodes whose parent is weak
-(≤ -85dBm) or unstable, and suggests the action:
+After each radio survey, Mesh Guardian lists the nodes whose parent link is weak
+(link quality 1) or unstable, and suggests the action:
 
 - **battery device:** remove the battery for 10 seconds and put it back — it
   rejoins and picks the best parent available;
@@ -239,8 +239,8 @@ much better router is now in range. The usual fix is to remove the battery for
 **Find better parents** does it remotely. When pressed, Mesh Guardian:
 
 1. reads the parent link of every available end device (one small read each);
-2. keeps those whose link is poor: link quality (LQI) 2 or less, or signal at
-   or below -80dBm;
+2. keeps those whose link is weak: link quality (LQI) 1 — the same rule as
+   the table and the advice;
 3. asks each of them to connect again to the Thread network it is already on
    (Matter commands `ArmFailSafe`, `ConnectNetwork`, `CommissioningComplete`).
    The node restarts its Thread interface and attaches again, choosing a
@@ -284,10 +284,14 @@ Ethernet, on battery; a search box (name, area, model, id). Default columns:
 - *Node* — name, area, model, network;
 - *Status · Role* — available / silent / unavailable, and the Thread role
   (Leader router, Router, End, Sleepy end);
-- *Attachment · signal* — for an end device its parent, for a router the
-  neighbor router it hears best (a router has no parent), with the signal in
-  dBm and in words (good ≥ -75, fair, weak ≤ -85); for a Wi-Fi node its access
-  point and channel;
+- *Attachment · signal* — the node this one sends through: for an end device
+  its parent, for a router the first hop of its route to the border router (a
+  router has no parent). One signal: the weakest direction of that link (a link
+  only works as well as its worst direction), as RSSI in dBm and Thread link
+  quality (LQI). The link quality decides the color and the word: 3 good and
+  2 fair in green, 1 weak in orange (without link quality: weak at -90 dBm or
+  below). Only one direction is known when the other end is a border router.
+  For a Wi-Fi node its access point and channel;
 - *Border router* — the border router the node most likely reaches Home
   Assistant through, and the number of hops (full path on hover and in the node
   panel);
@@ -366,7 +370,7 @@ covers the last hour, the 24-hour score is in the attributes.
 | Part | Weight | 100 % when… | 0 % when… |
 |---|---|---|---|
 | Availability | 50 % | every node available in Home Assistant | 20 % of the nodes unavailable the whole time |
-| Radio | 25 % | no weak link among the links in use (parent of a child, best link of a router) | half of them weak (≤ -85 dBm or LQI 1) |
+| Radio | 25 % | no weak link among the links in use (parent of a child, first hop of a router) | half of them weak (link quality 1) |
 | Outages | 10 % | no node became unavailable | 1 outage per 10 nodes per hour |
 | Backbone | 10 % | every border router online and a leader known | no border router online |
 | Partition | 5 % | a single partition | partitioned the whole time |

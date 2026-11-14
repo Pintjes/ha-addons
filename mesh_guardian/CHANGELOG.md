@@ -4,6 +4,16 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.5.0] - 2026-11-14
+
+### Changed
+
+- "Attachment · signal": one signal per node, the weakest direction of the link it sends through (RSSI and link quality).
+- A router shows the first hop of its route to the border router; nothing when the route is not known.
+- One rule for a weak link everywhere (color, advice, "Find better parents", score): link quality 1, or -90 dBm when it is not known.
+- Signal colors: good and fair in green, weak in orange; red is kept for unavailable nodes.
+- Parent search result: the parent (new or same) with its link quality and RSSI.
+
 ## [2.4.6] - 2026-11-14
 
 ### Fixed
