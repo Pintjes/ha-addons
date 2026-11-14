@@ -111,6 +111,16 @@ class WebUI:
                         if not getattr(ui.w, "reattach", None):
                             raise RuntimeError("parent search unavailable")
                         out = {"ok": True, **ui.w.reattach.run_node(nid)}
+                        # parent names: a child RLOC16 points to its parent router (rloc & 0xFC00)
+                        names = {}
+                        for r in (ui.table.get().get("rows") or []):
+                            try:
+                                names[int(r["rloc16"], 16) & 0xFC00] = r["name"]
+                            except (TypeError, ValueError, KeyError):
+                                pass
+                        for k in ("rloc_before", "rloc"):
+                            if isinstance(out.get(k), int):
+                                out[k.replace("rloc", "parent")] = names.get(out[k] & 0xFC00, f"0x{out[k] & 0xFC00:04x}")
                     elif act == "interview":
                         h.matter_command("interview_node", {"node_id": int(nid, 16)}, timeout=300)
                         out = {"ok": True, "s": round(time.time() - t0)}

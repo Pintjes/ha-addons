@@ -33,6 +33,18 @@ NEW_PARENT_S = 30 * 60
 BACKGROUND_S = 20
 
 
+def nb_rssi(nb):
+    """Signal of a neighbor entry: average RSSI (field 6), or the last RSSI (field 7) when
+    the average is implausible — some firmwares report e.g. -21dBm for a link heard at -77."""
+    avg, last = nb.get("6"), nb.get("7")
+    if avg is None or avg > RSSI_PLAUSIBLE_MAX:
+        return last if last is not None and last <= RSSI_PLAUSIBLE_MAX else None
+    return avg
+
+
+RSSI_PLAUSIBLE_MAX = -30   # dBm: a Thread link stronger than this is a reporting error
+
+
 def ext_of(attrs):
     """Thread extended address of a node (General Diagnostics network interfaces)."""
     for itf in attrs.get("0/51/0") or []:
@@ -170,11 +182,11 @@ def find_parents(thread, labels):
             ext = own[0].get("0") if own else rloc_ext.get(prloc)
             name = match(ext, labels) if ext else None
             name = name or f"router {prloc >> 10} (0x{prloc:04x})"
-            parents[nid] = (name, own[0].get("6") if own else None, own[0].get("5") if own else None, ext or prloc)
-        linked = [nb for nb in nbs if nb.get("5") and nb.get("6") is not None and not nb.get("13")]
+            parents[nid] = (name, nb_rssi(own[0]) if own else None, own[0].get("5") if own else None, ext or prloc)
+        linked = [nb for nb in nbs if nb.get("5") and nb_rssi(nb) is not None and not nb.get("13")]
         if linked and router[nid]:
-            nb = max(linked, key=lambda x: x["6"])
-            best[nid] = (match(nb.get("0"), labels) or f"0x{(nb.get('2') or 0):04x}", nb.get("6"), nb.get("5"))
+            nb = max(linked, key=nb_rssi)
+            best[nid] = (match(nb.get("0"), labels) or f"0x{(nb.get('2') or 0):04x}", nb_rssi(nb), nb.get("5"))
     for nid, v in thread.items():   # seen from the parent side
         for nb in v["attrs"].get("0/53/7") or []:
             if isinstance(nb, dict) and nb.get("13"):
@@ -183,14 +195,14 @@ def find_parents(thread, labels):
                     continue   # router since: stale entry
                 cur = parents.get(child)
                 if cur is None or cur[0] == v["name"] or cur[0].startswith("router "):
-                    parents[child] = (v["name"], nb.get("6"), nb.get("5"), ext_of(v["attrs"]) or nid)   # signal heard by the parent
+                    parents[child] = (v["name"], nb_rssi(nb), nb.get("5"), ext_of(v["attrs"]) or nid)   # signal heard by the parent
     for nid, v in thread.items():   # an end device only keeps its parent in its table
         if nid in parents or v["attrs"].get("0/53/1") not in (2, 3):
             continue
-        nbs = [nb for nb in v["attrs"].get("0/53/7") or [] if isinstance(nb, dict) and nb.get("6") is not None]
+        nbs = [nb for nb in v["attrs"].get("0/53/7") or [] if isinstance(nb, dict) and nb_rssi(nb) is not None]
         if len(nbs) == 1:
             parents[nid] = (match(nbs[0].get("0"), labels) or f"0x{(nbs[0].get('2') or 0):04x}",
-                            nbs[0].get("6"), nbs[0].get("5"), nbs[0].get("0"))
+                            nb_rssi(nbs[0]), nbs[0].get("5"), nbs[0].get("0"))
     for nid in [k for k in parents if router[k]]:
         del parents[nid]   # a router has no parent (stale "is child" entry in a neighbor table)
     return parents, rlocs, best
@@ -414,7 +426,7 @@ class NodeTable:
                 new_parent = {"before": hist["prev"], "before_rssi": hist["prev_rssi"], "at": hist["since"]}
             # neighbors
             nbs = [nb for nb in a.get("0/53/7") or [] if isinstance(nb, dict) and (nb.get("5") or nb.get("13"))]
-            weak = [nb for nb in nbs if (nb.get("6") is not None and nb.get("6") <= THRESHOLDS["rssi_bad"])
+            weak = [nb for nb in nbs if (nb_rssi(nb) is not None and nb_rssi(nb) <= THRESHOLDS["rssi_bad"])
                     or nb.get("5") == 1]
             # instability over 24h (difference with the survey of about 24h ago)
             old = ref.get(nid)

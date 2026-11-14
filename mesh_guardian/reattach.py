@@ -27,6 +27,7 @@ import threading
 import time
 
 from i18n import t, tn
+from nodetable import nb_rssi
 
 LOG = logging.getLogger("mg.reattach")
 POOR_LQI = 2          # link quality (1-3) from which a new parent is worth looking for
@@ -52,7 +53,7 @@ def parent_link(table):
     for nb in table or []:
         if not isinstance(nb, dict) or nb.get("13") is True:
             continue
-        lqi, rssi = nb.get("5"), nb.get("6")
+        lqi, rssi = nb.get("5"), nb_rssi(nb)
         if not lqi or rssi is None:
             continue
         return {"rloc": nb.get("2"), "lqi": lqi, "rssi": rssi}
@@ -157,7 +158,8 @@ class Reattach:
             self.live.note_contact(nid, src="read")
         if attrs.get("0/53/1") not in END_DEVICE_ROLES or not (force or is_poor(before)):
             return None
-        row = {"node": name, "area": area, "rssi_before": before["rssi"], "lqi_before": before["lqi"]}
+        row = {"node": name, "area": area, "rssi_before": before["rssi"], "lqi_before": before["lqi"],
+               "rloc_before": before["rloc"]}
         network = connected_network(attrs.get("0/49/1"))
         if network is None or CONNECT_NETWORK not in (attrs.get("0/49/65529") or []):
             return row | {"result": "unsupported"}
@@ -185,7 +187,7 @@ class Reattach:
         res = verdict(before, after)
         row["result"] = res
         if after:
-            row |= {"rssi": after["rssi"], "lqi": after["lqi"]}
+            row |= {"rssi": after["rssi"], "lqi": after["lqi"], "rloc": after["rloc"]}
         texts = {
             "better": t("{node}: better parent, {before}dBm → {after}dBm (LQI {lqi_before} → {lqi})"),
             "worse": t("{node}: weaker parent, {before}dBm → {after}dBm (LQI {lqi_before} → {lqi})"),

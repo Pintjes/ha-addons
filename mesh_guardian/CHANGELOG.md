@@ -4,6 +4,19 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.1] - 2026-11-14
+
+### Fixed
+
+- Signal of a link: some firmwares report an impossible average RSSI (e.g. -21dBm
+  for a link heard at -77dBm); the last RSSI is used instead. Affected the parent
+  search result and the attachment column.
+
+### Changed
+
+- Parent search result names the old and the new parent.
+- Shorter tooltips on the action buttons.
+
 ## [2.0.0] - 2026-11-14
 
 ### Changed

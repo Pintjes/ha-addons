@@ -272,12 +272,12 @@ const T = {
     parent_tip:"The router this end device sends all its traffic through", h_br:"Border router", hop1:"1 hop", hops:"{n} hops", hops_min:"at least", t_path:"Full path",
     drag_tip:"Drag to move the column", h_act:"Actions",
     a_ping:"Ping", a_parent:"Find a better parent", a_interview:"Interview",
-    a_ping_tip:"Ping the node through the Matter Server", a_parent_tip:"Make this end device attach again to pick the best parent it hears now (no reboot)",
-    a_interview_tip:"Read again everything the node describes (endpoints, clusters, attributes)", a_parent_router:"A router has no parent: nothing to search",
+    a_ping_tip:"Ping", a_parent_tip:"Find a new parent",
+    a_interview_tip:"Reinterview", a_parent_router:"A router has no parent: nothing to search",
     a_parent_confirm:"{n}: attach again to look for a better parent? The new parent can also be weaker.", a_interview_confirm:"{n}: interview the node again? It can take a minute.",
     a_ping_ok:"{n} answered the ping ({ms} ms)", a_ping_ko:"{n} did not answer the ping", a_interview_ok:"{n} interviewed again ({s} s)",
-    a_parent_better:"{n}: better parent ({b} → {a} dBm)", a_parent_worse:"{n}: weaker parent ({b} → {a} dBm)", a_parent_similar:"{n}: similar parent ({b} → {a} dBm)",
-    a_parent_same:"{n}: same parent kept ({a} dBm), no better router in range", a_parent_unknown:"{n}: request sent, new link not read yet",
+    a_parent_better:"{n}: better parent, {pb} ({b} dBm) → {pa} ({a} dBm)", a_parent_worse:"{n}: weaker parent, {pb} ({b} dBm) → {pa} ({a} dBm)", a_parent_similar:"{n}: similar parent, {pb} ({b} dBm) → {pa} ({a} dBm)",
+    a_parent_same:"{n}: same parent kept, {pa} ({a} dBm): no better router in range", a_parent_unknown:"{n}: request sent, new link not read yet",
     a_parent_unsupported:"{n}: this node does not accept the request", a_parent_failed:"{n}: request refused by the node",
     a_parent_router:"A router has no parent: nothing to search", a_parent_busy:"A parent search is already running", ap_ph:"Name of this access point", save:"Save", saved:"Saved", ap:"Access point", ap_unknown:"Access point not named: name it in the node panel, or add your access points to Home Assistant as devices",
     to_ha:"Path to Home Assistant", r_direct:"{br} directly", r_via:"{br} via {via}", r_parent:"parent {p}, then ", r_cost:"cost {c}",
@@ -315,12 +315,12 @@ const T = {
     parent_tip:"Le routeur par lequel cet appareil final fait passer tout son trafic", h_br:"Border router", hop1:"1 saut", hops:"{n} sauts", hops_min:"au moins", t_path:"Chemin complet",
     drag_tip:"Glisser pour déplacer la colonne", h_act:"Actions",
     a_ping:"Ping", a_parent:"Chercher un meilleur parent", a_interview:"Ré-interviewer",
-    a_ping_tip:"Pinguer la node via le Matter Server", a_parent_tip:"Faire se rattacher cet appareil final pour qu'il choisisse le meilleur parent qu'il capte maintenant (sans redémarrage)",
-    a_interview_tip:"Relire tout ce que la node décrit (endpoints, clusters, attributs)", a_parent_router:"Un routeur n'a pas de parent : rien à chercher",
+    a_ping_tip:"Ping", a_parent_tip:"Recherche d'un nouveau parent",
+    a_interview_tip:"Reinterview", a_parent_router:"Un routeur n'a pas de parent : rien à chercher",
     a_parent_confirm:"{n} : se rattacher pour chercher un meilleur parent ? Le nouveau parent peut aussi être moins bon.", a_interview_confirm:"{n} : ré-interviewer la node ? Ça peut prendre une minute.",
     a_ping_ok:"{n} a répondu au ping ({ms} ms)", a_ping_ko:"{n} n'a pas répondu au ping", a_interview_ok:"{n} ré-interviewée ({s} s)",
-    a_parent_better:"{n} : meilleur parent ({b} → {a} dBm)", a_parent_worse:"{n} : parent moins bon ({b} → {a} dBm)", a_parent_similar:"{n} : parent équivalent ({b} → {a} dBm)",
-    a_parent_same:"{n} : même parent gardé ({a} dBm), pas de meilleur routeur à portée", a_parent_unknown:"{n} : demande envoyée, nouveau lien pas encore lu",
+    a_parent_better:"{n} : meilleur parent, {pb} ({b} dBm) → {pa} ({a} dBm)", a_parent_worse:"{n} : parent moins bon, {pb} ({b} dBm) → {pa} ({a} dBm)", a_parent_similar:"{n} : parent équivalent, {pb} ({b} dBm) → {pa} ({a} dBm)",
+    a_parent_same:"{n} : même parent gardé, {pa} ({a} dBm) : pas de meilleur routeur à portée", a_parent_unknown:"{n} : demande envoyée, nouveau lien pas encore lu",
     a_parent_unsupported:"{n} : cette node n'accepte pas la demande", a_parent_failed:"{n} : demande refusée par la node",
     a_parent_router:"Un routeur n'a pas de parent : rien à chercher", a_parent_busy:"Une recherche de parent est déjà en cours", ap_ph:"Nom de ce point d'accès", save:"Enregistrer", saved:"Enregistré", ap:"Point d'accès", ap_unknown:"Point d'accès sans nom : le nommer dans la fiche de la node, ou ajouter les points d'accès à Home Assistant comme appareils",
     to_ha:"Chemin vers Home Assistant", r_direct:"{br} en direct", r_via:"{br} via {via}", r_parent:"parent {p}, puis ", r_cost:"coût {c}",
@@ -738,7 +738,8 @@ async function runAction(btn) {
     if (!res.ok) msg = `${r.name} : ${L("error")} ${res.error || ""}`;
     else if (a === "ping") msg = F(res.ok ? "a_ping_ok" : "a_ping_ko", {n: r.name, ms: res.ms});
     else if (a === "interview") msg = F("a_interview_ok", {n: r.name, s: res.s});
-    else msg = F("a_parent_" + (res.result || "unknown"), {n: r.name, b: res.rssi_before ?? "?", a: res.rssi ?? "?"});
+    else msg = F("a_parent_" + (res.result || "unknown"), {n: r.name, b: res.rssi_before ?? "?", a: res.rssi ?? "?",
+      pb: res.parent_before || "?", pa: res.parent || "?"});
   } catch (e) { msg = `${r.name} : ${L("error")}`; }
   toast(msg);
   document.querySelectorAll(`[data-act="${a}"][data-node="${id}"]`).forEach(b => { b.disabled = false; b.classList.remove("busy"); });
