@@ -4,6 +4,14 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.2] - 2026-11-14
+
+### Fixed
+
+- Path to the border router: an end device always goes through its parent (its
+  own route table can be stale); routers whose link quality to the next hop is
+  not published get a path too.
+
 ## [1.3.1] - 2026-11-14
 
 ### Fixed
