@@ -397,6 +397,8 @@ class NodeTable:
             adv = advice.get(v["name"])
             if adv and p and adv[3] and p[0] != adv[3] and (adv[2] == "low" or p[1] is None or p[1] > WEAK_PARENT):
                 adv = None
+            elif adv and p and adv[2] == "high" and p[1] is not None and p[1] > WEAK_PARENT:
+                adv = None   # weak-link advice, but the link is no longer weak
             # weak-link advice: shown only while the link shown is still weak
             if adv and adv[2] == "high" and p and p[0] == adv[3] and p[1] is not None and p[1] > WEAK_PARENT:
                 adv = None
