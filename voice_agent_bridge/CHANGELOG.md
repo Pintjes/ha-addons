@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.3] - 2026-11-14
+
+### Changed
+
+- Token option: link to the documentation explaining how to get it.
+
 ## [1.0.2] - 2026-11-14
 
 ### Changed

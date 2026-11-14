@@ -4,7 +4,7 @@ configuration:
     description: Language of the spoken answers, error messages and the house notes template.
   claude_token:
     name: Claude token
-    description: Long-lived token from `claude setup-token` (Claude Pro or Max plan). Leave empty to use an API key.
+    description: "Long-lived token from `claude setup-token` (Claude Pro or Max plan). Leave empty to use an API key. How to get it: https://code.claude.com/docs/en/authentication#generate-a-long-lived-token"
   anthropic_api_key:
     name: Anthropic API key
     description: Alternative to the Claude token, billed per use on console.anthropic.com.
