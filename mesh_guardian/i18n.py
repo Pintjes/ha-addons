@@ -52,16 +52,16 @@ FR = {
     "Finding a new parent could improve the situation": "Rechercher un nouveau parent pourrait améliorer la situation",
     "press Find a new parent on its line: it attaches again and picks the best parent it hears (if it refuses: remove the battery or unplug it for 10s)":
         "bouton Recherche d'un nouveau parent sur sa ligne : elle se rattache et choisit le meilleur parent qu'elle capte (si elle refuse : retirer la pile ou la débrancher 10s)",
-    "{parent} restarts (×{n} in 24h): finding a new parent could improve the situation":
-        "{parent} redémarre (×{n} en 24h) : rechercher un nouveau parent pourrait améliorer la situation",
-    "{parent} detaches (×{n} in 24h): finding a new parent could improve the situation":
-        "{parent} décroche (×{n} en 24h) : rechercher un nouveau parent pourrait améliorer la situation",
+    "{parent} restarts ({n}× in 24h): finding a new parent could improve the situation":
+        "{parent} redémarre ({n}× en 24h) : rechercher un nouveau parent pourrait améliorer la situation",
+    "{parent} detaches ({n}× in 24h): finding a new parent could improve the situation":
+        "{parent} décroche ({n}× en 24h) : rechercher un nouveau parent pourrait améliorer la situation",
     "Press Find a new parent on its line so it picks a steadier parent":
         "Bouton Recherche d'un nouveau parent sur sa ligne pour qu'elle choisisse un parent plus stable",
     "Unplug 10s": "Débrancher 10s",
     "Unstable parent": "Parent instable",
-    "{parent} restarts (×{n} in 24h): change the parent": "{parent} redémarre (×{n} en 24h) : changer de parent",
-    "{parent} detaches (×{n} in 24h): change the parent": "{parent} décroche (×{n} en 24h) : changer de parent",
+    "{parent} restarts ({n}× in 24h): change the parent": "{parent} redémarre ({n}× en 24h) : changer de parent",
+    "{parent} detaches ({n}× in 24h): change the parent": "{parent} décroche ({n}× en 24h) : changer de parent",
     "{parent} restarted {n} times in 24h": "{parent} a redémarré {n} fois en 24h",
     "{parent} detached {n} times in 24h": "{parent} a décroché {n} fois en 24h",
     ": this node loses its parent each time. ": " : cette node perd son parent à chaque fois. ",

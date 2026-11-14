@@ -187,10 +187,10 @@ class Advisor:
             if shaky:
                 kind, cnt = unstable_parents[p["parent"]]
                 if kind == "reboots":
-                    short.append(t("{parent} restarts (×{n} in 24h): finding a new parent could improve the situation", parent=p["parent"], n=cnt))
+                    short.append(t("{parent} restarts ({n}× in 24h): finding a new parent could improve the situation", parent=p["parent"], n=cnt))
                     why = t("{parent} restarted {n} times in 24h", parent=p["parent"], n=cnt)
                 else:
-                    short.append(t("{parent} detaches (×{n} in 24h): finding a new parent could improve the situation", parent=p["parent"], n=cnt))
+                    short.append(t("{parent} detaches ({n}× in 24h): finding a new parent could improve the situation", parent=p["parent"], n=cnt))
                     why = t("{parent} detached {n} times in 24h", parent=p["parent"], n=cnt)
                 actions.append(why + t(": this node loses its parent each time. ") +
                                t("Press Find a new parent on its line so it picks a steadier parent"))
