@@ -5,11 +5,6 @@
 
 Add-on repository for [Home Assistant](https://www.home-assistant.io/).
 
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Pintjes/ha-addons/main/mesh_guardian/images/screenshot.png" alt="Mesh Guardian page (demo data)" width="900">
-</p>
-
 ## Add-ons
 
 | | Add-on | Version | Description |
