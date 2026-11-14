@@ -252,7 +252,7 @@ const T = {
     d_net:"Network", d_role:"Role", d_parent:"Parent", d_best:"Best link", d_signal:"Signal", d_lqi:"Link quality (0–3)", d_resp:"Response · average",
     d_power:"Power", mains:"mains", battery:"battery", bat_level:["ok", "low", "critical"], d_last:"Last contact",
     sig7:"Signal · last 7 days", resp7:"Response · last 7 days", outages:"Outages", pchanges:"Parent changes", none:"none", ongoing:"ongoing",
-    hist_wait:"History is built every 15 minutes: come back later.", now:"now", d7:"7 d ago", average:"average", threshold:"weak threshold",
+    hist_wait:"History is built every 15 minutes: come back later.", now:"now", d7:"7 d ago", average:"average", threshold:"weak threshold", off_scale:"off scale",
     tech:"Technical details", t_id:"Id", t_rloc:"RLOC16", t_nb:"Neighbors", t_weak:"Weak links", t_det:"Detaches 24h", t_pch:"Parent changes 24h",
     t_partch:"Partition changes 24h", t_out:"Outages 24h · 7d", t_down:"Downtime 7d", t_reb:"Reboots · 24h", t_boot:"Last boot reason", t_up:"Uptime",
     t_src:"Last contact source", t_gap:"Longest silence", copy:"Copy", copied:"Copied", download:"Download", report_tip:"Anonymized report (no names, areas or addresses) to paste in an issue",
@@ -283,7 +283,7 @@ const T = {
     d_net:"Réseau", d_role:"Rôle", d_parent:"Parent", d_best:"Meilleur lien", d_signal:"Signal", d_lqi:"Qualité du lien (0–3)", d_resp:"Réponse · moyenne",
     d_power:"Alimentation", mains:"secteur", battery:"pile", bat_level:["ok", "faible", "critique"], d_last:"Dernier contact",
     sig7:"Signal · 7 derniers jours", resp7:"Réponse · 7 derniers jours", outages:"Coupures", pchanges:"Changements de parent", none:"aucun", ongoing:"en cours",
-    hist_wait:"L'historique se construit toutes les 15 minutes : revenez plus tard.", now:"maintenant", d7:"il y a 7 j", average:"moyenne", threshold:"seuil faible",
+    hist_wait:"L'historique se construit toutes les 15 minutes : revenez plus tard.", now:"maintenant", d7:"il y a 7 j", average:"moyenne", threshold:"seuil faible", off_scale:"hors échelle",
     tech:"Détails techniques", t_id:"Id", t_rloc:"RLOC16", t_nb:"Voisins", t_weak:"Liens faibles", t_det:"Décrochages 24 h", t_pch:"Chgt de parent 24 h",
     t_partch:"Chgt de partition 24 h", t_out:"Coupures 24 h · 7 j", t_down:"Durée coupée 7 j", t_reb:"Redémarrages · 24 h", t_boot:"Raison du dernier démarrage", t_up:"En marche depuis",
     t_src:"Source du dernier contact", t_gap:"Plus long silence", copy:"Copier", copied:"Copié", download:"Télécharger", report_tip:"Rapport anonymisé (sans noms, pièces ni adresses) à coller dans une issue",
@@ -656,17 +656,25 @@ function chart(pts, unit, color, warn) {
   if (!v.length) return `<p class="mut">—</p>`;
   const vals = v.map(p => p[1]), cur = vals[vals.length - 1];
   const avg = vals.reduce((a, b) => a + b, 0) / vals.length, mn = Math.min(...vals), mx = Math.max(...vals);
-  let lo = Math.min(mn, warn ?? Infinity), hi = Math.max(mx, warn ?? -Infinity);
-  const pad = Math.max(1, (hi - lo) * .12); lo -= pad; hi += pad;
+  // scale centered on the 7-day average: ±5 dBm at least (±50 % for response times),
+  // widened by whole steps until every point fits
+  const step = unit === "ms" ? Math.max(1, Math.round(avg * .5)) : 5;
+  const half = step * Math.max(1, Math.ceil(Math.max(mx - avg, avg - mn) / step - 1e-9));
+  let hi = avg + half, lo = avg - half;
+  if (unit === "ms" && lo < 0) { lo = 0; }
+  const span = (hi - lo) * .08; hi += span; lo -= unit === "ms" && lo === 0 ? 0 : span;
   const t0 = v[0][0], t1 = Math.max(v[v.length - 1][0], t0 + 1);
-  const W = 440, H = 96, L0 = 46, B = 16;
+  const W = 440, H = 96, L0 = 52, B = 16;
   const X = t => L0 + (t - t0) / (t1 - t0) * (W - L0 - 6), Y = y => 6 + (hi - y) / (hi - lo) * (H - B - 6);
   const fmt = x => unit === "ms" ? ms(x) : Math.round(x) + " " + unit;
-  const ticks = [...new Set([mx, (mx + mn) / 2, mn].map(x => fmt(x)))].map(s => [s, [mx, (mx + mn) / 2, mn].find(x => fmt(x) === s)]);
-  return `<div class="chart"><div class="stats"><span>${L("now")} <b class="num">${fmt(cur)}</b></span><span>${L("average")} ${fmt(avg)}</span><span>min ${fmt(mn)}</span><span>max ${fmt(mx)}</span></div>
+  const top = avg + half, bot = Math.max(unit === "ms" ? 0 : -Infinity, avg - half);
+  const warnIn = warn != null && warn >= lo && warn <= hi;
+  const grid = [[top, "var(--line)", ""], [bot, "var(--line)", ""], [avg, "var(--mut)", ' stroke-dasharray="3 3"']];
+  return `<div class="chart"><div class="stats"><span>${L("now")} <b class="num">${fmt(cur)}</b></span><span>${L("average")} ${fmt(avg)}</span><span>min ${fmt(mn)}</span><span>max ${fmt(mx)}</span>
+      ${warn != null && !warnIn ? `<span>${L("threshold")} ${warn} ${unit} : ${L("off_scale")}</span>` : ""}</div>
     <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(L("now") + " " + fmt(cur) + ", " + L("average") + " " + fmt(avg))}">
-    ${ticks.map(([s, t]) => `<line x1="${L0}" x2="${W - 6}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--line)"/><text x="${L0 - 5}" y="${Y(t) + 3}" text-anchor="end">${s}</text>`).join("")}
-    ${warn != null ? `<line x1="${L0}" x2="${W - 6}" y1="${Y(warn)}" y2="${Y(warn)}" stroke="var(--bad)" stroke-dasharray="4 3"/><text x="${L0 + 4}" y="${Y(warn) + 11}" style="fill:var(--bad)">${L("threshold")} ${warn}</text>` : ""}
+    ${grid.map(([t, c, d]) => `<line x1="${L0}" x2="${W - 6}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}" stroke="${c}"${d}/><text x="${L0 - 5}" y="${(Y(t) + 3).toFixed(1)}" text-anchor="end">${fmt(t)}</text>`).join("")}
+    ${warnIn ? `<line x1="${L0}" x2="${W - 6}" y1="${Y(warn)}" y2="${Y(warn)}" stroke="var(--bad)" stroke-dasharray="4 3"/><text x="${W - 8}" y="${Y(warn) - 3}" text-anchor="end" style="fill:var(--bad)">${L("threshold")} ${warn}</text>` : ""}
     ${v.length > 1 ? `<polyline fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" points="${v.map(p => X(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1)).join(" ")}"/>` : ""}
     ${v.map(p => `<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="5" fill="transparent"><title>${dt(p[0])} : ${fmt(p[1])}</title></circle>`).join("")}
     <circle cx="${X(v[v.length - 1][0])}" cy="${Y(cur)}" r="3.5" fill="${color}"/>

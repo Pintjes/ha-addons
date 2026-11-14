@@ -4,6 +4,15 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.2] - 2026-11-14
+
+### Changed
+
+- Beta view curves: scale centered on the 7-day average (dashed line), ±5 dBm at
+  least (±50 % for response times), widened by whole steps to fit every point;
+  the weak-signal threshold is drawn only when it is within the scale, otherwise
+  noted as off scale.
+
 ## [1.5.1] - 2026-11-14
 
 ### Changed
