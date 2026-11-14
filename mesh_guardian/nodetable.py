@@ -186,6 +186,50 @@ def find_parents(thread, labels):
     return parents, rlocs, best
 
 
+def routes_to_br(thread, labels, br_exts, rlocs, parents):
+    """Path of every node to the nearest border router, from the route tables (0/53/8).
+
+    Each entry of a router's route table gives, for a destination router, the next
+    hop (router id) and the path cost. The nearest border router is the one with the
+    lowest cost; its traffic towards Home Assistant most likely leaves the mesh there.
+    An end device goes through its parent. Returns node hex -> {"br", "via", "cost"}
+    ("via" None: direct link)."""
+    id_ext = {}   # router id -> extended address, from every route and neighbor table
+    for v in thread.values():
+        for rt in v["attrs"].get("0/53/8") or []:
+            if isinstance(rt, dict) and rt.get("0") and rt.get("2") is not None:
+                id_ext.setdefault(rt["2"], rt["0"])
+        for nb in v["attrs"].get("0/53/7") or []:
+            if isinstance(nb, dict) and nb.get("0") and nb.get("2") is not None and not nb["2"] & 0x3FF:
+                id_ext.setdefault(nb["2"] >> 10, nb["0"])
+    br_names = {labels[x] for x in br_exts if x in labels}
+    name_of = lambda rid: match(id_ext.get(rid), labels) or f"router {rid}"
+    out = {}
+    for nid, v in thread.items():
+        best = None
+        for rt in v["attrs"].get("0/53/8") or []:
+            if not isinstance(rt, dict) or rt.get("2") is None or rt.get("4") is None:
+                continue
+            dest = match(rt.get("0") or id_ext.get(rt["2"]), labels)
+            if dest not in br_names or not rt.get("9") and rt["4"] >= 16:
+                continue
+            if best is None or rt["4"] < best[1]:
+                best = (dest, rt["4"], rt.get("3"), rt["2"])
+        if best:
+            via = None if best[2] in (None, 63, best[3]) else name_of(best[2])
+            out[nid] = {"br": best[0], "via": via, "cost": best[1]}
+    by_name = {v["name"]: k for k, v in thread.items()}
+    for nid, p in parents.items():   # end devices: their parent, then the parent's path
+        if nid in out:
+            continue
+        if p[0] in br_names:
+            out[nid] = {"br": p[0], "via": None, "cost": 0, "parent": p[0]}
+        elif by_name.get(p[0]) in out:
+            r = out[by_name[p[0]]]
+            out[nid] = {"br": r["br"], "via": r["via"], "cost": r["cost"], "parent": p[0]}
+    return out
+
+
 def match(ext, table):
     """The Matter Server may round 64-bit integers (JSON): allow a small tolerance."""
     if ext is None:
@@ -242,6 +286,13 @@ class NodeTable:
             if ext is not None:
                 labels[ext] = thread[nid]["name"]
         parent_of, rlocs, best = find_parents(thread, labels)
+        with self.w.lock:
+            br_exts = [b["xa"] for b in self.w.br.values() if b.get("xa") is not None]
+        try:
+            routes = routes_to_br(thread, labels, br_exts, rlocs, parent_of)
+        except Exception as err:  # noqa: BLE001 - never break the table for this extra
+            LOG.debug("route to border router: %s", err)
+            routes = {}
         named = bool(meta)
         leader = None
         if self.radio and self.radio.leader_name and time.time() - self.radio.leader_t < 2400:
@@ -322,6 +373,7 @@ class NodeTable:
                 "new_parent": new_parent,
                 "rloc16": f"0x{rloc:04x}" if rloc is not None else None,
                 "best_link": bl[0] if bl else None, "best_rssi": bl[1] if bl else None, "best_lqi": bl[2] if bl else None,
+                "route": routes.get(nid),
                 "neighbors": len(nbs), "weak": len(weak),
                 "detaches_24h": diff["detached"], "parent_changes_24h": diff["parent_changes"],
                 "partition_changes_24h": diff["partition_changes"],
@@ -368,7 +420,7 @@ class NodeTable:
             "battery": bool(m.get("battery")), "available": bool(avail),
             "since": m.get("since") if not avail else None, "role": None,
             "parent": link, "rssi": a.get("0/54/4") if wifi else None, "lqi": None, "new_parent": None,
-            "rloc16": None, "best_link": None, "best_rssi": None, "best_lqi": None,
+            "rloc16": None, "best_link": None, "best_rssi": None, "best_lqi": None, "route": None,
             "neighbors": None, "weak": None,
             "detaches_24h": None, "parent_changes_24h": None,
             "partition_changes_24h": None,

@@ -206,9 +206,11 @@ const T = {
     storm:"Thread storm in progress: pings are spaced out and the hourly sweep is paused.",
     brs:"Border routers", br_seen:"seen {t}", br_never:"no contact yet", br_primary:"primary", offline:"offline", detached24:"detached ×{n} in 24h", other_subnet:"other subnet than Home Assistant",
     nodes:"Nodes", search:"Filter: name, area, model…", c_all:"All", c_issues:"To handle", c_bat:"On battery",
-    h_node:"Node", h_status:"Status", h_link:"Parent or best link · signal", h_resp:"Response", h_bat:"Battery", h_last:"Last contact", h_adv:"Advice",
+    h_node:"Node", h_status:"Status", h_link:"Attachment · signal", h_resp:"Response", h_bat:"Battery", h_last:"Last contact", h_adv:"Advice",
     available:"available", unavailable:"unavailable", unav_since:"unavailable since {t}", no_answer:"no answer", avg:"avg. {v}", contact:"Contact ",
-    best_tip:"Best link: a router has no parent", no_parent:"Unknown parent (probably a border router)",
+    best_tip:"Router: it has no parent, ↔ is the neighbor router it hears best", link_tip:"End device: its parent. Router (↔): the neighbor router it hears best",
+    to_ha:"Path to Home Assistant", r_direct:"{br} directly", r_via:"{br} via {via}", r_parent:"parent {p}, then ", r_cost:"cost {c}",
+    r_cost_tip:"Path cost: 1 per good hop, up to 4 for a weak link. The nearest border router is the one with the lowest cost.", r_unknown:"unknown (no route table published yet)", no_parent:"Unknown parent (probably a border router)",
     sig:["weak", "fair", "good"], new_parent:"new parent", none_match:"No node matches.",
     ago_s:"{n}s ago", ago_m:"{n} min ago", ago_h:"{n} h ago", ago_d:"{n} d ago", never:"never",
     d_net:"Network", d_role:"Role", d_parent:"Parent", d_best:"Best link", d_signal:"Signal", d_lqi:"Link quality (0–3)", d_resp:"Response · average",
@@ -233,9 +235,11 @@ const T = {
     storm:"Tempête Thread en cours : les pings sont espacés et le balayage horaire est suspendu.",
     brs:"Border routers", br_seen:"vu {t}", br_never:"aucun contact pour l'instant", br_primary:"primaire", offline:"hors ligne", detached24:"détaché ×{n} en 24 h", other_subnet:"autre sous-réseau que Home Assistant",
     nodes:"Nodes", search:"Filtrer : nom, pièce, modèle…", c_all:"Toutes", c_issues:"À traiter", c_bat:"Sur pile",
-    h_node:"Node", h_status:"Statut", h_link:"Parent ou meilleur lien · signal", h_resp:"Réponse", h_bat:"Pile", h_last:"Dernier contact", h_adv:"Conseil",
+    h_node:"Node", h_status:"Statut", h_link:"Rattachement · signal", h_resp:"Réponse", h_bat:"Pile", h_last:"Dernier contact", h_adv:"Conseil",
     available:"disponible", unavailable:"indisponible", unav_since:"indisponible depuis {t}", no_answer:"pas de réponse", avg:"moy. {v}", contact:"Contact ",
-    best_tip:"Meilleur lien : un routeur n'a pas de parent", no_parent:"Parent inconnu (probablement un border router)",
+    best_tip:"Routeur : il n'a pas de parent, ↔ est le voisin routeur qu'il capte le mieux", link_tip:"Appareil final : son parent. Routeur (↔) : le voisin routeur qu'il capte le mieux",
+    to_ha:"Chemin vers Home Assistant", r_direct:"{br} en direct", r_via:"{br} via {via}", r_parent:"parent {p}, puis ", r_cost:"coût {c}",
+    r_cost_tip:"Coût du chemin : 1 par bon saut, jusqu'à 4 pour un lien faible. Le border router le plus proche est celui de plus bas coût.", r_unknown:"inconnu (table de routage pas encore publiée)", no_parent:"Parent inconnu (probablement un border router)",
     sig:["faible", "moyen", "bon"], new_parent:"nouveau parent", none_match:"Aucune node ne correspond.",
     ago_s:"il y a {n} s", ago_m:"il y a {n} min", ago_h:"il y a {n} h", ago_d:"il y a {n} j", never:"jamais",
     d_net:"Réseau", d_role:"Rôle", d_parent:"Parent", d_best:"Meilleur lien", d_signal:"Signal", d_lqi:"Qualité du lien (0–3)", d_resp:"Réponse · moyenne",
@@ -335,6 +339,13 @@ function battery(r) {
   if (r.battery_level != null) return `<span class="${r.battery_level ? "st " + (r.battery_level > 1 ? "bad" : "warn") : ""}">${IC.bat} ${esc(L("bat_level")[r.battery_level] ?? "?")}</span>`;
   return "";
 }
+function route(r) {
+  const x = r.route;
+  if (!x) return null;
+  const pre = x.parent && x.parent !== x.br ? F("r_parent", {p: x.parent}) : "";
+  const end = x.parent === x.br ? F("r_direct", {br: x.br}) : x.via ? F("r_via", {br: x.br, via: x.via}) : F("r_direct", {br: x.br});
+  return pre + end + (x.cost ? " (" + F("r_cost", {c: x.cost}) + ")" : "");
+}
 function link(r) {
   const n = linkName(r);
   if (!n) return `<span class="p mut" title="${esc(L("no_parent"))}">${net(r) === "thread" ? "?" : "—"}</span>`;
@@ -344,7 +355,8 @@ function link(r) {
     const g = (r.rssi ?? 0) - (r.new_parent.before_rssi ?? r.rssi ?? 0);
     np = `<span class="np" title="${esc(L("new_parent") + " · " + r.new_parent.before + " (" + (r.new_parent.before_rssi ?? "?") + " dBm)")}">${g >= 6 ? "▲" : g <= -6 ? "▼" : "●"}</span>`;
   }
-  return `<span class="p" title="${esc(best ? L("best_tip") : L("d_parent"))}">${best ? "↔ " : ""}${esc(n)}${np}</span>`;
+  const rt = route(r);
+  return `<span class="p" title="${esc((best ? L("best_tip") : L("d_parent")) + (rt ? "\n" + L("to_ha") + " : " + rt : ""))}">${best ? "↔ " : ""}${esc(n)}${np}</span>`;
 }
 
 // ------------------------------------------------------------ summary
@@ -435,7 +447,8 @@ function renderList() {
   if (!fl.some(x => x[0] === P.filter)) P.filter = "all";
   $("#nodesTitle").textContent = L("nodes");
   $("#chips").innerHTML = fl.map(([k, lab, f]) => `<button class="chip" data-f="${k}" aria-pressed="${k === P.filter}">${lab}<span class="n num">${rows.filter(f).length}</span></button>`).join("");
-  $("#cols").innerHTML = ["h_node", "h_status", "h_link", "h_resp", "h_bat", "h_last", "h_adv"].map((k, i) => `<span class="${i === 3 ? "r" : ""}">${L(k)}</span>`).join("");
+  $("#cols").innerHTML = ["h_node", "h_status", "h_link", "h_resp", "h_bat", "h_last", "h_adv"].map((k, i) =>
+    `<span class="${i === 3 ? "r" : ""}"${i === 2 ? ` title="${esc(L("link_tip"))}"` : ""}>${L(k)}</span>`).join("");
   const q = P.q.trim().toLowerCase(), f = fl.find(x => x[0] === P.filter)[2];
   const list = rows.filter(f).filter(r => !q || [r.name, r.area, r.model, r.id, linkName(r)].some(x => (x || "").toLowerCase().includes(q)))
     .sort((a, b) => sev(a) - sev(b) || a.name.localeCompare(b.name));
@@ -495,7 +508,8 @@ async function openNode(id) {
   const power = r.battery ? L("battery") + (r.battery_pct != null ? " " + r.battery_pct + " %" : r.battery_level != null ? " · " + L("bat_level")[r.battery_level] : "") : L("mains");
   const kv = [[L("d_net"), NETS[net(r)]], [L("d_role"), r.role ? esc(L("roles")[r.role] || r.role) : "—"],
     [best ? L("d_best") : L("d_parent"), esc(linkName(r) || "—")], [L("d_signal"), signal(r)],
-    [L("d_lqi"), linkLqi(r) ?? "—"], [L("d_resp"), `${r.rtt_fail ? L("no_answer") : ms(r.rtt_ms)} · ${ms(r.rtt_avg_ms)}`],
+    [L("d_lqi"), linkLqi(r) ?? "—"],
+    ...(net(r) === "thread" ? [[L("to_ha"), `<span title="${esc(L("r_cost_tip"))}">${esc(route(r) || L("r_unknown"))}</span>`]] : []), [L("d_resp"), `${r.rtt_fail ? L("no_answer") : ms(r.rtt_ms)} · ${ms(r.rtt_avg_ms)}`],
     [L("d_power"), esc(power)], [L("d_last"), r.last_report ? ago(r.last_report) + (r.contact_src ? ` <small class="mut">(${esc(L("csrc")[r.contact_src] || r.contact_src)})</small>` : "") : L("never")]];
   const c = v => v == null ? "—" : v;
   const tech = [[L("t_id"), esc(r.id)], [L("t_rloc"), esc(r.rloc16 || "—")], [L("t_nb"), c(r.neighbors)], [L("t_weak"), c(r.weak)],

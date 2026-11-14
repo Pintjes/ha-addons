@@ -4,6 +4,19 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-11-14
+
+### Added
+
+- Path to Home Assistant of every Thread node, from the route tables: nearest
+  border router (lowest path cost), next hop and cost; end devices go through
+  their parent. In the API (`route`) and in the beta view (tooltip of the link
+  and node panel).
+
+### Changed
+
+- Beta view: link column renamed *Attachment · signal*, with an explanation.
+
 ## [1.2.0] - 2026-11-14
 
 ### Added
