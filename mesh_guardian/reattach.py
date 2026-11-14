@@ -35,7 +35,7 @@ LOG = logging.getLogger("mg.reattach")
 GOOD_GAIN = 6         # dB: gain from which the new link counts as better (same as the advice)
 FAILSAFE_S = 120      # s: the node goes back to its configuration by itself after this time
 SETTLE_S = 25         # s: time left to the node to attach before its new link is read
-END_DEVICE_ROLES = (2, 3)   # sleepy end device, end device
+END_DEVICE_ROLES = (2, 3, 4)   # sleepy end device, end device, REED (a full end device attached as a child)
 CONNECT_NETWORK = 6   # Network Commissioning command id
 PATHS = ["0/53/1", "0/53/7", "0/49/1", "0/49/65529"]
 
@@ -74,16 +74,14 @@ def connected_network(networks):
 
 
 def verdict(before, after):
-    """better / worse / similar / same (no parent change) / unknown."""
-    if not after:
-        return "unknown"
-    if after["rloc"] == before["rloc"]:
-        return "same"
-    gain = after["rssi"] - before["rssi"]
-    if after["lqi"] > before["lqi"] or gain >= GOOD_GAIN:
-        return "better"
-    if after["lqi"] < before["lqi"] or gain <= -GOOD_GAIN:
-        return "worse"
+    """better / worse / similar, from the link shown in the table before and after:
+    (rssi, lqi). The link quality decides first, then the RSSI."""
+    (rssi_b, lqi_b), (rssi_a, lqi_a) = before, after
+    if lqi_a and lqi_b and lqi_a != lqi_b:
+        return "better" if lqi_a > lqi_b else "worse"
+    if rssi_a is not None and rssi_b is not None:
+        gain = rssi_a - rssi_b
+        return "better" if gain >= GOOD_GAIN else "worse" if gain <= -GOOD_GAIN else "similar"
     return "similar"
 
 
@@ -185,11 +183,13 @@ class Reattach:
         parent_before, rssi_before, lqi_before = self._view(nid)
         # same rule as the table and the advice, on the link the table shows
         poor = weak_link(rssi_before, lqi_before) if (rssi_before is not None or lqi_before) else is_poor(before)
-        roles = END_DEVICE_ROLES + ((4,) if force else ())   # a REED attached as a child has a parent too
-        if attrs.get("0/53/1") not in roles or not before or not (force or poor):
+        if attrs.get("0/53/1") not in END_DEVICE_ROLES or not before or not (force or poor):
             return None
-        rssi_before = rssi_before if rssi_before is not None else before["rssi"]
-        row = {"node": name, "area": area, "rssi_before": rssi_before, "lqi_before": lqi_before or before["lqi"],
+        if not force and not parent_before:
+            return None   # no parent in the table (a router, whatever its reported role): nothing to search
+        if rssi_before is None and not lqi_before:   # not in the table yet: the link read on the node
+            rssi_before, lqi_before = before["rssi"], before["lqi"]
+        row = {"node": name, "area": area, "rssi_before": rssi_before, "lqi_before": lqi_before,
                "rloc_before": before["rloc"], "parent_before": parent_before}
         network = connected_network(attrs.get("0/49/1"))
         if network is None or CONNECT_NETWORK not in (attrs.get("0/49/65529") or []):
@@ -215,7 +215,6 @@ class Reattach:
                 self.live.note_contact(nid, src="read")
         except Exception as err:  # noqa: BLE001
             LOG.debug("read after parent search of %s: %s", name, err)
-        res = verdict(before, after)
         try:   # addresses of the node: its RLOC16 (and so its parent) can have changed
             res_a = self.h.matter_command("read_attribute", {"node_id": node_id, "attribute_path": "0/51/0"}, timeout=30)
             addrs = res_a.get("0/51/0") if isinstance(res_a, dict) else None
@@ -224,8 +223,12 @@ class Reattach:
         except Exception as err:  # noqa: BLE001
             LOG.debug("addresses of %s: %s", name, err)
         parent, rssi, lqi = self._view(nid, read_parent=True)   # only the values of the table: no other source
-        if parent and parent == parent_before and res != "unknown":
+        if not after or not parent:
+            res = "unknown"
+        elif parent == parent_before:
             res = "same"
+        else:
+            res = verdict((rssi_before, lqi_before), (rssi, lqi))
         if self.advisor:
             self.advisor.tried[name] = (time.time(), res)
         row.update({"result": res, "parent": parent, "rssi": rssi, "lqi": lqi})
