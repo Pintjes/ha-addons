@@ -274,6 +274,11 @@ class Reattach:
         if self.advisor:
             self.advisor.tried[name] = (time.time(), res)   # kept on disk: the advice follows it
             self.advisor.save()
+        if res not in ("noanswer", "unknown") and getattr(self.w, "history", None):
+            try:
+                self.w.history.sample_one(nid)   # the parent change shows in the node panel at once
+            except Exception as err:  # noqa: BLE001
+                LOG.debug("history point of %s: %s", name, err)
         if self.table:
             self.table.cache_t = 0   # the page shows the new link at its next request
 

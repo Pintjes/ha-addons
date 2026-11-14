@@ -37,6 +37,24 @@ class History:
         except OSError as err:
             LOG.warning(t("Cannot write {file}: {err}", file=FILE, err=err))
 
+    @staticmethod
+    def _point(r, now):
+        router = r.get("role") in ("router", "leader")
+        parent = r.get("parent") or (("↔ " + r["best_link"]) if router and r.get("best_link") else None)
+        rssi = r.get("rssi") if r.get("rssi") is not None else (r.get("best_rssi") if router else None)
+        return [now, bool(r.get("available")), parent, rssi, r.get("rtt_ms")]
+
+    def sample_one(self, nid):
+        """One point now for one node, from the table just rebuilt (after a parent search:
+        the change shows in the node panel at once, not at the next 15-minute point)."""
+        table = getattr(self.w, "table", None)
+        rows = ((table.cache or {}).get("rows") or []) if table else []
+        rid = f"0x{nid.lstrip('0') or '0'}"
+        r = next((x for x in rows if x.get("id") == rid), None)
+        if r:
+            with self.lock:
+                self.data.setdefault(nid, []).append(self._point(r, round(time.time())))
+
     def sample(self):
         table = getattr(self.w, "table", None)
         rows = ((table.cache or {}).get("rows") or []) if table else []
@@ -49,10 +67,7 @@ class History:
                     nid = f"{int(r['id'], 16):016X}"
                 except (KeyError, ValueError):
                     continue
-                router = r.get("role") in ("router", "leader")
-                parent = r.get("parent") or (("↔ " + r["best_link"]) if router and r.get("best_link") else None)
-                rssi = r.get("rssi") if r.get("rssi") is not None else (r.get("best_rssi") if router else None)
-                self.data.setdefault(nid, []).append([now, bool(r.get("available")), parent, rssi, r.get("rtt_ms")])
+                self.data.setdefault(nid, []).append(self._point(r, now))
             cutoff = now - KEEP_S
             for k in list(self.data):
                 self.data[k] = [x for x in self.data[k] if x[0] >= cutoff]
