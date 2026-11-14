@@ -748,7 +748,7 @@ async function runAction(btn) {
     else if (a === "ping") msg = F(res.ok ? "a_ping_ok" : "a_ping_ko", {n: r.name, ms: res.ms});
     else if (a === "interview") msg = F("a_interview_ok", {n: r.name, s: res.s});
     else msg = F("a_parent_" + (res.result || "unknown"), {n: r.name, b: res.rssi_before ?? "?", a: res.rssi ?? "?",
-      pb: res.parent_before || "?", pa: res.parent || "?"}) + (res.rssi_before != null ? " " + L("a_rssi_note") : "");
+      pb: res.parent_before || "?", pa: res.parent || "?"});
   } catch (e) { msg = `${r.name} : ${L("error")}`; }
   toast(msg);
   document.querySelectorAll(`[data-act="${a}"][data-node="${id}"]`).forEach(b => { b.disabled = false; b.classList.remove("busy"); });
