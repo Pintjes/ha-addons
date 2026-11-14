@@ -312,13 +312,17 @@ def routes_to_br(thread, labels, br_exts, rlocs, parents):
             if v["name"] == name:
                 rid_node.setdefault(rid, nid)
 
-    def walk(first, dest):
+    def walk(first, dest, origin):
         """Routers crossed from the next hop `first` to the border router `dest`, following
-        the next hop announced by each router. Returns (names, complete)."""
+        the next hop announced by each router. Returns (names, complete). Route tables are
+        read at different times: a hop that leads back to the origin or to a router already
+        crossed is a loop between an old and a new table, and the rest of the path is unknown."""
         path, hop = [], first
         while hop is not None and len(path) < 12:
-            if hop in (63, dest) or name_of(hop) in path:
+            if hop in (63, dest):
                 break
+            if name_of(hop) == origin or name_of(hop) in path:
+                return path, False
             if name_of(hop) in br_names:
                 break   # reached a border router (by another router id than expected): the path ends here
             path.append(name_of(hop))
@@ -353,7 +357,7 @@ def routes_to_br(thread, labels, br_exts, rlocs, parents):
                 if cost < 16 and (best is None or cost < best[1]):
                     best = (dest, cost, via, rid)
         if best:
-            path, complete = walk(best[2], best[3]) if best[2] is not None else ([], True)
+            path, complete = walk(best[2], best[3], v["name"]) if best[2] is not None else ([], True)
             out[nid] = {"br": best[0], "via": name_of(best[2]) if best[2] is not None else None, "cost": best[1],
                         "hop_rid": best[2] if best[2] is not None else best[3],   # router id of the first hop
                         "path": path, "hops": len(path) + 1, "complete": complete}

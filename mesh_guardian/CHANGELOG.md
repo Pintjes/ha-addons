@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.6.2] - 2026-11-14
+
+### Fixed
+
+- Path to the border router: a loop between route tables read at different times (a node shown in its own path) now ends the path, marked as incomplete.
+
 ## [2.6.1] - 2026-11-14
 
 ### Fixed
