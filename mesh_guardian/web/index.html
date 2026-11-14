@@ -844,7 +844,10 @@ async function openNode(id) {
   try {
     const d = await (await fetch("api/node?id=" + encodeURIComponent(id), {cache: "no-store"})).json();
     if (!$("#sheet").classList.contains("on")) return;
-    const s = d.series || [];
+    const s = (d.series || []).slice();
+    // the history has one point every 15 min: end the curves on the values shown in the table now
+    const nowRssi = linkRssi(r), nowRtt = r.rtt_fail ? null : r.rtt_ms;
+    if (nowRssi != null || nowRtt != null) s.push([Date.now() / 1000, r.available ? 1 : 0, linkName(r), nowRssi, nowRtt]);
     const out = (d.outages || []).slice(-15).reverse().map(o => `<li>${dt(o[0])} → ${o[1] ? dt(o[1]) : L("ongoing")}</li>`).join("");
     const pc = (d.parent_changes || []).slice(-15).reverse().map(x => `<li>${dt(x[0])} : ${esc(x[1])} → ${esc(x[2])}</li>`).join("");
     const signalChart = net(r) === "ethernet" ? "" : `<h2>${L("sig7")}</h2>${chart(s.map(x => [x[0], x[3]]), "dBm", "var(--acc)", net(r) === "thread" ? TH.rssi_bad : null)}`;
