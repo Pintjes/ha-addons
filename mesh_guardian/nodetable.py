@@ -480,6 +480,16 @@ class NodeTable:
                 adv = None
             elif adv and adv[2] == "high" and strong:
                 adv = None   # weak-link advice, but the link shown is no longer weak
+            # a parent search was just done (the advice is only computed again at the next survey)
+            tried = (self.advisor.tried.get(v["name"]) if self.advisor else None) or (0, None)
+            if adv and tried[1] not in (None, "noanswer") and now - tried[0] < 86400:
+                if adv[2] == "low":
+                    adv = None   # unstable parent: the search was the action, wait 24 h
+                elif tried[1] == "same" and p and weak_link(p[1], p[2]):
+                    adv = (t("Add a router near {area}", area=m.get("area") or "?"),
+                           t("add a mains-powered Thread router (e.g. a Matter smart plug) near \"{area}\": "
+                             "the node already had a chance to find a better parent and did not", area=m.get("area") or "?"),
+                           "high", p[0])
             if not adv and not p and bl and weak_link(bl[1], bl[2]) and v["meta"].get("available", True):
                 # a router has no parent to change: the link it sends through is weak, it needs a closer router
                 adv = (t("Add a router near {area}", area=m.get("area") or "?"),
@@ -542,6 +552,7 @@ class NodeTable:
                 "contact_src": src[0], "active_gap_max_s": src[1], "since_active_s": src[2], **self._silence(nid, bool(avail)),
                 "rtt_ms": rtt_last, "rtt_avg_ms": rtt_avg, "rtt_fail": rtt_fail,
                 "last_report": v["node"].get("last"), "last_radio": v["node"].get("radio"),
+                "search": self.w.reattach.result_of(nid) if getattr(self.w, "reattach", None) else None,
             })
         for nid, v in other.items():
             rows.append(self._other_row(nid, v))

@@ -35,6 +35,9 @@ LOG = logging.getLogger("mg.reattach")
 GOOD_GAIN = 6         # dB: gain from which the new link counts as better (same as the advice)
 FAILSAFE_S = 120      # s: the node goes back to its configuration by itself after this time
 SETTLE_S = 25         # s: time left to the node to attach before its new link is read
+FOLLOW_EVERY_S = 30   # s: result not known yet: the node and its parent are read again this often...
+FOLLOW_FOR_S = 300    # s: ...for this long
+RESULT_KEEP_S = 900   # s: a result stays in the table this long (the page shows it when it arrives)
 END_DEVICE_ROLES = (2, 3, 4)   # sleepy end device, end device, REED (a full end device attached as a child)
 CONNECT_NETWORK = 6   # Network Commissioning command id
 PATHS = ["0/53/1", "0/53/7", "0/49/1", "0/49/65529"]
@@ -94,6 +97,12 @@ class Reattach:
         self.table = None         # node table: the link shown to the user (weakest direction)
         self.busy = threading.Lock()
         self.last = {"date": None, "checked": 0, "poor": 0, "better": 0, "nodes": []}
+        self.results = {}         # node hex -> {"state": "pending" | "done", "text", "at"} of the last search
+
+    def result_of(self, nid):
+        """Last parent search of a node for the table, while it is recent."""
+        r = self.results.get(nid)
+        return r if r and time.time() - r["at"] < RESULT_KEEP_S else None
 
     # ------------------------------------------------------------ Matter Server
     def _read(self, node_id):
@@ -222,31 +231,67 @@ class Reattach:
                 self.live.set_attribute(nid, "0/51/0", addrs)
         except Exception as err:  # noqa: BLE001
             LOG.debug("addresses of %s: %s", name, err)
-        parent, rssi, lqi = self._view(nid, read_parent=True)   # only the values of the table: no other source
-        if not after or not parent:
-            res = "unknown"
-        elif parent == parent_before:
-            res = "same"
-        else:
-            res = verdict((rssi_before, lqi_before), (rssi, lqi))
-        if self.advisor:
-            self.advisor.tried[name] = (time.time(), res)
-        row.update({"result": res, "parent": parent, "rssi": rssi, "lqi": lqi})
         if after:
             row["rloc"] = after["rloc"]
-        # the result: the parent (new or same) and its link now, as the table shows them
+        before = (parent_before, rssi_before, lqi_before)
+        if not self._conclude(nid, name, before, row, read=False, known=bool(after)):
+            # not known yet (a sleepy node answers at its next wake-up): followed in the background
+            threading.Thread(target=self._follow, args=(nid, name, before), daemon=True, name="reattach-follow").start()
+        return row
+
+    def _conclude(self, nid, name, before, row, read=True, known=True):
+        """Read the node and its parent, and if the parent is known, give the result: the
+        parent (new or same) and its link now, as the table shows them. Returns True when done."""
+        node_id = int(nid, 16)
+        if read:
+            for path in ("0/53/7", "0/51/0"):   # its table and its addresses (RLOC16, so its parent)
+                try:
+                    res_r = self.h.matter_command("read_attribute", {"node_id": node_id, "attribute_path": path}, timeout=30)
+                    value = res_r.get(path) if isinstance(res_r, dict) else None
+                    if isinstance(value, list) and self.live:
+                        self.live.set_attribute(nid, path, value)
+                        self.live.note_contact(nid, src="read")
+                except Exception as err:  # noqa: BLE001 - asleep: next try
+                    LOG.debug("follow-up read of %s %s: %s", name, path, err)
+                    return False
+        parent, rssi, lqi = self._view(nid, read_parent=True)   # only the values of the table: no other source
+        if not known or not parent:
+            row.update({"result": "unknown", "text": t("{node}: new parent not known yet", node=name)})
+            self.results[nid] = {"state": "pending", "text": row["text"], "at": time.time()}
+            return False
+        parent_before, rssi_before, lqi_before = before
+        res = "same" if parent == parent_before else verdict((rssi_before, lqi_before), (rssi, lqi))
         link = " · ".join(x for x in (parent, f"LQI {lqi}" if lqi else None, f"{rssi} dBm" if rssi is not None else None) if x)
-        if res == "unknown" or not parent:
-            text = t("{node}: new parent not known yet", node=name)
-        elif res == "same":
-            text = t("{node}: same parent {link}", node=name, link=link)
-        else:
-            text = t("{node}: new parent {link}", node=name, link=link)
-        row["text"] = text
+        text = t("{node}: same parent {link}", node=name, link=link) if res == "same" else \
+            t("{node}: new parent {link}", node=name, link=link)
+        row.update({"result": res, "parent": parent, "rssi": rssi, "lqi": lqi, "text": text})
+        self._done(nid, name, res, text)
+        self.w.emit("reattach_result", text, node=name, result=res, rssi_before=rssi_before, rssi=rssi, lqi=lqi, parent=parent)
+        return True
+
+    def _done(self, nid, name, res, text):
+        self.results[nid] = {"state": "done", "result": res, "text": text, "at": time.time()}
+        if self.advisor:
+            self.advisor.tried[name] = (time.time(), res)   # kept on disk: the advice follows it
+            self.advisor.save()
         if self.table:
             self.table.cache_t = 0   # the page shows the new link at its next request
-        self.w.emit("reattach_result", text, node=name, result=res, rssi_before=rssi_before, rssi=rssi, lqi=lqi, parent=parent)
-        return row
+
+    def _follow(self, nid, name, before):
+        """Result not known right after the search: read the node and its parent again every
+        FOLLOW_EVERY_S for FOLLOW_FOR_S, then give the result (or say the node did not answer)."""
+        end = time.time() + FOLLOW_FOR_S
+        while time.time() < end:
+            if self.w.stop.wait(FOLLOW_EVERY_S):
+                return
+            try:
+                if self._conclude(nid, name, before, {}):
+                    return
+            except Exception as err:  # noqa: BLE001
+                LOG.debug("follow-up of %s: %s", name, err)
+        text = t("{node}: no answer from the node", node=name)
+        self._done(nid, name, "noanswer", text)
+        self.w.emit("reattach_result", text, node=name, result="noanswer")
 
     def run_node(self, nid):
         """Parent search for one node, asked from the node table: done even when its link is

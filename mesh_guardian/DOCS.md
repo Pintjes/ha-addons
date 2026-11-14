@@ -174,7 +174,7 @@ Every event is written to the add-on log, published on the MQTT topic
 | `ping_all`, `ping_all_done` | ping of every node requested with the button |
 | `radio_survey`, `radio_advice`, `parent_change` | radio quality and advice (also shown in the node table) |
 | `names`, `name_synced` | names Home Assistant → Matter (Rename nodes button) |
-| `reattach`, `reattach_node`, `reattach_result`, `reattach_done` | parent search (Find better parents button): start, node asked to attach again, its link before and after (`result`: `better`, `worse`, `similar`, `same`, `unknown`), summary |
+| `reattach`, `reattach_node`, `reattach_result`, `reattach_done` | parent search (Find better parents button): start, node asked to attach again, its link before and after (`result`: `better`, `worse`, `similar`, `same`, `unknown`, then `noanswer` if the node never answered), summary |
 | `statistics`, `auto_recovery` | statistics rebuilt, recovery switched on / off (with who switched it) |
 
 You can trigger automations on them, for example a notification when a node
@@ -254,7 +254,13 @@ What to know:
   better, sometimes the same parent is kept (no better router in range), and
   it can be weaker. There is no way back to the previous parent. This is why
   nodes with a good link are never touched.
-- Routers (mains-powered devices) are never touched: a router has no parent.
+- Routers are never touched: a router has no parent. A mains-powered device
+  attached as a child (*End* in the table) has one and can be moved.
+- When the result is not known right away (a sleepy node answers at its next
+  wake-up), the node and its parent are read again every 30 s for 5 minutes;
+  the page shows the result as soon as it is known.
+- After a search, the advice follows: an unstable-parent advice is hidden for
+  24 h; a weak link that kept the same parent becomes *Add a router near …*.
 - If a node does not confirm, the fail-safe is cancelled and the node keeps
   the network configuration it had.
 - The search is skipped during a Thread storm or right after a global outage.

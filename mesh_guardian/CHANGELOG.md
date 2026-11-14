@@ -4,6 +4,16 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.6.0] - 2026-11-14
+
+### Added
+
+- Parent search: when the result is not known right away (sleepy node), the add-on reads the node and its parent again every 30 s for 5 minutes, then shows the result (new or same parent, link quality, RSSI), or that the node did not answer.
+
+### Changed
+
+- After a parent search, the advice follows at once: an unstable-parent advice is hidden for 24 h; a weak link that kept the same parent becomes "Add a router near …". The last searches are kept across restarts.
+
 ## [2.5.6] - 2026-11-14
 
 ### Fixed

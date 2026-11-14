@@ -30,7 +30,8 @@ WEAK_RSSI = -90        # dBm: weak link when the link quality is not known
 GOOD_GAIN = 6          # dB: gain from which a change counts as "better"
 UNSTABLE_DETACHES = 3  # detaches over about 24h from which a parent counts as unstable
 UNSTABLE_REBOOTS = 2   # reboots over about 24h (software updates excluded) from which a parent counts as unstable
-SETTLE_S = 86400       # s: no "Unstable parent" during this time after a move to a better parent
+SETTLE_S = 86400       # s: no "Unstable parent" during this time after a move to a better parent,
+                       # nor after a parent search that kept the same parent (it was tried)
 FORCED_S = 7200        # s: a parent change this long after a requested parent search is not spontaneous
 
 
@@ -75,14 +76,20 @@ class Advisor:
             self.models = st.get("models", {})
             self.changes = st.get("changes", [])
             self.last_t = st.get("last_t")
+            self.tried = {k: tuple(v) for k, v in (st.get("tried") or {}).items()}
         except Exception:  # noqa: BLE001
             pass
+
+    def save(self):
+        self._save()
 
     def _save(self):
         try:
             with open(STATE_FILE, "w") as f:
                 json.dump({"prev": self.prev, "reboot_counts": self.uptimes, "models": self.models,
-                           "changes": self.changes[-30:], "last_t": self.last_t}, f, ensure_ascii=False)
+                           "changes": self.changes[-30:], "last_t": self.last_t,
+                           "tried": {k: v for k, v in self.tried.items() if time.time() - v[0] < 7 * 86400}},
+                          f, ensure_ascii=False)
         except Exception as err:  # noqa: BLE001
             LOG.warning(t("Cannot save the radio advice state: {err}", err=err))
 
@@ -179,14 +186,16 @@ class Advisor:
             since = self.prev.get(child, {}).get("since")
             # just moved to a better parent: the past of that parent is not this node's problem
             settling = bool(since and self.prev[child].get("better") and now - since < SETTLE_S)
-            shaky = p["parent"] in unstable_parents and not settling
+            tried = self.tried.get(child)
+            # a parent search was just done: the instability counted so far is from before it
+            just_tried = bool(tried and now - tried[0] < SETTLE_S and tried[1] != "noanswer")
+            shaky = p["parent"] in unstable_parents and not settling and not just_tried
             if not (weak or shaky):
                 continue
             days = (now - since) / 86400 if since else 0
             model = n.get("model") or "?"
             autonomous = self.models.get(model, {}).get("spontaneous", 0) > 0
             actions, short = [], []
-            tried = self.tried.get(child)
             no_better = bool(tried and now - tried[0] < 7 * 86400 and tried[1] in ("same", "similar", "worse"))
             if weak:
                 if no_better or child in rebooted or (autonomous and days > 1):
