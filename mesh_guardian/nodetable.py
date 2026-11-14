@@ -18,6 +18,7 @@ import time
 from i18n import lang, t
 
 LOG = logging.getLogger("mg.table")
+from advice import WEAK_PARENT  # noqa: E402
 
 ROLE = {0: "unspecified", 1: "unassigned", 2: "sleepy_end_device", 3: "end_device", 4: "reed",
         5: "router", 6: "leader"}
@@ -317,7 +318,8 @@ class NodeTable:
         if self.radio and self.radio.leader_name and time.time() - self.radio.leader_t < 2400:
             leader = self.radio.leader_name   # Home Assistant names loaded: parent history can start
         ref = (self.radio.reference(now, min_age=3600) or {}).get("nodes", {}) if self.radio else {}
-        advice = {a["node"]: ("; ".join(a.get("short") or a["actions"]), "; ".join(a["actions"]), a.get("severity", "high"))
+        advice = {a["node"]: ("; ".join(a.get("short") or a["actions"]), "; ".join(a["actions"]), a.get("severity", "high"),
+                              a.get("parent"))
                   for a in (self.advisor.advice if self.advisor else [])}
         rows = []
         for nid, v in thread.items():
@@ -350,6 +352,11 @@ class NodeTable:
                 elif hist["key"] != p[3]:
                     hist.update({"prev": hist["parent"], "prev_rssi": hist["rssi"], "since": now, "key": p[3]})
                 hist["parent"], hist["rssi"] = p[0], p[1]
+            # advice is computed at the radio survey (every 30 min): drop it as soon as the
+            # node has left the parent it was about (weak link fixed, unstable parent left)
+            adv = advice.get(v["name"])
+            if adv and p and adv[3] and p[0] != adv[3] and (adv[2] == "low" or p[1] is None or p[1] > WEAK_PARENT):
+                adv = None
             new_parent = None
             if p and hist and hist.get("since") and now - hist["since"] <= NEW_PARENT_S and hist.get("prev"):
                 new_parent = {"before": hist["prev"], "before_rssi": hist["prev_rssi"], "at": hist["since"]}
@@ -402,9 +409,9 @@ class NodeTable:
                 "uptime_h": round(uptime / 3600, 1) if isinstance(uptime, (int, float)) else None,
                 "uptime_s": round(uptime) if isinstance(uptime, (int, float)) else None,
                 "battery_pct": bat[0], "battery_level": bat[1],
-                "advice": "; ".join(x for x in (bat_short, (advice.get(v["name"]) or (None, None, None))[0]) if x) or None,
-                "advice_level": "high" if low else (advice.get(v["name"]) or (None, None, None))[2],
-                "advice_detail": "; ".join(x for x in (bat_short, (advice.get(v["name"]) or (None, None, None))[1]) if x) or None,
+                "advice": "; ".join(x for x in (bat_short, (adv or (None, None, None))[0]) if x) or None,
+                "advice_level": "high" if low else (adv or (None, None, None))[2],
+                "advice_detail": "; ".join(x for x in (bat_short, (adv or (None, None, None))[1]) if x) or None,
                 "contact_src": src[0], "active_gap_max_s": src[1], "since_active_s": src[2],
                 "rtt_ms": rtt_last, "rtt_avg_ms": rtt_avg, "rtt_fail": rtt_fail,
                 "last_report": v["node"].get("last"), "last_radio": v["node"].get("radio"),
