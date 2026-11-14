@@ -215,11 +215,39 @@ def routes_to_br(thread, labels, br_exts, rlocs, parents):
         lq = min(e.get("5") or 0, e.get("6") or 0)
         return lq_cost.get(lq) if e.get("9") or lq else None
 
+    tables = {nid: {rt["2"]: rt for rt in v["attrs"].get("0/53/8") or []
+                    if isinstance(rt, dict) and rt.get("2") is not None} for nid, v in thread.items()}
+    rid_node = {}   # router id -> node hex (Matter routers)
+    for nid, v in thread.items():
+        rloc = rlocs.get(nid)
+        if rloc is not None and not rloc & 0x3FF:
+            rid_node[rloc >> 10] = nid
+    for rid, ext in id_ext.items():
+        name = match(ext, labels)
+        for nid, v in thread.items():
+            if v["name"] == name:
+                rid_node.setdefault(rid, nid)
+
+    def walk(first, dest):
+        """Routers crossed from the next hop `first` to the border router `dest`, following
+        the next hop announced by each router. Returns (names, complete)."""
+        path, hop = [], first
+        while hop is not None and len(path) < 12:
+            if hop in (63, dest) or name_of(hop) in path:
+                break
+            path.append(name_of(hop))
+            node = rid_node.get(hop)
+            entry = tables.get(node, {}).get(dest) if node else None
+            if not entry:
+                return path, False   # not a Matter node or no route table: the rest is unknown
+            nxt = entry.get("3")
+            hop = None if nxt in (None, 63, dest) else nxt
+        return path, True
+
     for nid, v in thread.items():
         if nid in parents:
             continue   # an end device sends through its parent (its own route table is stale)
-        table = {rt["2"]: rt for rt in v["attrs"].get("0/53/8") or []
-                 if isinstance(rt, dict) and rt.get("2") is not None}
+        table = tables[nid]
         best = None
         for rid, rt in table.items():
             dest = match(rt.get("0") or id_ext.get(rid), labels)
@@ -237,16 +265,19 @@ def routes_to_br(thread, labels, br_exts, rlocs, parents):
                 options.append((rt["4"] + (first if first is not None else 1), hop))
             for cost, via in options:
                 if cost < 16 and (best is None or cost < best[1]):
-                    best = (dest, cost, via)
+                    best = (dest, cost, via, rid)
         if best:
-            out[nid] = {"br": best[0], "via": name_of(best[2]) if best[2] is not None else None, "cost": best[1]}
+            path, complete = walk(best[2], best[3]) if best[2] is not None else ([], True)
+            out[nid] = {"br": best[0], "via": name_of(best[2]) if best[2] is not None else None, "cost": best[1],
+                        "path": path, "hops": len(path) + 1, "complete": complete}
     by_name = {v["name"]: k for k, v in thread.items()}
     for nid, p in parents.items():   # end devices: their parent, then the parent's path
         if p[0] in br_names:
-            out[nid] = {"br": p[0], "via": None, "cost": 0, "parent": p[0]}
+            out[nid] = {"br": p[0], "via": None, "cost": 0, "parent": p[0], "path": [], "hops": 1, "complete": True}
         elif by_name.get(p[0]) in out:
             r = out[by_name[p[0]]]
-            out[nid] = {"br": r["br"], "via": r["via"], "cost": r["cost"], "parent": p[0]}
+            out[nid] = {"br": r["br"], "via": r["via"], "cost": r["cost"], "parent": p[0],
+                        "path": [p[0]] + r["path"], "hops": r["hops"] + 1, "complete": r["complete"]}
     return out
 
 
