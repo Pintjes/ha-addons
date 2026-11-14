@@ -457,7 +457,7 @@ class NodeTable:
                 "advice": "; ".join(x for x in (bat_short, (adv or (None, None, None))[0]) if x) or None,
                 "advice_level": "high" if low else (adv or (None, None, None))[2],
                 "advice_detail": "; ".join(x for x in (bat_short, (adv or (None, None, None))[1]) if x) or None,
-                "contact_src": src[0], "active_gap_max_s": src[1], "since_active_s": src[2],
+                "contact_src": src[0], "active_gap_max_s": src[1], "since_active_s": src[2], **self._silence(nid, bool(avail)),
                 "rtt_ms": rtt_last, "rtt_avg_ms": rtt_avg, "rtt_fail": rtt_fail,
                 "last_report": v["node"].get("last"), "last_radio": v["node"].get("radio"),
             })
@@ -485,6 +485,24 @@ class NodeTable:
                 LOG.debug("MAC addresses: %s", err)
                 self._macs_v = getattr(self, "_macs_v", {})
         return getattr(self, "_macs_v", {})
+
+    def _silence(self, nid, available):
+        """Usual rhythm of the node and, when it has been silent for much longer than usual,
+        for how long: an early sign that it lost power, minutes before the Matter Server
+        declares it unavailable. Only with passive contact (every packet is seen), and not
+        while the silence can come from our side (start, reconnection, mass outage)."""
+        usual, since = self.live.rhythm(nid)
+        out = {"rhythm_s": usual, "silent_limit_s": None, "silent_s": None}
+        if usual is None:
+            return out
+        limit = out["silent_limit_s"] = round(max(2 * usual, usual + 45))
+        q = getattr(self, "quality", None)
+        now = time.time()
+        listening = now - max(self.live.t0, self.live.since or now)
+        if (available and since is not None and since > limit and q and getattr(q, "sniffing", False)
+                and self.live.connected and now >= self.h.mass_until and listening > limit):
+            out["silent_s"] = round(since)
+        return out
 
     AP_FILE = "/data/ap_names.json"
 
@@ -570,7 +588,7 @@ class NodeTable:
             "uptime_s": round(uptime) if isinstance(uptime, (int, float)) else None,
             "battery_pct": bat[0], "battery_level": bat[1],
             "advice": None, "advice_level": None, "advice_detail": None,
-            "contact_src": src[0], "active_gap_max_s": src[1], "since_active_s": src[2],
+            "contact_src": src[0], "active_gap_max_s": src[1], "since_active_s": src[2], **self._silence(nid, bool(avail)),
             "rtt_ms": rtt_last, "rtt_avg_ms": rtt_avg, "rtt_fail": rtt_fail,
             "last_report": v["node"].get("last"), "last_radio": None,
             "bssid": bssid, "access_point": ap,

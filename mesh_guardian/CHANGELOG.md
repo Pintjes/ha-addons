@@ -4,6 +4,19 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.0] - 2026-11-14
+
+### Added
+
+- Rhythm of each node: its usual silence between two signs of life, measured
+  from every contact (with passive contact, close to the liveness interval of
+  the Matter subscription). In the API (`rhythm_s`, `silent_limit_s`,
+  `silent_s`) and in the technical details of the beta view.
+- Beta view: a node silent for much longer than usual is shown *silent* (probably
+  without power), minutes before the Matter Server declares it unavailable. No
+  extra radio traffic; needs passive contact. The availability, the outages and
+  the quality score still follow the Matter Server.
+
 ## [1.7.1] - 2026-11-14
 
 ### Fixed
