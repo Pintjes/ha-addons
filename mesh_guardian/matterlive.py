@@ -160,7 +160,8 @@ class MatterLive:
                 if k == nid and time.time() - t0 < FRESH_KEEP_S:
                     attrs[path] = value
             self.nodes[nid] = {"available": data.get("available"), "attributes": attrs,
-                               "last": old.get("last") or self.contacts.get(nid), "radio": old.get("radio")}
+                               "last": old.get("last") or self.contacts.get(nid), "radio": old.get("radio"),
+                               "date_commissioned": data.get("date_commissioned")}
 
     def _event(self, msg):
         ev, data = msg.get("event"), msg.get("data")

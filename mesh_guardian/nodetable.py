@@ -473,7 +473,7 @@ class NodeTable:
                 "network": "thread",
                 "id": f"0x{nid.lstrip('0') or '0'}", "name": v["name"], "area": m.get("area") or "",
                 "floor": m.get("floor") or "", "model": m.get("model") or "",
-                "battery": bool(m.get("battery")), "available": bool(avail),
+                "battery": bool(m.get("battery")), "available": bool(avail), "added": v["node"].get("date_commissioned"),
                 "since": m.get("since") if not avail else None,
                 "role": ROLE.get(role, str(role)) if role is not None else None,
                 "parent": p[0] if p else None, "rssi": p[1] if p else None, "lqi": p[2] if p else None,
@@ -610,7 +610,7 @@ class NodeTable:
         return {
             "network": v["net"], "id": f"0x{nid.lstrip('0') or '0'}", "name": v["name"],
             "area": m.get("area") or "", "floor": m.get("floor") or "", "model": m.get("model") or "",
-            "battery": bool(m.get("battery")), "available": bool(avail),
+            "battery": bool(m.get("battery")), "available": bool(avail), "added": v["node"].get("date_commissioned"),
             "since": m.get("since") if not avail else None, "role": None,
             "parent": link, "rssi": a.get("0/54/4") if wifi else None, "lqi": None, "new_parent": None,
             "rloc16": None, "best_link": None, "best_rssi": None, "best_lqi": None, "route": None,
