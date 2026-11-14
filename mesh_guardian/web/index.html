@@ -592,7 +592,8 @@ P.filter = P.filter || "all"; P.q = P.q || "";
 const SORT = {
   node: r => r.name.toLowerCase(),
   status: r => !r.available ? 0 : r.silent_s ? 0.5 : 1,
-  link: r => linkRssi(r),
+  // weakest first: the level shown (link quality), then the RSSI (not known: last of its level)
+  link: r => { const l = sigLevel(r); return l == null ? null : l * 1000 + (linkRssi(r) ?? -200); },
   resp: r => r.rtt_fail ? Infinity : r.rtt_ms,
   bat: r => r.battery_pct ?? (r.battery_level != null ? 100 - r.battery_level * 50 : null),
   last: r => r.last_report ? -r.last_report : null,
