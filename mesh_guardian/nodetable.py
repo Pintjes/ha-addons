@@ -205,19 +205,35 @@ def routes_to_br(thread, labels, br_exts, rlocs, parents):
     br_names = {labels[x] for x in br_exts if x in labels}
     name_of = lambda rid: match(id_ext.get(rid), labels) or f"router {rid}"
     out = {}
+    lq_cost = {3: 1, 2: 2, 1: 4}
+
+    def link_cost(e):
+        """Cost of a direct link, from the link quality in both directions (Thread)."""
+        if not e or not e.get("9"):
+            return None
+        return lq_cost.get(min(e.get("5") or 0, e.get("6") or 0))
+
     for nid, v in thread.items():
+        table = {rt["2"]: rt for rt in v["attrs"].get("0/53/8") or []
+                 if isinstance(rt, dict) and rt.get("2") is not None}
         best = None
-        for rt in v["attrs"].get("0/53/8") or []:
-            if not isinstance(rt, dict) or rt.get("2") is None or rt.get("4") is None:
+        for rid, rt in table.items():
+            dest = match(rt.get("0") or id_ext.get(rid), labels)
+            if dest not in br_names:
                 continue
-            dest = match(rt.get("0") or id_ext.get(rt["2"]), labels)
-            if dest not in br_names or not rt.get("9") and rt["4"] >= 16:
-                continue
-            if best is None or rt["4"] < best[1]:
-                best = (dest, rt["4"], rt.get("3"), rt["2"])
+            # PathCost is the cost from the next hop onwards: add the link to the next hop
+            options = []
+            direct = link_cost(rt)
+            if direct is not None:
+                options.append((direct, None))
+            hop = rt.get("3")
+            if hop not in (None, 63, rid) and rt.get("4") is not None and link_cost(table.get(hop)) is not None:
+                options.append((rt["4"] + link_cost(table[hop]), hop))
+            for cost, via in options:
+                if cost < 16 and (best is None or cost < best[1]):
+                    best = (dest, cost, via)
         if best:
-            via = None if best[2] in (None, 63, best[3]) else name_of(best[2])
-            out[nid] = {"br": best[0], "via": via, "cost": best[1]}
+            out[nid] = {"br": best[0], "via": name_of(best[2]) if best[2] is not None else None, "cost": best[1]}
     by_name = {v["name"]: k for k, v in thread.items()}
     for nid, p in parents.items():   # end devices: their parent, then the parent's path
         if nid in out:

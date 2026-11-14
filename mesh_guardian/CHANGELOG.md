@@ -4,6 +4,13 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.1] - 2026-11-14
+
+### Fixed
+
+- Path to the border router: the route table cost starts at the next hop, the
+  link to the next hop is now added (and direct links are taken into account).
+
 ## [1.3.0] - 2026-11-14
 
 ### Added
