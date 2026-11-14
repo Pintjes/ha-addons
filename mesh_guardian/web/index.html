@@ -155,6 +155,7 @@
   .row .nm b { display: block; font-weight: 600; }
   .row small { color: var(--mut); font-size: 12px; }
   .row .lk span.p { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .new { font-size: 11px; font-weight: 600; color: var(--acc-txt); border: 1px solid currentColor; border-radius: 6px; padding: 0 5px; margin-left: 4px; vertical-align: 2px; }
   .adv { font-size: 13px; display: flex; gap: 6px; }
   .adv.warn svg { color: var(--warn); } .adv.info svg { color: var(--acc-txt); }
   .row .lab { display: none; }
@@ -270,7 +271,7 @@ const T = {
     f_avail:"Available nodes", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Automatic recovery", on:"on", off:"off",
     quality:"Network quality · last {n} min", q_lab:["poor", "to watch", "good", "excellent"], q_trend:"{d} vs 24h", q_24h:"24h: {v} %", part_tip:"Now {v} % · 24h {v24} % · weight {n} %", q_scale:"≥ 95 excellent · 90–95 good · 80–90 to watch",
     q_capped:"capped: partitioned network", q_wait:"The score starts after a few minutes.", q_parts:{availability:"Availability", radio:"Radio", outages:"Outages", backbone:"Backbone", partition:"Partition"}, weight:"Weight {n} %",
-    todo:"To handle ({n})", todo_none:"Nothing to handle", w_down:"Unavailable", w_warn:"Action advised", w_info:"Good to know", w_net:"Network",
+    todo:"To handle ({n})", new:"new", todo_none:"Nothing to handle", w_down:"Unavailable", w_warn:"Action advised", w_info:"Good to know", w_net:"Network",
     down_do:"Since {t}. Check its power.",
     storm:"Thread storm: pings spaced out, sweep paused.",
     brs:"Border routers", br_seen:"seen {t}", br_never:"never seen", br_primary:"primary", offline:"offline", detached24:"detached {n}× in 24h", other_subnet:"other subnet than Home Assistant",
@@ -313,7 +314,7 @@ const T = {
     f_avail:"Nodes disponibles", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Récupération auto.", on:"activée", off:"désactivée",
     quality:"Qualité du réseau · dernières {n} min", q_lab:["mauvais", "à surveiller", "bon", "excellent"], q_trend:"{d} par rapport à 24 h", q_24h:"24 h : {v} %", part_tip:"Actuel {v} % · 24 h {v24} % · poids {n} %", q_scale:"≥ 95 excellent · 90–95 bon · 80–90 à surveiller",
     q_capped:"plafonnée : réseau partitionné", q_wait:"La note démarre après quelques minutes.", q_parts:{availability:"Disponibilité", radio:"Radio", outages:"Coupures", backbone:"Ossature", partition:"Partition"}, weight:"Poids {n} %",
-    todo:"À traiter ({n})", todo_none:"Rien à traiter", w_down:"Indisponible", w_warn:"Action conseillée", w_info:"À savoir", w_net:"Réseau",
+    todo:"À traiter ({n})", new:"nouveau", todo_none:"Rien à traiter", w_down:"Indisponible", w_warn:"Action conseillée", w_info:"À savoir", w_net:"Réseau",
     down_do:"Depuis {t}. Vérifier l'alimentation.",
     storm:"Tempête Thread : pings espacés, balayage suspendu.",
     brs:"Border routers", br_seen:"vu {t}", br_never:"jamais vu", br_primary:"primaire", offline:"hors ligne", detached24:"décroché {n}× en 24 h", other_subnet:"autre sous-réseau que Home Assistant",
@@ -421,6 +422,8 @@ const sigWord = v => L("sig")[v >= TH.rssi_good ? 2 : v > TH.rssi_bad ? 1 : 0];
 const sigBars = v => v >= TH.rssi_good + 10 ? 4 : v >= TH.rssi_good ? 3 : v > TH.rssi_bad ? 2 : 1;
 const lvl = r => r.advice_level === "low" ? "info" : "warn";
 // a silent node is only shown by its status (often short-lived): not in "To handle" nor the verdict
+// added to Matter less than 24 h ago (date_commissioned is UTC without zone)
+const isNew = r => { if (!r.added) return false; const t = Date.parse(/Z|[+-]\d\d:?\d\d$/.test(r.added) ? r.added : r.added + "Z"); return t && Date.now() - t < 864e5; };
 const sev = r => !r.available ? 0 : r.advice ? (lvl(r) === "warn" ? 1 : 2) : 3;
 const silentTip = r => F("silent_tip", {t: dur1(r.silent_s), u: dur1(r.rhythm_s)});
 const since = r => !r.since ? "?" : (Date.now() / 1000 - r.since > 86400 ? dt(r.since) : hm(r.since)) + " (" + ago(r.since) + ")";
@@ -673,7 +676,7 @@ function renderList() {
     const resp = r.rtt_fail ? `<span class="st bad">${IC.bad}${L("no_answer")}</span>` : `<span class="num">${ms(r.rtt_ms)}</span>`;
     const last = r.last_report ? `<span title="${esc(new Date(r.last_report * 1000).toLocaleString(LANG) + (r.contact_src ? " · " + (L("csrc")[r.contact_src] || r.contact_src) : ""))}">${ago(r.last_report)}</span>` : `<span class="mut">${L("never")}</span>`;
     const cell = {
-      node: `<span class="nm"><b>${esc(r.name)}</b><small>${meta}</small></span>`,
+      node: `<span class="nm"><b>${esc(r.name)}${isNew(r) ? ` <span class="new">${L("new")}</span>` : ""}</b><small>${meta}</small></span>`,
       status: `<span>${status(r)}${r.role && !narrow ? `<span class="rl">${esc(L("roles")[r.role] || r.role)}</span>` : ""}</span>`,
       link: `<span class="lk">${link(r)}${signal(r)}</span>`,
       resp: `<span class="rt r">${resp}<br><small class="num">${F("avg", {v: ms(r.rtt_avg_ms)})}</small></span>`,
