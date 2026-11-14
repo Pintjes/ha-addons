@@ -4,6 +4,25 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.0] - 2026-11-14
+
+### Changed
+
+- The new view replaces the old one (no more beta badge or switch).
+
+### Added
+
+- *Actions* column and buttons in the node panel: ping, find a better parent
+  (end devices, one node, after confirmation) and interview again.
+- Advice for a router whose best link is weak: add a router nearby.
+
+### Fixed
+
+- Path to a border router ending on another router id of the same border router
+  was shown as incomplete (*at least N hops*).
+- Thread leader shown as unknown when the router asked was the leader itself, or
+  when the first routers asked did not answer.
+
 ## [1.9.0] - 2026-11-14
 
 ### Added

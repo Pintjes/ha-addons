@@ -244,6 +244,8 @@ def routes_to_br(thread, labels, br_exts, rlocs, parents):
         while hop is not None and len(path) < 12:
             if hop in (63, dest) or name_of(hop) in path:
                 break
+            if name_of(hop) in br_names:
+                break   # reached a border router (by another router id than expected): the path ends here
             path.append(name_of(hop))
             node = rid_node.get(hop)
             entry = tables.get(node, {}).get(dest) if node else None
@@ -399,6 +401,11 @@ class NodeTable:
                 adv = None
             elif adv and p and adv[2] == "high" and p[1] is not None and p[1] > WEAK_PARENT:
                 adv = None   # weak-link advice, but the link is no longer weak
+            if not adv and not p and bl and bl[1] is not None and bl[1] <= WEAK_PARENT and v["meta"].get("available", True):
+                # a router has no parent to change: its best link is weak, it needs a closer router
+                adv = (t("Add a router near {area}", area=m.get("area") or "?"),
+                       t("best link {rssi}dBm: add a mains-powered Thread router (e.g. a Matter smart plug) between this node and the rest of the mesh",
+                         rssi=bl[1]), "high", None)
             # weak-link advice: shown only while the link shown is still weak
             if adv and adv[2] == "high" and p and p[0] == adv[3] and p[1] is not None and p[1] > WEAK_PARENT:
                 adv = None

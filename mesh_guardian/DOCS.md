@@ -265,64 +265,88 @@ What to know:
 ## Node table
 
 Open **Mesh Guardian** in the Home Assistant sidebar (tick **Show in sidebar**
-on the *Info* tab of the add-on if it is not there). The page lists every Thread
-node of Home Assistant in one table:
+on the *Info* tab of the add-on if it is not there). The page follows the light
+or dark theme of Home Assistant and adapts to phones.
 
-- name, area, model, power (battery / mains), id, availability in Home Assistant;
-- Thread role, parent (for a child) or strongest link marked ↔ (for a router — a router has no parent) with the signal (RSSI) and quality (LQI) of the link,
-  colored green / orange / red, and a small mark for 30 minutes after a parent
-  change: ▲ better, ▼ worse, ● similar (the tooltip gives the old parent and
-  its signal);
-- neighbors and weak links;
-- detaches, parent changes and partition changes over 24 hours;
-- outages over 24 hours and 7 days, cumulated downtime;
-- reboots (counter and increase over 24 hours) and last boot reason;
-- battery level (green ≥ 50%, orange ≥ 20%, red below, with the advice
-  "Change the batteries");
-- response time of the last read and average of the last 20 (✕: no answer);
-- advice, and the time of the last contact with the node.
+**At the top** — a one-line verdict (*All good*, *1 node unavailable*, *2
+actions advised*…), the counters (available nodes per network, border routers,
+partitions, leader, automatic recovery) and the network quality score with its
+five parts; a small mark on each bar gives its value over 24 hours.
 
-Click a node to open its last 7 days: signal and response time curves (one point
-every 15 minutes), outages and parent changes.
+**To handle** — one card per problem, most serious first: unavailable nodes,
+silent nodes (see below), advice. A click opens the node.
 
-The **Report** button opens an anonymized Markdown report, to copy or download (models, roles,
-signals and counters; no names, areas, addresses or prefixes) to paste in an
-issue.
+**Border routers** — online, role, primary, detaches over 24 hours, last contact.
 
-On a narrow screen (phone) the table starts with a compact set of columns
-(name, status, parent, signal, response); the columns you pick there are kept
-apart from those of the large screen.
+**Nodes** — problems first by default. Filters: all, to handle, Thread, Wi-Fi,
+Ethernet, on battery; a search box (name, area, model, id). Default columns:
 
-Click a column header to sort (again to reverse), type in the filter box to
-search by name, area or model, and pick the visible columns with **Columns**.
-Sort, filter and columns are remembered by your browser. The page refreshes
-itself every minute; **Refresh** does it at once.
+- *Node* — name, area, model, network;
+- *Status · Role* — available / silent / unavailable, and the Thread role
+  (Leader router, Router, End, Sleepy end);
+- *Attachment · signal* — for an end device its parent, for a router the
+  neighbor router it hears best (a router has no parent), with the signal in
+  dBm and in words (good ≥ -75, fair, weak ≤ -85); for a Wi-Fi node its access
+  point and channel;
+- *Border router* — the border router the node most likely reaches Home
+  Assistant through, and the number of hops (full path on hover and in the node
+  panel);
+- *Response* — last read and average (no answer in red);
+- *Power* — mains, or the battery with its charge (green > 50 %, orange
+  20–50 %, red < 20 %);
+- *Last contact*, *Advice*;
+- *Actions* — ping, find a better parent (end devices), interview again.
 
-Values are the current ones: the add-on keeps a live link with the Matter
-Server (`start_listening`) and receives every report of every node as it
-arrives, without sending anything to the nodes. Battery nodes report less
-often, so check *Last contact* before drawing conclusions. A contact is any
-report, event, read or ping answer of the node (and, with `passive_contact`,
-any packet it sends); it is kept across restarts. Its tooltip gives the source
-of the last contact (report, event, read, ping, packet). The Matter Server does not
-forward a report whose value did not change: without `passive_contact`, a
-stable sensor can stay silent for hours between two reads.
+More columns with the button next to the filters (neighbors, weak links,
+detaches, parent changes, outages, downtime, reboots, uptime, RLOC16, id…).
+Drag a header (or a line of the column list) to move a column. Click a header to
+sort, again to reverse; the column menu brings the default order back. Sort,
+filter, columns and their order are remembered by your browser. The page
+refreshes itself every minute; **Refresh** does it at once.
 
-**Response time** — the add-on reads the uptime of each available node
-(General Diagnostics) and times the answer: every 15 minutes for mains-powered
-nodes, every hour for battery nodes, one read every 5 seconds at most, none
-during a Thread storm or a global outage. A sleepy battery node only answers
-when it wakes up: its response time is naturally longer. The read also
-refreshes *Uptime* and *Last contact*. A typical use: remove
-the battery of a sensor stuck on a weak parent, put it back, and watch the
-*Parent* column change, with its ▲ / ▼ mark.
+**Node panel** — click a node: status and advice, attachment explained, border
+router and cost of the path, response, power, the three actions, the signal and
+response curves of the last 7 days (centered on their average, the weak
+threshold drawn when it is in range), outages, parent changes, and the
+technical details (full path, RLOC16, neighbors, counters, sign of life…).
 
-Above the table: the border routers (role, partition, OMR prefix, detaches over
-24 hours, 👑 for the leader, ⭐ for the primary border router) and the state of the network (partitions, OMR prefixes, leader,
-unavailable nodes). The page is only reachable through Home Assistant (ingress).
+**Report** — an anonymized Markdown report (models, roles, signals, counters; no
+names, areas, addresses or prefixes) to copy or download and paste in an issue.
 
-Signal colors: RSSI ≥ -75dBm green, -75 to -85 orange, ≤ -85 red; LQI 3 green,
-2 orange, 0–1 red.
+### Actions on one node
+
+- **Ping** — through the Matter Server; the answer counts as a contact.
+- **Find a better parent** — end devices only: the node attaches again and
+  picks the best parent it hears now (see *Find better parents*), even when its
+  link is not poor (you are asked to confirm: the new parent can be weaker).
+- **Interview** — the Matter Server reads again everything the node describes
+  (endpoints, clusters, attributes); useful after a firmware update.
+
+### Silent nodes
+
+A node gives a sign of life at a steady pace (about every minute for most mains
+nodes, the liveness interval of its Matter subscription). With
+`passive_contact` the add-on sees every packet and learns that pace (*Sign of
+life* in the technical details). A node silent for much longer is shown
+**silent** — probably without power — minutes before the Matter Server declares
+it unavailable. No radio traffic is added. The availability, the outages and the
+quality score still follow the Matter Server.
+
+### Where the values come from
+
+The add-on keeps a live link with the Matter Server and receives every report as
+it arrives. Some nodes stop reporting their Thread diagnostics (role, neighbors)
+after a change of role, so the Matter Server keeps old values: mains nodes are
+read again once an hour (role, neighbor table, addresses), battery nodes never
+(their batteries). The response time comes from a read of the uptime every 15
+minutes (mains) or every hour (battery); after a failed read the node is read
+again 2 minutes after it is back. A contact is any report, event, read, ping
+answer or (with `passive_contact`) packet of the node.
+
+The border router of a node and its path come from the route tables of the
+routers: the border router with the lowest path cost (1 per good hop, up to 4
+for a weak link). It is the most likely way out of the mesh, not the path of
+every packet; route tables can be a few minutes old.
 
 ## Wi-Fi and Ethernet nodes
 

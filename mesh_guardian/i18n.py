@@ -120,6 +120,8 @@ FR = {
     "Automatic recovery": "Récupération automatique",
     "Network quality": "Qualité du réseau",
     "Wi-Fi": "Wi-Fi",
+    "best link {rssi}dBm: add a mains-powered Thread router (e.g. a Matter smart plug) between this node and the rest of the mesh":
+        "meilleur lien {rssi}dBm : ajouter un routeur Thread sur secteur (p. ex. une prise Matter) entre cette node et le reste du maillage",
     "Ethernet": "Ethernet",
     "Announced on the Matter fabric but unknown to the Matter Server (removed without a factory reset?): {ids}":
         "Annoncée sur la fabric Matter mais inconnue du Matter Server (retirée sans réinitialisation ?) : {ids}",

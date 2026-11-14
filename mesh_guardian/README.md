@@ -28,13 +28,17 @@ Server, which finds it again — within minutes, without restarting
 anything. It holds back during Home Assistant restarts and Thread
 storms, when pinging would only add traffic.
 
-**2. Your whole mesh in one table.**
-A **Mesh Guardian** page in the sidebar lists every Thread node: role, parent
-(or best link for a router) with its signal, neighbors, detaches, outages,
-reboots, battery level, last contact and a one-line advice such as *Remove the
-battery 10s*. Sort by any column, filter, pick the columns. Values are live,
-read from the Matter Server without any radio traffic: unplug a device, plug it
-back, and watch it pick its new parent.
+**2. Your whole mesh in one page.**
+A **Mesh Guardian** page in the sidebar tells you at a glance whether the network
+is fine and, if not, which node and what to do. Every node — Thread, Wi-Fi and
+Ethernet — with its status and role, its parent (or best neighbor for a router)
+and signal, the border router it reaches Home Assistant through and in how many
+hops, its response time, power and battery, last contact and a one-line advice
+such as *Remove the battery 10s*. Ping a node, make it look for a better parent
+or interview it again from its line. A node that suddenly goes silent is
+flagged minutes before Home Assistant marks it unavailable. Sort, filter, pick
+and move the columns; 7-day curves for every node; light and dark theme, phone
+layout.
 
 **3. Know what your border routers really do.**
 Any brand — Google, Apple, Amazon, Home Assistant Connect… Mesh Guardian

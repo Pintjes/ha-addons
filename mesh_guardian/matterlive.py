@@ -278,7 +278,7 @@ class MatterLive:
             routers = [k for k, n in self.nodes.items()
                        if n.get("available") is not False and n["attributes"].get("0/53/1") in (5, 6)
                        and n["attributes"].get("0/53/8")]
-        for k in routers[:3]:
+        for k in routers[:10]:
             try:
                 rid = self._read(k, "0/53/13")
                 routes = self._read(k, "0/53/8")
@@ -286,6 +286,22 @@ class MatterLive:
                 LOG.debug("leader read on %s: %s", k, err)
                 continue
             if not isinstance(rid, int) or not isinstance(routes, list):
+                continue
+            if not any(isinstance(rt, dict) and rt.get("2") == rid for rt in routes):
+                # no route to the leader: the router asked is the leader itself
+                try:
+                    role = self._read(k, "0/53/1")
+                except Exception:  # noqa: BLE001
+                    role = None
+                if role == 6:
+                    with self.lock:
+                        own = self.nodes.get(k, {}).get("attributes", {})
+                        if k in self.nodes:
+                            self.nodes[k]["attributes"]["0/53/1"] = 6
+                    ext = ext_of(own)
+                    for e, name in names.items():
+                        if ext is not None and abs(e - ext) <= 4096:
+                            return name
                 continue
             with self.lock:
                 if k in self.nodes:

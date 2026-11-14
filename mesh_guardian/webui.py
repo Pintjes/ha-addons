@@ -21,7 +21,6 @@ LOG = logging.getLogger("mg.web")
 PORT = 8790
 ALLOWED = {"172.30.32.2", "127.0.0.1", "::1"}
 PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "index.html")
-BETA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "beta.html")
 
 
 class WebUI:
@@ -58,7 +57,7 @@ class WebUI:
                 path = path.rstrip("/")
                 if path in ("", "/index.html", "/beta.html"):
                     try:
-                        with open(BETA if path == "/beta.html" else PAGE, "rb") as f:
+                        with open(PAGE, "rb") as f:
                             self._send(200, f.read(), "text/html; charset=utf-8")
                     except OSError:
                         self._send(500, '{"error": "page not found"}')
@@ -93,10 +92,41 @@ class WebUI:
                 else:
                     self._send(404, '{"error": "not found"}')
 
+            def _action(self):
+                """Action on one node from the table: ping, parent search, interview."""
+                try:
+                    n = int(self.headers.get("Content-Length") or 0)
+                    body = json.loads(self.rfile.read(min(n, 4096)) or b"{}")
+                    nid = f"{int(str(body.get('id')), 16):016X}"
+                    act = body.get("action")
+                    h = ui.w.healer
+                    t0 = time.time()
+                    if act == "ping":
+                        res = h.matter_command("ping_node", {"node_id": int(nid, 16)}, timeout=60)
+                        ok = isinstance(res, dict) and any(res.values())
+                        if ok and getattr(ui.w, "live", None):
+                            ui.w.live.note_contact(nid, src="ping")
+                        out = {"ok": ok, "ms": round((time.time() - t0) * 1000)}
+                    elif act == "parent":
+                        if not getattr(ui.w, "reattach", None):
+                            raise RuntimeError("parent search unavailable")
+                        out = {"ok": True, **ui.w.reattach.run_node(nid)}
+                    elif act == "interview":
+                        h.matter_command("interview_node", {"node_id": int(nid, 16)}, timeout=300)
+                        out = {"ok": True, "s": round(time.time() - t0)}
+                    else:
+                        raise ValueError("unknown action")
+                    ui.table.cache_t = 0
+                    self._send(200, json.dumps(out, ensure_ascii=False))
+                except Exception as err:  # noqa: BLE001
+                    self._send(200, json.dumps({"ok": False, "error": str(err)}, ensure_ascii=False))
+
             def do_POST(self):
                 if not self._allowed():
                     return
                 path = self.path.partition("?")[0].rstrip("/")
+                if path == "/api/action":
+                    return self._action()
                 if path != "/api/ap_name":
                     return self._send(404, '{"error": "not found"}')
                 try:

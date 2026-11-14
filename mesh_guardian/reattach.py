@@ -146,7 +146,7 @@ class Reattach:
             out.append((nid, n.get("name") or f"0x{nid.lstrip('0')}", n.get("area", "?")))
         return sorted(out, key=lambda x: x[1])
 
-    def _one(self, nid, name, area):
+    def _one(self, nid, name, area, force=False):
         """Read the link of one node and, if it is poor, make it look for a parent.
         Returns None (nothing to do) or the result (dict)."""
         node_id = int(nid, 16)
@@ -155,7 +155,7 @@ class Reattach:
         if self.live and isinstance(attrs.get("0/53/7"), list):
             self.live.set_attribute(nid, "0/53/7", attrs["0/53/7"])
             self.live.note_contact(nid, src="read")
-        if attrs.get("0/53/1") not in END_DEVICE_ROLES or not is_poor(before):
+        if attrs.get("0/53/1") not in END_DEVICE_ROLES or not (force or is_poor(before)):
             return None
         row = {"node": name, "area": area, "rssi_before": before["rssi"], "lqi_before": before["lqi"]}
         network = connected_network(attrs.get("0/49/1"))
@@ -199,6 +199,20 @@ class Reattach:
             node=name, result=res, rssi_before=before["rssi"], lqi_before=before["lqi"],
             rssi=after["rssi"] if after else None, lqi=after["lqi"] if after else None)
         return row
+
+    def run_node(self, nid):
+        """Parent search for one node, asked from the node table: done even when its link is
+        not poor (the user chose). Returns the result dict, or {"result": "router"} when
+        the node is not an end device."""
+        if not self.busy.acquire(timeout=1):
+            return {"result": "busy"}
+        try:
+            with self.h.lock:
+                n = dict(self.h.nodes.get(nid) or {})
+            row = self._one(nid, n.get("name") or f"0x{nid.lstrip('0')}", n.get("area", "?"), force=True)
+            return row or {"result": "router"}
+        finally:
+            self.busy.release()
 
     def run_now(self, origin):
         """Read the parent link of every end device and move those whose link is poor (button)."""
