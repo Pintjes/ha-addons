@@ -4,6 +4,19 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.4.0] - 2026-11-14
+
+### Changed
+
+- One kind of advice, *Action advised*, in blue (no more orange nor "Good to
+  know"); the verdict of actions is blue too.
+
+### Fixed
+
+- A value read directly from a node (after a parent search, or by the hourly
+  read) is no longer overwritten by the older copy the Matter Server keeps: it
+  stays until the node reports that attribute, or 2 hours.
+
 ## [2.3.4] - 2026-11-14
 
 ### Fixed

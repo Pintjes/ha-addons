@@ -33,6 +33,7 @@ def node_hex(node_id):
     return f"{int(node_id):016X}"
 
 
+FRESH_KEEP_S = 2 * 3600   # a value read from a node wins over the Matter Server cache this long
 RHYTHM_MIN_GAP_S = 30     # shorter silences are bursts of traffic, not the rhythm of the node
 RHYTHM_KEEP = 40          # silences kept per node
 RHYTHM_MIN_SAMPLES = 8    # silences needed before the rhythm is trusted
@@ -152,8 +153,13 @@ class MatterLive:
         nid = node_hex(data.get("node_id", 0))
         with self.lock:
             old = self.nodes.get(nid, {})
-            self.nodes[nid] = {"available": data.get("available"),
-                               "attributes": dict(data.get("attributes") or {}),
+            attrs = dict(data.get("attributes") or {})
+            # a value read directly from the node is newer than the cache of the Matter Server,
+            # which can hold an old one for hours: keep it until the node reports that attribute
+            for (k, path), (t0, value) in list(getattr(self, "fresh", {}).items()):
+                if k == nid and time.time() - t0 < FRESH_KEEP_S:
+                    attrs[path] = value
+            self.nodes[nid] = {"available": data.get("available"), "attributes": attrs,
                                "last": old.get("last") or self.contacts.get(nid), "radio": old.get("radio")}
 
     def _event(self, msg):
@@ -164,6 +170,7 @@ class MatterLive:
             with self.lock:
                 n = self.nodes.setdefault(nid, {"available": None, "attributes": {}, "last": None, "radio": None})
                 n["attributes"][data[1]] = data[2]
+                getattr(self, "fresh", {}).pop((nid, data[1]), None)   # a real report: it is the current value
                 if str(data[1]).startswith("0/53/"):
                     n["radio"] = now
             self.note_contact(nid, now, src="report")
@@ -183,6 +190,7 @@ class MatterLive:
         with self.lock:
             if nid in self.nodes:
                 self.nodes[nid]["attributes"][path] = value
+            self.__dict__.setdefault("fresh", {})[(nid, path)] = (time.time(), value)
 
     def addresses(self):
         """node hex -> IPv6 addresses (16 bytes) the node reports (General Diagnostics)."""
