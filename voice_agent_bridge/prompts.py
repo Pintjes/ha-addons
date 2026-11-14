@@ -24,6 +24,10 @@ explicit confirmation from the user in this conversation. Ask, then wait for "ye
         "notes_header": "House notes (written by the owner):",
         "ha_context": "Context sent by Home Assistant:",
         "history": "Earlier in this conversation:",
+        "recent_header": "Recent exchanges in this home, all channels, oldest first (context only: use it when "
+                         "the user refers to something said before, never mention this list otherwise):",
+        "recent_user": "User",
+        "recent_local": "Home Assistant",
         "err_auth": "Claude is not signed in. Check the token in the gateway add-on configuration.",
         "err_limit": "The Claude usage limit has been reached for now. Try again later.",
         "err_timeout": "That took too long, I stopped. Try a simpler request.",
@@ -68,6 +72,11 @@ Demande, puis attends le « oui ».
         "notes_header": "Notes de la maison (écrites par le propriétaire) :",
         "ha_context": "Contexte envoyé par Home Assistant :",
         "history": "Plus tôt dans cette conversation :",
+        "recent_header": "Échanges récents dans la maison, tous canaux, du plus ancien au plus récent (contexte "
+                         "seulement : sers-t'en quand l'utilisateur fait référence à ce qui a été dit avant, "
+                         "sinon ne mentionne jamais cette liste) :",
+        "recent_user": "Utilisateur",
+        "recent_local": "Home Assistant",
         "err_auth": "Claude n'est pas connecté. Vérifie le jeton dans la configuration de l'add-on passerelle.",
         "err_limit": "La limite d'utilisation de Claude est atteinte pour le moment. Réessaie plus tard.",
         "err_timeout": "C'était trop long, j'ai arrêté. Essaie une demande plus simple.",

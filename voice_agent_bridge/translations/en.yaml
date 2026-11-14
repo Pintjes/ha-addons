@@ -50,6 +50,12 @@ configuration:
   history_days:
     name: History (days)
     description: How long the conversations stay in the conversation panel.
+  recent_context:
+    name: Recent exchanges
+    description: Number of recent exchanges (every channel, local Home Assistant answers included) given to Claude with each request, so it knows what was said before. 0 = off. About 60 tokens per exchange.
+  recent_context_hours:
+    name: Recent exchanges (hours)
+    description: Only exchanges from the last hours are given.
   log_level:
     name: Log level
 network:

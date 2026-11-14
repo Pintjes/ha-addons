@@ -4,6 +4,15 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-11-14
+
+### Added
+
+- Recent exchanges: Claude receives the last exchanges of every channel (panel,
+  satellites, Assist, local Home Assistant answers) with each request, so it
+  knows what was said before, even when Home Assistant answered. Options
+  *Recent exchanges* (20) and *Recent exchanges (hours)* (24).
+
 ## [1.0.3] - 2026-11-14
 
 ### Changed

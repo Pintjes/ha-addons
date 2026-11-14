@@ -50,6 +50,12 @@ configuration:
   history_days:
     name: Historique (jours)
     description: Durée de conservation des conversations dans le panneau des conversations.
+  recent_context:
+    name: Échanges récents
+    description: Nombre d'échanges récents (tous canaux, réponses locales de Home Assistant comprises) donnés à Claude à chaque demande, pour qu'il sache ce qui a été dit. 0 = désactivé. Environ 60 jetons par échange.
+  recent_context_hours:
+    name: Échanges récents (heures)
+    description: Seuls les échanges des dernières heures sont donnés.
   log_level:
     name: Niveau de journal
 network:

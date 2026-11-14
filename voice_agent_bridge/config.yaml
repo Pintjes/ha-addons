@@ -1,5 +1,5 @@
 name: Voice Agent Bridge
-version: "1.0.3"
+version: "1.1.0"
 slug: voice_agent_bridge
 url: https://github.com/Pintjes/ha-addons
 description: >-
@@ -43,6 +43,8 @@ options:
   notes_file: ""
   logbook: true
   history_days: 90
+  recent_context: 20
+  recent_context_hours: 24
   log_level: info
 schema:
   language: list(en|fr)
@@ -62,4 +64,6 @@ schema:
   notes_file: str?
   logbook: bool
   history_days: int(1,3650)
+  recent_context: int(0,50)
+  recent_context_hours: int(1,168)
   log_level: list(debug|info|warning|error)

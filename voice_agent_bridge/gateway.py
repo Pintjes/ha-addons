@@ -268,11 +268,36 @@ def system_prompt() -> str:
     return "\n\n".join(parts)
 
 
+def _clip(text: str, size: int = 200) -> str:
+    text = " ".join((text or "").split())
+    return text if len(text) <= size else text[:size - 1] + "…"
+
+
+def recent_exchanges() -> str:
+    """Last exchanges of every channel (panel, satellites, Assist, local HA answers)."""
+    count = int(OPTIONS.get("recent_context", 20) or 0)
+    if count <= 0:
+        return ""
+    after = time.time() - int(OPTIONS.get("recent_context_hours", 24) or 24) * 3600
+    with HISTORY._lock:
+        items = [i for i in HISTORY.items if i.get("ts", 0) >= after][-count:]
+    lines = []
+    for i in items:
+        when = datetime.fromtimestamp(i["ts"]).astimezone().strftime("%d/%m %H:%M")
+        who = T["recent_local"] if i.get("source") == "local" else "Claude"
+        where = f" · {i['place']}" if i.get("place") else ""
+        lines.append(f"{when}{where} · {T['recent_user']}: {_clip(i.get('user'))} → {who}: {_clip(i.get('assistant'))}")
+    return (T["recent_header"] + "\n" + "\n".join(lines)) if lines else ""
+
+
 def build_prompt(text: str, ha_context: str, history: list[tuple[str, str]]) -> str:
     now = datetime.now().astimezone()
     lines = [f"[{now:%Y-%m-%d %H:%M} {now.tzname() or ''}]".replace(" ]", "]")]
     if ha_context and OPTIONS["forward_ha_prompt"]:
         lines.append(T["ha_context"] + "\n" + ha_context)
+    recent = recent_exchanges()
+    if recent:
+        lines.append(recent)
     if history:
         lines.append(T["history"])
         lines += [f"{'User' if r == 'user' else 'Assistant'}: {t}" for r, t in history]

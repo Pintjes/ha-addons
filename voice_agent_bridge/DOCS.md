@@ -161,6 +161,8 @@ conversations in **Logbook** and in **Settings → Voice assistants → ⋮ → 
 | House notes file | | Path in the Home Assistant config folder (File editor). |
 | Logbook | on | Write each exchange in the Home Assistant logbook. |
 | History (days) | 90 | How long conversations stay in the panel. |
+| Recent exchanges | 20 | Last exchanges of every channel given to Claude with each request (0 = off). |
+| Recent exchanges (hours) | 24 | Only exchanges from the last hours. |
 
 ## Cost and speed
 
