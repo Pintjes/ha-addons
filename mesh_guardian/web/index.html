@@ -369,7 +369,8 @@ function render() {
   }
   for (const k of ["thread", "wifi", "ethernet"]) {
     const el = $("#shown_" + k);
-    if (el) el.textContent = `${rows.filter(r => (r.network || "thread") === k).length}/${D.rows.length}`;
+    const of = r => (r.network || "thread") === k;
+    if (el) el.textContent = `${rows.filter(of).length}/${D.rows.filter(of).length}`;
   }
   status();
 }
