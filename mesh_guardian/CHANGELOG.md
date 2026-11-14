@@ -4,6 +4,22 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] - 2026-11-14
+
+### Added
+
+- Wi-Fi nodes: access point they are connected to (BSSID matched against the
+  MAC addresses of the Home Assistant devices, e.g. UniFi access points), shown
+  in the attachment column; the BSSID is on hover and in the API (`bssid`,
+  `access_point`).
+
+### Changed
+
+- Beta view: *Power* column (mains or battery), battery icon filled with its
+  charge (green > 50 %, orange 20–50 %, red < 20 %).
+- Beta view: the column button moved next to the filters (it covered the last
+  header); narrower default columns so they fit without scrolling.
+
 ## [1.5.2] - 2026-11-14
 
 ### Changed
