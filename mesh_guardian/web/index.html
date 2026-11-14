@@ -85,6 +85,7 @@
   <button id="refresh"></button>
   <button id="report"></button>
   <button id="colsbtn"></button>
+  <a id="beta" href="beta.html" style="color:var(--acc);text-decoration:none;white-space:nowrap"></a>
   <span class="muted" id="status"></span>
   <span id="info" style="cursor:help" class="muted">ⓘ</span>
   <span id="score"></span>
@@ -101,6 +102,7 @@
 </main>
 <script>
 "use strict";
+try { if (localStorage.getItem("mesh_guardian_ui") === "beta") location.replace("beta.html"); } catch (e) { /* storage unavailable */ }
 const I18N = {
   en: {search:"Filter: name, area, model…", refresh:"↻ Refresh", columns:"Columns",
        network:"Network", brs:"Border routers", partitions:"Partitions", omr:"OMR prefix", leader:"Leader",
@@ -290,6 +292,7 @@ function applyLang() {
   $("#q").placeholder = L("search"); $("#refresh").textContent = L("refresh");
   $("#report").textContent = "⬇ " + L("report"); $("#report").title = L("report_tip");
   $("#colsbtn").textContent = "☰ " + L("columns");
+  $("#beta").textContent = "✨ " + (LANG === "fr" ? "Nouvelle interface (bêta)" : "New view (beta)");
   $("#h_net").textContent = L("network"); $("#h_brs").textContent = L("brs"); $("#info").title = L("note");
   $("#cols").innerHTML = COLS.map(c => `<label><input type="checkbox" data-k="${c.k}"> ${esc(L("c")[c.k])}</label>`).join("");
   $("#cols").querySelectorAll("input").forEach(i => {

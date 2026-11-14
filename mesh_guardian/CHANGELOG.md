@@ -4,6 +4,16 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-11-14
+
+### Added
+
+- New view (beta), reachable from the classic view: summary with verdict and
+  quality score parts, list of what to handle, border routers, node list with
+  problems first and quick filters, side panel with the 7-day curves and the
+  technical details. Follows the Home Assistant light or dark theme, adapted to
+  phones. The last view used is kept per browser; the classic view is unchanged.
+
 ## [1.1.2] - 2026-11-14
 
 ### Fixed
