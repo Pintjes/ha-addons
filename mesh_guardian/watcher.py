@@ -74,7 +74,7 @@ from radio import Radio  # noqa: E402
 from storm import Storm  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.2.0"
+VERSION = "2.3.0"
 
 _MQ = _load_mqtt()
 MQTT_HOST = _MQ.get("host") or os.environ.get("MQTT_HOST", "core-mosquitto")
@@ -330,7 +330,7 @@ class Watch:
             self.events_count += 1
             self.dirty = True
             icon, color = style_for(kind)
-            LOG.info("%s %s%-22s%s %s", icon, COLORS[color], kind, RESET, text)
+            LOG.info("%s %s%s%s", icon, COLORS[color], text, RESET)
         if self.storm:
             try:
                 self.storm.observe(kind, data)
@@ -986,7 +986,8 @@ class Watch:
                       before=self.prev_leaders[1], after=leaders[1])
         if self.prev_partitions is not None and parts != self.prev_partitions:
             txt = t("network partitioned") if len(parts) > 1 else t("Thread partition")
-            self.emit("partition_change", f"{txt}: {list(self.prev_partitions)} → {list(parts)}",
+            self.emit("partition_change", t("{what}: {before} → {after} partitions", what=txt,
+                                              before=len(self.prev_partitions), after=len(parts)),
                       before=list(self.prev_partitions), after=list(parts))
         if self.prev_omr is not None and omr != self.prev_omr:
             self.emit("omr_change", t("OMR prefix: {before} → {after}", before=", ".join(self.prev_omr) or t("none"),
@@ -1418,6 +1419,7 @@ class Watch:
         self.quality = Quality(self, self.healer, self.live, OPTIONS)
         self.history = History(self)
         self.table = NodeTable(self, self.healer, self.radio, self.live, self.advisor)
+        self.reattach.table = self.table
         self.table.quality = self.quality
         self.webui = WebUI(self, self.table)
         LOG.info(t("Mesh Guardian {v} starting", v=VERSION,

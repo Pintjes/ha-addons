@@ -106,42 +106,11 @@ class WebUI:
                         ok = isinstance(res, dict) and any(res.values())
                         if ok and getattr(ui.w, "live", None):
                             ui.w.live.note_contact(nid, src="ping")
-                        out = {"ok": ok, "ms": round((time.time() - t0) * 1000)}
+                        out = {"ok": True, "answered": ok}
                     elif act == "parent":
                         if not getattr(ui.w, "reattach", None):
                             raise RuntimeError("parent search unavailable")
-                        rid = f"0x{nid.lstrip('0') or '0'}"
-                        row_of = lambda data: next((r for r in data.get("rows") or [] if r.get("id") == rid), {})
-                        before = row_of(ui.table.get())
                         out = {"ok": True, **ui.w.reattach.run_node(nid)}
-                        # the signal shown is the one of the table (received by the parent), before and after
-                        ui.table.cache_t = 0
-                        rows = ui.table.get(force=True).get("rows") or []
-                        names = {}
-                        for r in rows:
-                            try:
-                                names[int(r["rloc16"], 16) & 0xFC00] = r
-                            except (TypeError, ValueError, KeyError):
-                                pass
-                        new_parent = names.get(out["rloc"] & 0xFC00) if isinstance(out.get("rloc"), int) else None
-                        if new_parent:   # read the neighbor table of the new parent: it holds the child's signal
-                            try:
-                                pid = f"{int(new_parent['id'], 16):016X}"
-                                res = h.matter_command("read_attribute", {"node_id": int(pid, 16), "attribute_path": "0/53/7"}, timeout=30)
-                                table = res.get("0/53/7") if isinstance(res, dict) else None
-                                if isinstance(table, list):
-                                    ui.w.live.set_attribute(pid, "0/53/7", table)
-                            except Exception:  # noqa: BLE001
-                                pass
-                        ui.table.cache_t = 0
-                        after = row_of(ui.table.get(force=True))
-                        old = names.get(out["rloc_before"] & 0xFC00) if isinstance(out.get("rloc_before"), int) else None
-                        out["parent_before"] = before.get("parent") or (old or {}).get("name")
-                        out["parent"] = after.get("parent") or (new_parent or {}).get("name")
-                        if before.get("rssi") is not None:
-                            out["rssi_before"] = before["rssi"]
-                        if after.get("rssi") is not None:
-                            out["rssi"] = after["rssi"]
                     elif act == "remove":
                         h.matter_command("remove_node", {"node_id": int(nid, 16)}, timeout=120)
                         out = {"ok": True}
@@ -153,7 +122,8 @@ class WebUI:
                     ui.table.cache_t = 0
                     self._send(200, json.dumps(out, ensure_ascii=False))
                 except Exception as err:  # noqa: BLE001
-                    self._send(200, json.dumps({"ok": False, "error": str(err)}, ensure_ascii=False))
+                    LOG.warning("action %s: %s", body.get("action") if isinstance(locals().get("body"), dict) else "?", err)
+                    self._send(200, json.dumps({"ok": False}, ensure_ascii=False))
 
             def do_POST(self):
                 if not self._allowed():

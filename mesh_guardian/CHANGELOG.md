@@ -4,6 +4,30 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.3.0] - 2026-11-14
+
+Texts audit: short and to the point.
+
+### Fixed
+
+- Ping without answer showed "error"; failed actions showed a raw Python error.
+- Parent search: the log, the Home Assistant entity and the result now give the
+  parent and the signal of the table (received by the parent); a sleeping node
+  gives "no answer" instead of "a router has no parent"; same weak threshold as
+  the advice (-85 dBm); a router-eligible end device can be asked too.
+- "1 others" in the verdict: the unavailable nodes are listed (3 at most).
+- The node panel shows the new values after an action.
+
+### Changed
+
+- Shorter texts everywhere (verdict, silent nodes, storm, advice, parent search,
+  events, confirmations); "available again" instead of "back"; units written
+  "-84 dBm", "24 h", "5 min" in French; no internal event type in the log; the
+  advice count is logged only when it changes.
+- The result of an action stays until clicked.
+- A *Clear* button appears when a filter or a search is active.
+- "Good to know" title when there is nothing to handle.
+
 ## [2.2.0] - 2026-11-14
 
 ### Added

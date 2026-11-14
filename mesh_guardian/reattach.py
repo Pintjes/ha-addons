@@ -28,6 +28,7 @@ import time
 
 from i18n import t, tn
 from nodetable import nb_rssi
+from advice import WEAK_PARENT
 
 LOG = logging.getLogger("mg.reattach")
 POOR_LQI = 2          # link quality (1-3) from which a new parent is worth looking for
@@ -93,6 +94,7 @@ class Reattach:
         self.h = healer
         self.live = None          # live copy of the Matter Server cache, plugged in by watcher
         self.advisor = None       # radio advice: told which nodes were asked to move
+        self.table = None         # node table: the signal shown to the user (received by the parent)
         self.busy = threading.Lock()
         self.last = {"date": None, "checked": 0, "poor": 0, "better": 0, "nodes": []}
 
@@ -147,6 +149,31 @@ class Reattach:
             out.append((nid, n.get("name") or f"0x{nid.lstrip('0')}", n.get("area", "?")))
         return sorted(out, key=lambda x: x[1])
 
+    def _view(self, nid, read_parent=False):
+        """(parent name, signal) of a node as the table shows them (signal received by the
+        parent). read_parent: read the neighbor table of the parent first (just after a move)."""
+        if not self.table:
+            return None, None
+        rid = f"0x{nid.lstrip('0') or '0'}"
+        try:
+            self.table.cache_t = 0
+            rows = self.table.get(force=True).get("rows") or []
+            row = next((r for r in rows if r.get("id") == rid), {})
+            if read_parent and row.get("parent"):
+                par = next((r for r in rows if r.get("name") == row["parent"]), None)
+                if par:
+                    pid = f"{int(par['id'], 16):016X}"
+                    res = self.h.matter_command("read_attribute", {"node_id": int(pid, 16), "attribute_path": "0/53/7"}, timeout=30)
+                    table = res.get("0/53/7") if isinstance(res, dict) else None
+                    if isinstance(table, list) and self.live:
+                        self.live.set_attribute(pid, "0/53/7", table)
+                    self.table.cache_t = 0
+                    row = next((r for r in self.table.get(force=True).get("rows") or [] if r.get("id") == rid), row)
+            return row.get("parent"), row.get("rssi")
+        except Exception as err:  # noqa: BLE001
+            LOG.debug("table view of %s: %s", nid, err)
+            return None, None
+
     def _one(self, nid, name, area, force=False):
         """Read the link of one node and, if it is poor, make it look for a parent.
         Returns None (nothing to do) or the result (dict)."""
@@ -156,15 +183,19 @@ class Reattach:
         if self.live and isinstance(attrs.get("0/53/7"), list):
             self.live.set_attribute(nid, "0/53/7", attrs["0/53/7"])
             self.live.note_contact(nid, src="read")
-        if attrs.get("0/53/1") not in END_DEVICE_ROLES or not (force or is_poor(before)):
+        parent_before, rssi_before = self._view(nid)
+        # same rule as the advice: the signal of the table at or below the weak threshold
+        poor = rssi_before <= WEAK_PARENT if rssi_before is not None else is_poor(before)
+        roles = END_DEVICE_ROLES + ((4,) if force else ())   # a REED attached as a child has a parent too
+        if attrs.get("0/53/1") not in roles or not before or not (force or poor):
             return None
-        row = {"node": name, "area": area, "rssi_before": before["rssi"], "lqi_before": before["lqi"],
-               "rloc_before": before["rloc"]}
+        rssi_before = rssi_before if rssi_before is not None else before["rssi"]
+        row = {"node": name, "area": area, "rssi_before": rssi_before, "lqi_before": before["lqi"],
+               "rloc_before": before["rloc"], "parent_before": parent_before}
         network = connected_network(attrs.get("0/49/1"))
         if network is None or CONNECT_NETWORK not in (attrs.get("0/49/65529") or []):
             return row | {"result": "unsupported"}
-        self.w.emit("reattach_node", t("{node}: looking for a better parent (now {rssi}dBm, LQI {lqi})",
-                                       node=name, area=area, rssi=before["rssi"], lqi=before["lqi"]),
+        self.w.emit("reattach_node", t("{node}: looking for a better parent", node=name, area=area),
                     node=name, rssi=before["rssi"], lqi=before["lqi"])
         if self.advisor:
             self.advisor.forced[name] = time.time()
@@ -172,6 +203,7 @@ class Reattach:
             self._reattach(node_id, network)
         except Exception as err:  # noqa: BLE001
             LOG.warning(t("{node}: parent search refused: {err}", node=name, area=area, err=err))
+            LOG.debug("parent search of %s refused: %s", name, err)
             return row | {"result": "failed"}
         if self.w.stop.wait(SETTLE_S):
             return row | {"result": "unknown"}
@@ -185,23 +217,23 @@ class Reattach:
         except Exception as err:  # noqa: BLE001
             LOG.debug("read after parent search of %s: %s", name, err)
         res = verdict(before, after)
-        row["result"] = res
         if self.advisor:
             self.advisor.tried[name] = (time.time(), res)
+        parent, rssi = self._view(nid, read_parent=True)
+        if rssi is None and after:
+            rssi = after["rssi"]
+        row.update({"result": res, "parent": parent, "rssi": rssi})
         if after:
-            row |= {"rssi": after["rssi"], "lqi": after["lqi"], "rloc": after["rloc"]}
-        texts = {
-            "better": t("{node}: better parent, {before}dBm → {after}dBm (LQI {lqi_before} → {lqi})"),
-            "worse": t("{node}: weaker parent, {before}dBm → {after}dBm (LQI {lqi_before} → {lqi})"),
-            "similar": t("{node}: similar parent, {before}dBm → {after}dBm (LQI {lqi_before} → {lqi})"),
-            "same": t("{node}: same parent kept, {after}dBm (LQI {lqi}): no better router in range"),
-            "unknown": t("{node}: parent search sent, new link not read yet"),
-        }
-        self.w.emit("reattach_result", texts[res].format(
-            node=name, before=before["rssi"], lqi_before=before["lqi"],
-            after=after["rssi"] if after else "?", lqi=after["lqi"] if after else "?"),
-            node=name, result=res, rssi_before=before["rssi"], lqi_before=before["lqi"],
-            rssi=after["rssi"] if after else None, lqi=after["lqi"] if after else None)
+            row |= {"lqi": after["lqi"], "rloc": after["rloc"]}
+        if res == "unknown":
+            text = t("{node}: new parent not known yet", node=name)
+        elif res == "same":
+            text = t("{node}: same parent, {parent}, {after} dBm", node=name, parent=parent or "?", after=rssi if rssi is not None else "?")
+        else:
+            text = t("{node}: new parent {parent}, {before} → {after} dBm", node=name, parent=parent or "?",
+                     before=rssi_before, after=rssi if rssi is not None else "?")
+        row["text"] = text
+        self.w.emit("reattach_result", text, node=name, result=res, rssi_before=rssi_before, rssi=rssi, parent=parent)
         return row
 
     def run_node(self, nid):
@@ -213,7 +245,11 @@ class Reattach:
         try:
             with self.h.lock:
                 n = dict(self.h.nodes.get(nid) or {})
-            row = self._one(nid, n.get("name") or f"0x{nid.lstrip('0')}", n.get("area", "?"), force=True)
+            try:
+                row = self._one(nid, n.get("name") or f"0x{nid.lstrip('0')}", n.get("area", "?"), force=True)
+            except Exception as err:  # noqa: BLE001 - asleep or out of reach
+                LOG.debug("parent search of %s: %s", nid, err)
+                return {"result": "noanswer"}
             return row or {"result": "router"}
         finally:
             self.busy.release()
@@ -252,8 +288,7 @@ class Reattach:
                     rows.append(row)
             better = sum(1 for r in rows if r["result"] == "better")
             self.last = {"date": time.strftime("%d/%m %H:%M"), "checked": checked, "poor": len(rows), "better": better,
-                         "nodes": [f"{r['node']}: {r['result']}, {r['rssi_before']}dBm → {r.get('rssi', '?')}dBm"
-                                   for r in rows][:60]}
+                         "nodes": [r.get("text") or r["node"] for r in rows][:60]}
             if rows:
                 text = tn("Parent search: {n} poor link, {better} better now",
                           "Parent search: {n} poor links, {better} better now", len(rows), better=better, origin=origin)

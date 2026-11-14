@@ -214,7 +214,7 @@
   #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); opacity: 0; pointer-events: none;
     background: var(--txt); color: var(--card); padding: 10px 16px; border-radius: 10px; max-width: min(92vw, 560px); z-index: 9;
     transition: opacity .2s, transform .2s; font-size: 13.5px; }
-  #toast.on { opacity: 1; transform: translateX(-50%); }
+  #toast.on { opacity: 1; transform: translateX(-50%); pointer-events: auto; cursor: pointer; }
   .row { display: grid; }
   .note { margin: 18px 2px 0; font-size: 12px; color: var(--mut); }
   .note summary { cursor: pointer; min-height: 32px; }
@@ -240,6 +240,7 @@
   <div class="tools">
     <input type="search" id="q">
     <div class="chips" id="chips"></div>
+    <button class="chip" id="clearf" hidden></button>
     <button class="colset" id="colset" aria-haspopup="true" aria-expanded="false"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>
     <div class="colmenu" id="colmenu" role="menu"></div>
   </div>
@@ -256,91 +257,89 @@
 "use strict";
 // ------------------------------------------------------------ texts
 const T = {
-  en: {refresh:"Refresh", report:"Report", classic:"Classic view", loading:"loading…", error:"error", live:"live", polling:"live link down: values read on demand", updated:"updated {t}",
-    silent:"silent", w_silent:"Silent", n_silent:"{n} silent node", n_silent_pl:"{n} silent nodes", silent_sub:"{name} stopped giving signs of life: probably without power.",
-    silent_tip:"No sign of life for {t}, usually every {u} at most: probably without power. Home Assistant will show it unavailable within minutes.",
+  en: {clear:"Clear", filtered:"Filter on", todo_info:"Good to know ({n})", np_before:"Before: {p}, {r} dBm", a_parent_noanswer:"{n}: no answer (asleep?)", a_parent_new:"{n}: new parent {pa}, {b} → {a} dBm", a_failed:"{n}: action failed", check_bat:"Check its batteries.", check_power:"Check its power.", down_do_bat:"Since {t}. Check its batteries.", more:"+{n}", refresh:"Refresh", report:"Report", classic:"Classic view", loading:"loading…", error:"error", live:"live", polling:"live link down: values read on demand", updated:"updated at {t}",
+    silent:"silent", w_silent:"Silent", n_silent:"{n} silent node", n_silent_pl:"{n} silent nodes", silent_sub:"{name}: probably without power.",
+    silent_tip:"No sign of life for {t} (usually every {u}): probably without power.",
     t_rhythm:"Sign of life", rhythm_v:"every {u} at most · silence flagged after {l}", rhythm_wait:"being measured",
     all_ok:"All good", all_ok_sub:"All nodes are available.", n_down:"{n} node unavailable", n_down_pl:"{n} nodes unavailable", n_act:"{n} action advised", n_act_pl:"{n} actions advised",
-    down_sub:"{name} has not answered since {t}.", down_sub_pl:"{name} and {n} others are not answering.", act_sub:"Nothing is down: see the advice below.",
+    down_sub:"{name}, since {t}.", down_sub_pl:"{names}.", act_sub:"See the advice below.",
     f_avail:"Available nodes", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Automatic recovery", on:"on", off:"off",
-    quality:"Network quality · last {n} min", q_lab:["poor", "to watch", "good", "excellent"], q_trend:"{d} vs 24h", q_24h:"24h: {v} %", part_tip:"Last hour {v} % · 24h {v24} % (mark) · weight {n} %", q_scale:"≥ 95 excellent · 90–95 good · 80–90 to watch",
+    quality:"Network quality · last {n} min", q_lab:["poor", "to watch", "good", "excellent"], q_trend:"{d} vs 24h", q_24h:"24h: {v} %", part_tip:"Now {v} % · 24h {v24} % · weight {n} %", q_scale:"≥ 95 excellent · 90–95 good · 80–90 to watch",
     q_capped:"capped: partitioned network", q_wait:"The score starts after a few minutes.", q_parts:{availability:"Availability", radio:"Radio", outages:"Outages", backbone:"Backbone", partition:"Partition"}, weight:"Weight {n} %",
     todo:"To handle ({n})", todo_none:"Nothing to handle", w_down:"Unavailable", w_warn:"Action advised", w_info:"Good to know", w_net:"Network",
-    down_do:"Since {t}. Check its power or batteries and its distance to a router.",
-    storm:"Thread storm in progress: pings are spaced out and the hourly sweep is paused.",
-    brs:"Border routers", br_seen:"seen {t}", br_never:"no contact yet", br_primary:"primary", offline:"offline", detached24:"detached {n}× in 24h", other_subnet:"other subnet than Home Assistant",
+    down_do:"Since {t}. Check its power.",
+    storm:"Thread storm: pings spaced out, sweep paused.",
+    brs:"Border routers", br_seen:"seen {t}", br_never:"never seen", br_primary:"primary", offline:"offline", detached24:"detached {n}× in 24h", other_subnet:"other subnet than Home Assistant",
     nodes:"Nodes", search:"Filter: name, area, model…", c_all:"All", c_issues:"To handle", c_bat:"On battery",
-    h_node:"Node", h_status:"Status · Role", h_link:"Attachment · signal", h_resp:"Response", h_bat:"Power", h_last:"Last contact", h_adv:"Advice",
+    h_node:"Node", h_status:"Status · role", h_link:"Attachment · signal", h_resp:"Response", h_bat:"Power", h_last:"Last contact", h_adv:"Advice",
     available:"available", unavailable:"unavailable", unav_since:"unavailable since {t}", no_answer:"no answer", avg:"avg. {v}", contact:"Contact ",
     best_tip:"Router: it has no parent; this is the neighbor router it hears best", link_tip:"End device: its parent. Router: the neighbor router it hears best (a router has no parent)",
     parent_tip:"The router this end device sends all its traffic through", h_br:"Border router", hop1:"1 hop", hops:"{n} hops", hops_min:"at least", t_path:"Full path",
     drag_tip:"Drag to move the column", h_act:"Actions",
-    a_ping:"Ping", a_parent:"Find a better parent", a_interview:"Interview", a_remove:"Remove", a_remove_tip:"Remove",
-    a_remove_confirm:"{n}: remove this node from the Matter network? It must then be added again (commissioned) to work.", a_remove_ok:"{n} removed",
+    a_ping:"Ping", a_parent:"Find a new parent", a_interview:"Interview", a_remove:"Remove", a_remove_tip:"Remove",
+    a_remove_confirm:"{n}: remove this node? It must be commissioned again.", a_remove_ok:"{n} removed",
     a_ping_tip:"Ping", a_parent_tip:"Find a new parent",
     a_interview_tip:"Reinterview", a_parent_router:"A router has no parent: nothing to search",
-    a_parent_confirm:"{n}: attach again to look for a better parent? The new parent can also be weaker.", a_interview_confirm:"{n}: interview the node again? It can take a minute.",
-    a_ping_ok:"{n} answered the ping ({ms} ms)", a_ping_ko:"{n} did not answer the ping", a_interview_ok:"{n} interviewed again ({s} s)",
-    a_parent_better:"{n}: new parent {pa}, {b} → {a} dBm", a_parent_worse:"{n}: new parent {pa}, {b} → {a} dBm", a_parent_similar:"{n}: new parent {pa}, {b} → {a} dBm",
-    a_parent_same:"{n}: same parent, {pa}, {a} dBm", a_parent_unknown:"{n}: request sent",
-    a_parent_unsupported:"{n}: this node does not accept the request", a_parent_failed:"{n}: request refused by the node",
-    a_parent_router:"A router has no parent: nothing to search", a_parent_busy:"A parent search is already running", ap_ph:"Name of this access point", save:"Save", saved:"Saved", ap:"Access point", ap_unknown:"Access point not named: name it in the node panel, or add your access points to Home Assistant as devices",
+    a_parent_confirm:"{n}: find a new parent? The new one may be weaker.", a_interview_confirm:"{n}: interview the node again? It can take a minute.",
+    a_ping_ok:"{n}: answers the ping", a_ping_ko:"{n}: no answer to ping", a_interview_ok:"{n} interviewed again ({s} s)",
+    a_parent_same:"{n}: same parent, {pa}, {a} dBm", a_parent_unknown:"{n}: new parent not known yet",
+    a_parent_unsupported:"{n}: parent search not supported", a_parent_failed:"{n}: parent search refused",
+    a_parent_busy:"A parent search is already running", ap_ph:"Name of this access point", save:"Save", saved:"Saved", ap:"Access point", ap_unknown:"Unnamed access point: name it in the node panel",
     to_ha:"Path to Home Assistant", r_direct:"{br} directly", r_via:"{br} via {via}", r_parent:"parent {p}, then ", r_cost:"cost {c}",
-    r_cost_tip:"Path cost: 1 per good hop, up to 4 for a weak link. The nearest border router is the one with the lowest cost.", r_unknown:"unknown (no route table published yet)", no_parent:"Unknown parent (probably a border router)",
+    r_cost_tip:"Path cost: 1 per good hop, up to 4 for a weak link. The nearest border router is the one with the lowest cost.", r_unknown:"not known yet", no_parent:"Unknown parent (probably a border router)",
     sig:["weak", "fair", "good"], new_parent:"new parent", none_match:"No node matches.", columns:"Columns", cols_reset:"Default columns", t_out24:"Outages 24h", t_out7:"Outages 7d", sort_tip:"Click to sort, click again to reverse", sort_reset:"Default order (problems first)",
     ago_s:"{n}s ago", ago_m:"{n} min ago", ago_h:"{n} h ago", ago_d:"{n} d ago", never:"never",
     d_net:"Network", d_role:"Role", d_parent:"Parent", d_best:"Best link", d_signal:"Signal", d_lqi:"Link quality (0–3)", d_resp:"Response · average",
     d_power:"Power", mains:"mains", battery:"battery", bat_level:["ok", "low", "critical"], d_last:"Last contact",
     sig7:"Signal · last 7 days", resp7:"Response · last 7 days", outages:"Outages", pchanges:"Parent changes", none:"none", ongoing:"ongoing",
-    hist_wait:"History is built every 15 minutes: come back later.", now:"now", d7:"7 d ago", average:"average", threshold:"weak threshold", off_scale:"off scale",
+    hist_wait:"History available within 15 min.", now:"now", d7:"7 d ago", average:"average", threshold:"weak threshold", off_scale:"off scale",
     tech:"Technical details", t_id:"Id", t_rloc:"RLOC16", t_nb:"Neighbors", t_weak:"Weak links", t_det:"Detaches 24h", t_pch:"Parent changes 24h",
-    t_partch:"Partition changes 24h", t_out:"Outages 24h · 7d", t_down:"Downtime 7d", t_reb:"Reboots · 24h", t_boot:"Last boot reason", t_up:"Uptime",
+    t_partch:"Partition changes 24h", t_out:"Outages 24h · 7d", t_down:"Downtime 7d", t_reb:"Reboots total · 24h", t_boot:"Last boot reason", t_up:"Uptime",
     t_src:"Last contact source", t_gap:"Longest silence", copy:"Copy", copied:"Copied", download:"Download", report_tip:"Anonymized report (no names, areas or addresses) to paste in an issue",
-    note_t:"About these values", note:"Radio values come from the reports of the nodes (Matter Server cache, no radio traffic). Battery nodes report less often: check “Last contact”. 24h values compare with the radio survey of about 24h ago. The page refreshes every minute.",
+    note_t:"About these values", note:"Radio values: latest reports of the nodes. Battery nodes update less often (see Last contact). The page refreshes every minute.",
     roles:{leader:"Leader router", router:"Router", reed:"End", end_device:"End", sleepy_end_device:"Sleepy end", unassigned:"unassigned", unspecified:"unspecified", detached:"detached", child:"End device", offline:"offline"},
     boot:{unspecified:"unspecified", power_on:"power on", brown_out:"brown-out", software_watchdog:"software watchdog", hardware_watchdog:"hardware watchdog", software_update:"software update", software_reset:"software reset"},
     csrc:{report:"report", event:"event", read:"read", ping:"ping", passive:"packet"}},
-  fr: {refresh:"Actualiser", report:"Rapport", classic:"Vue classique", loading:"chargement…", error:"erreur", live:"en direct", polling:"lien direct coupé : valeurs lues à la demande", updated:"à jour {t}",
-    silent:"silencieuse", w_silent:"Silencieuse", n_silent:"{n} node silencieuse", n_silent_pl:"{n} nodes silencieuses", silent_sub:"{name} ne donne plus signe de vie : probablement sans courant.",
-    silent_tip:"Aucun signe de vie depuis {t}, d'habitude toutes les {u} au plus : probablement sans courant. Home Assistant l'affichera indisponible dans quelques minutes.",
+  fr: {clear:"Effacer", filtered:"Filtre actif", todo_info:"À savoir ({n})", np_before:"Avant : {p}, {r} dBm", a_parent_noanswer:"{n} : pas de réponse (endormie ?)", a_parent_new:"{n} : nouveau parent {pa}, {b} → {a} dBm", a_failed:"{n} : action impossible", check_bat:"Vérifier les piles.", check_power:"Vérifier l'alimentation.", down_do_bat:"Depuis {t}. Vérifier les piles.", more:"+{n}", refresh:"Actualiser", report:"Rapport", classic:"Vue classique", loading:"chargement…", error:"erreur", live:"en direct", polling:"lien direct coupé : valeurs lues à la demande", updated:"mis à jour à {t}",
+    silent:"silencieuse", w_silent:"Silencieuse", n_silent:"{n} node silencieuse", n_silent_pl:"{n} nodes silencieuses", silent_sub:"{name} : probablement sans courant.",
+    silent_tip:"Aucun signe de vie depuis {t} (d'habitude toutes les {u}) : probablement sans courant.",
     t_rhythm:"Signe de vie", rhythm_v:"toutes les {u} au plus · silence signalé après {l}", rhythm_wait:"mesure en cours",
     all_ok:"Tout va bien", all_ok_sub:"Toutes les nodes sont disponibles.", n_down:"{n} node indisponible", n_down_pl:"{n} nodes indisponibles", n_act:"{n} action conseillée", n_act_pl:"{n} actions conseillées",
-    down_sub:"{name} ne répond plus depuis {t}.", down_sub_pl:"{name} et {n} autres ne répondent plus.", act_sub:"Rien n'est coupé : voir les conseils ci-dessous.",
+    down_sub:"{name}, depuis {t}.", down_sub_pl:"{names}.", act_sub:"Voir les conseils ci-dessous.",
     f_avail:"Nodes disponibles", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Récupération auto.", on:"activée", off:"désactivée",
-    quality:"Qualité du réseau · dernières {n} min", q_lab:["mauvais", "à surveiller", "bon", "excellent"], q_trend:"{d} par rapport à 24 h", q_24h:"24 h : {v} %", part_tip:"Dernière heure {v} % · 24 h {v24} % (repère) · poids {n} %", q_scale:"≥ 95 excellent · 90–95 bon · 80–90 à surveiller",
+    quality:"Qualité du réseau · dernières {n} min", q_lab:["mauvais", "à surveiller", "bon", "excellent"], q_trend:"{d} par rapport à 24 h", q_24h:"24 h : {v} %", part_tip:"Actuel {v} % · 24 h {v24} % · poids {n} %", q_scale:"≥ 95 excellent · 90–95 bon · 80–90 à surveiller",
     q_capped:"plafonnée : réseau partitionné", q_wait:"La note démarre après quelques minutes.", q_parts:{availability:"Disponibilité", radio:"Radio", outages:"Coupures", backbone:"Ossature", partition:"Partition"}, weight:"Poids {n} %",
     todo:"À traiter ({n})", todo_none:"Rien à traiter", w_down:"Indisponible", w_warn:"Action conseillée", w_info:"À savoir", w_net:"Réseau",
-    down_do:"Depuis {t}. Vérifier son alimentation ou ses piles et sa distance à un routeur.",
-    storm:"Tempête Thread en cours : les pings sont espacés et le balayage horaire est suspendu.",
-    brs:"Border routers", br_seen:"vu {t}", br_never:"aucun contact pour l'instant", br_primary:"primaire", offline:"hors ligne", detached24:"détaché {n}× en 24 h", other_subnet:"autre sous-réseau que Home Assistant",
+    down_do:"Depuis {t}. Vérifier l'alimentation.",
+    storm:"Tempête Thread : pings espacés, balayage suspendu.",
+    brs:"Border routers", br_seen:"vu {t}", br_never:"jamais vu", br_primary:"primaire", offline:"hors ligne", detached24:"décroché {n}× en 24 h", other_subnet:"autre sous-réseau que Home Assistant",
     nodes:"Nodes", search:"Filtrer : nom, pièce, modèle…", c_all:"Toutes", c_issues:"À traiter", c_bat:"Sur pile",
-    h_node:"Node", h_status:"Statut · Rôle", h_link:"Rattachement · signal", h_resp:"Réponse", h_bat:"Alimentation", h_last:"Dernier contact", h_adv:"Conseil",
+    h_node:"Node", h_status:"Statut · rôle", h_link:"Rattachement · signal", h_resp:"Réponse", h_bat:"Alimentation", h_last:"Dernier contact", h_adv:"Conseil",
     available:"disponible", unavailable:"indisponible", unav_since:"indisponible depuis {t}", no_answer:"pas de réponse", avg:"moy. {v}", contact:"Contact ",
     best_tip:"Routeur : il n'a pas de parent ; c'est le voisin routeur qu'il capte le mieux", link_tip:"Appareil final : son parent. Routeur : le voisin routeur qu'il capte le mieux (un routeur n'a pas de parent)",
     parent_tip:"Le routeur par lequel cet appareil final fait passer tout son trafic", h_br:"Border router", hop1:"1 saut", hops:"{n} sauts", hops_min:"au moins", t_path:"Chemin complet",
     drag_tip:"Glisser pour déplacer la colonne", h_act:"Actions",
-    a_ping:"Ping", a_parent:"Chercher un meilleur parent", a_interview:"Ré-interviewer", a_remove:"Supprimer", a_remove_tip:"Supprimer",
-    a_remove_confirm:"{n} : supprimer cette node du réseau Matter ? Il faudra la rajouter (appairer) pour qu'elle refonctionne.", a_remove_ok:"{n} supprimée",
+    a_ping:"Ping", a_parent:"Recherche d'un nouveau parent", a_interview:"Ré-interviewer", a_remove:"Supprimer", a_remove_tip:"Supprimer",
+    a_remove_confirm:"{n} : supprimer cette node ? Il faudra l'appairer à nouveau.", a_remove_ok:"{n} supprimée",
     a_ping_tip:"Ping", a_parent_tip:"Recherche d'un nouveau parent",
     a_interview_tip:"Reinterview", a_parent_router:"Un routeur n'a pas de parent : rien à chercher",
-    a_parent_confirm:"{n} : se rattacher pour chercher un meilleur parent ? Le nouveau parent peut aussi être moins bon.", a_interview_confirm:"{n} : ré-interviewer la node ? Ça peut prendre une minute.",
-    a_ping_ok:"{n} a répondu au ping ({ms} ms)", a_ping_ko:"{n} n'a pas répondu au ping", a_interview_ok:"{n} ré-interviewée ({s} s)",
-    a_parent_better:"{n} : nouveau parent {pa}, {b} → {a} dBm", a_parent_worse:"{n} : nouveau parent {pa}, {b} → {a} dBm", a_parent_similar:"{n} : nouveau parent {pa}, {b} → {a} dBm",
-    a_parent_same:"{n} : même parent, {pa}, {a} dBm", a_parent_unknown:"{n} : demande envoyée",
-    a_parent_unsupported:"{n} : cette node n'accepte pas la demande", a_parent_failed:"{n} : demande refusée par la node",
-    a_parent_router:"Un routeur n'a pas de parent : rien à chercher", a_parent_busy:"Une recherche de parent est déjà en cours", ap_ph:"Nom de ce point d'accès", save:"Enregistrer", saved:"Enregistré", ap:"Point d'accès", ap_unknown:"Point d'accès sans nom : le nommer dans la fiche de la node, ou ajouter les points d'accès à Home Assistant comme appareils",
+    a_parent_confirm:"{n} : rechercher un nouveau parent ? Le nouveau peut être moins bon.", a_interview_confirm:"{n} : ré-interviewer la node ? Ça peut prendre une minute.",
+    a_ping_ok:"{n} : répond au ping", a_ping_ko:"{n} : pas de réponse au ping", a_interview_ok:"{n} ré-interviewée ({s} s)",
+    a_parent_same:"{n} : même parent, {pa}, {a} dBm", a_parent_unknown:"{n} : nouveau parent pas encore connu",
+    a_parent_unsupported:"{n} : recherche de parent non prise en charge", a_parent_failed:"{n} : recherche de parent refusée",
+    a_parent_busy:"Une recherche de parent est déjà en cours", ap_ph:"Nom de ce point d'accès", save:"Enregistrer", saved:"Enregistré", ap:"Point d'accès", ap_unknown:"Point d'accès sans nom : à nommer dans la fiche",
     to_ha:"Chemin vers Home Assistant", r_direct:"{br} en direct", r_via:"{br} via {via}", r_parent:"parent {p}, puis ", r_cost:"coût {c}",
-    r_cost_tip:"Coût du chemin : 1 par bon saut, jusqu'à 4 pour un lien faible. Le border router le plus proche est celui de plus bas coût.", r_unknown:"inconnu (table de routage pas encore publiée)", no_parent:"Parent inconnu (probablement un border router)",
+    r_cost_tip:"Coût du chemin : 1 par bon saut, jusqu'à 4 pour un lien faible. Le border router le plus proche est celui de plus bas coût.", r_unknown:"inconnu pour l'instant", no_parent:"Parent inconnu (probablement un border router)",
     sig:["faible", "moyen", "bon"], new_parent:"nouveau parent", none_match:"Aucune node ne correspond.", columns:"Colonnes", cols_reset:"Colonnes par défaut", t_out24:"Coupures 24 h", t_out7:"Coupures 7 j", sort_tip:"Cliquer pour trier, recliquer pour inverser", sort_reset:"Ordre par défaut (problèmes d'abord)",
     ago_s:"il y a {n} s", ago_m:"il y a {n} min", ago_h:"il y a {n} h", ago_d:"il y a {n} j", never:"jamais",
     d_net:"Réseau", d_role:"Rôle", d_parent:"Parent", d_best:"Meilleur lien", d_signal:"Signal", d_lqi:"Qualité du lien (0–3)", d_resp:"Réponse · moyenne",
     d_power:"Alimentation", mains:"secteur", battery:"pile", bat_level:["ok", "faible", "critique"], d_last:"Dernier contact",
     sig7:"Signal · 7 derniers jours", resp7:"Réponse · 7 derniers jours", outages:"Coupures", pchanges:"Changements de parent", none:"aucun", ongoing:"en cours",
-    hist_wait:"L'historique se construit toutes les 15 minutes : revenez plus tard.", now:"maintenant", d7:"il y a 7 j", average:"moyenne", threshold:"seuil faible", off_scale:"hors échelle",
+    hist_wait:"Historique disponible dans 15 min au plus.", now:"maintenant", d7:"il y a 7 j", average:"moyenne", threshold:"seuil faible", off_scale:"hors échelle",
     tech:"Détails techniques", t_id:"Id", t_rloc:"RLOC16", t_nb:"Voisins", t_weak:"Liens faibles", t_det:"Décrochages 24 h", t_pch:"Chgt de parent 24 h",
-    t_partch:"Chgt de partition 24 h", t_out:"Coupures 24 h · 7 j", t_down:"Durée coupée 7 j", t_reb:"Redémarrages · 24 h", t_boot:"Raison du dernier démarrage", t_up:"En marche depuis",
+    t_partch:"Chgt de partition 24 h", t_out:"Coupures 24 h · 7 j", t_down:"Indisponibilité 7 j", t_reb:"Redémarrages total · 24 h", t_boot:"Raison du dernier démarrage", t_up:"En marche depuis",
     t_src:"Source du dernier contact", t_gap:"Plus long silence", copy:"Copier", copied:"Copié", download:"Télécharger", report_tip:"Rapport anonymisé (sans noms, pièces ni adresses) à coller dans une issue",
-    note_t:"À propos de ces valeurs", note:"Les valeurs radio viennent des rapports des nodes (cache du Matter Server, sans trafic radio). Les nodes sur pile se mettent à jour moins souvent : voir « Dernier contact ». Les valeurs 24 h comparent avec le relevé radio d'il y a environ 24 h. La page se rafraîchit toutes les minutes.",
+    note_t:"À propos de ces valeurs", note:"Valeurs radio : derniers rapports des nodes. Sur pile, mises à jour moins fréquentes (voir « Dernier contact »). Page actualisée chaque minute.",
     roles:{leader:"Routeur leader", router:"Routeur", reed:"Final", end_device:"Final", sleepy_end_device:"Final dormant", unassigned:"non attribué", unspecified:"non précisé", detached:"détaché", child:"Appareil final", offline:"hors ligne"},
     boot:{unspecified:"non précisée", power_on:"mise sous tension", brown_out:"baisse de tension", software_watchdog:"watchdog logiciel", hardware_watchdog:"watchdog matériel", software_update:"mise à jour", software_reset:"redémarrage logiciel"},
     csrc:{report:"rapport", event:"événement", read:"lecture", ping:"ping", passive:"paquet"}},
@@ -419,7 +418,7 @@ const sigBars = v => v >= TH.rssi_good + 10 ? 4 : v >= TH.rssi_good ? 3 : v > TH
 const lvl = r => r.advice_level === "low" ? "info" : "warn";
 const sev = r => !r.available ? 0 : r.silent_s ? 1 : r.advice ? (lvl(r) === "warn" ? 1 : 2) : 3;
 const silentTip = r => F("silent_tip", {t: dur1(r.silent_s), u: dur1(r.rhythm_s)});
-const since = r => r.since ? hm(r.since) + " (" + ago(r.since) + ")" : "?";
+const since = r => !r.since ? "?" : (Date.now() / 1000 - r.since > 86400 ? dt(r.since) : hm(r.since)) + " (" + ago(r.since) + ")";
 const status = r => r.available && r.silent_s ? `<span class="st warn" title="${esc(silentTip(r))}">${IC.warn}${L("silent")}</span>`
   : r.available ? `<span class="st ok">${IC.ok}${L("available")}</span>`
   : `<span class="st bad" title="${esc(F("unav_since", {t: since(r)}))}">${IC.bad}${L("unavailable")}</span>`;
@@ -462,7 +461,7 @@ function link(r) {
   let np = "";
   if (r.new_parent) {
     const g = (r.rssi ?? 0) - (r.new_parent.before_rssi ?? r.rssi ?? 0);
-    np = `<span class="np" title="${esc(L("new_parent") + " · " + r.new_parent.before + " (" + (r.new_parent.before_rssi ?? "?") + " dBm)")}">${g >= 6 ? "▲" : g <= -6 ? "▼" : "●"}</span>`;
+    np = `<span class="np" title="${esc(F("np_before", {p: r.new_parent.before, r: r.new_parent.before_rssi ?? "?"}))}">${g >= 6 ? "▲" : g <= -6 ? "▼" : "●"}</span>`;
   }
   const rt = route(r);
   return `<span class="p" title="${esc((best ? L("best_tip") : L("d_parent")) + (rt ? "\n" + L("to_ha") + " : " + rt : ""))}">${esc(n)}${np}</span>`;
@@ -488,7 +487,7 @@ function renderHero() {
   if (act.length) parts.push(P2("n_act", act.length));
   const title = parts.length ? parts.join(", ") : L("all_ok");
   const sub = down.length === 1 ? F("down_sub", {name: esc(down[0].name), t: since(down[0])})
-    : down.length ? F("down_sub_pl", {name: esc(down[0].name), n: down.length - 1})
+    : down.length ? F("down_sub_pl", {names: down.slice(0, 3).map(x => esc(x.name)).join(", ") + (down.length > 3 ? " " + F("more", {n: down.length - 3}) : "")})
     : quiet.length ? F("silent_sub", {name: esc(quiet[0].name)}) : act.length ? L("act_sub") : L("all_ok_sub");
   const nets = Object.keys(NETS).filter(k => rows.some(r => net(r) === k));
   const brs = D.border_routers || [];
@@ -523,14 +522,14 @@ function renderTodo() {
   const net = [];
   if (n.storm) net.push(["warn", L("storm")]);
   if (n.routing_problem) net.push(["bad", n.routing_problem]);
-  const total = issues.length + net.length;
-  $("#todoTitle").textContent = total ? F("todo", {n: total}) : L("todo_none");
+  const urgent = issues.filter(r => sev(r) < 2).length + net.length;
+  $("#todoTitle").textContent = urgent ? F("todo", {n: urgent}) : issues.length ? F("todo_info", {n: issues.length}) : L("todo_none");
   $("#todo").innerHTML = net.map(([k, txt]) => `<div class="card issue ${k}"><span class="ic">${k === "bad" ? IC.bad : IC.warn}</span>
       <span><span class="what">${L("w_net")}</span><span>${esc(txt)}</span></span></div>`).join("") +
     issues.map(r => {
       const k = !r.available ? "bad" : r.silent_s ? "warn" : lvl(r);
       const what = !r.available ? L("w_down") : r.silent_s ? L("w_silent") : k === "warn" ? L("w_warn") : L("w_info");
-      const txt = !r.available ? F("down_do", {t: since(r)}) : r.silent_s ? esc(silentTip(r)) : esc(r.advice);
+      const txt = !r.available ? F(r.battery ? "down_do_bat" : "down_do", {t: since(r)}) : r.silent_s ? esc(silentTip(r)) : esc(r.advice);
       return `<button class="card issue ${k}" data-id="${esc(r.id)}" title="${esc(r.advice_detail || "")}"><span class="ic">${k === "bad" ? IC.bad : k === "warn" ? IC.bulb : IC.info}</span>
         <span><span class="what">${what}</span><b>${esc(r.name)} <span class="mut" style="font-weight:400">${r.area ? "· " + esc(r.area) : ""}</span></b><span>${txt}</span></span></button>`;
     }).join("");
@@ -632,6 +631,10 @@ function renderList() {
   const rows = D.rows || [], fl = filters();
   if (!fl.some(x => x[0] === P.filter)) P.filter = "all";
   $("#nodesTitle").textContent = L("nodes");
+  const filtered = P.filter !== "all" || P.q.trim();
+  $("#clearf").hidden = !filtered;
+  $("#clearf").textContent = "✕ " + L("clear");
+  $("#clearf").title = L("filtered");
   $("#chips").innerHTML = fl.map(([k, lab, f]) => `<button class="chip" data-f="${k}" aria-pressed="${k === P.filter}">${lab}<span class="n num">${rows.filter(f).length}</span></button>`).join("");
   const narrow = document.body.classList.contains("narrow");
   const cols = narrow ? COLS.filter(c => !c.x && c.k !== "br") : shown();
@@ -749,22 +752,26 @@ async function runAction(btn) {
   try {
     const res = await (await fetch("api/action", {method: "POST", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({id, action: a})})).json();
-    if (!res.ok) msg = `${r.name} : ${L("error")} ${res.error || ""}`;
-    else if (a === "ping") msg = F(res.ok ? "a_ping_ok" : "a_ping_ko", {n: r.name, ms: res.ms});
+    if (!res.ok) msg = F("a_failed", {n: r.name});
+    else if (a === "ping") msg = F(res.answered ? "a_ping_ok" : "a_ping_ko", {n: r.name});
     else if (a === "interview") msg = F("a_interview_ok", {n: r.name, s: res.s});
     else if (a === "remove") msg = F("a_remove_ok", {n: r.name});
-    else msg = F("a_parent_" + (res.result || "unknown"), {n: r.name, b: res.rssi_before ?? "?", a: res.rssi ?? "?",
-      pb: res.parent_before || "?", pa: res.parent || "?"});
-  } catch (e) { msg = `${r.name} : ${L("error")}`; }
+    else {
+      const k = ["better", "worse", "similar"].includes(res.result) ? "new" : res.result || "unknown";
+      msg = F("a_parent_" + k, {n: r.name, b: res.rssi_before ?? "", a: res.rssi ?? "", pa: res.parent || ""})
+        .replace(/, ,/g, ",").replace(/ → (?= dBm)| \? dBm|, dBm/g, "").replace(/,\s*$/, "").replace(/ ,/g, ",");
+    }
+  } catch (e) { msg = F("a_failed", {n: r.name}); }
   toast(msg);
   document.querySelectorAll(`[data-act="${a}"][data-node="${id}"]`).forEach(b => { b.disabled = false; b.classList.remove("busy"); });
-  load(true);
+  await load(true);
+  if ($("#sheet").classList.contains("on") && openId === id) openNode(id);   // the panel shows the new values
 }
 function toast(text) {
   let el = $("#toast");
   if (!el) { el = document.createElement("div"); el.id = "toast"; el.setAttribute("role", "status"); document.body.appendChild(el); }
-  el.textContent = text; el.classList.add("on");
-  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("on"), 7000);
+  el.textContent = text; el.classList.add("on");   // stays until clicked
+  el.onclick = () => el.classList.remove("on");
 }
 
 // ------------------------------------------------------------ detail sheet
@@ -806,17 +813,18 @@ const closeSheet = () => { $("#sheet").classList.remove("on"); $("#scrim").class
 const head = (title, sub, extra) => `<header><div><h3>${title}</h3>${sub ? `<span class="mut">${sub}</span>` : ""}${extra || ""}</div>
   <button class="x" aria-label="✕">✕</button></header>`;
 
+let openId = null;
 async function openNode(id) {
+  openId = id;
   const r = (D.rows || []).find(x => x.id === id);
   if (!r) return;
   const adv = r.available && r.silent_s ? `<div class="advice warn">${IC.warn}<div><b>${L("w_silent")}</b><br>${esc(silentTip(r))}</div></div>`
-    : !r.available ? `<div class="advice bad">${IC.bad}<div><b>${esc(F("unav_since", {t: since(r)}))}</b><br>${esc(F("down_do", {t: since(r)}))}</div></div>`
+    : !r.available ? `<div class="advice bad">${IC.bad}<div><b>${esc(F("unav_since", {t: since(r)}).replace(/^./, c => c.toUpperCase()))}</b><br>${esc(L(r.battery ? "check_bat" : "check_power"))}</div></div>`
     : r.advice ? `<div class="advice ${lvl(r)}">${lvl(r) === "warn" ? IC.bulb : IC.info}<div><b>${esc(r.advice)}</b>${r.advice_detail && r.advice_detail !== r.advice ? "<br>" + esc(r.advice_detail) : ""}</div></div>` : "";
   const best = !r.parent && isRouter(r);
   const power = r.battery ? L("battery") + (r.battery_pct != null ? " " + r.battery_pct + " %" : r.battery_level != null ? " · " + L("bat_level")[r.battery_level] : "") : L("mains");
   const kv = [[L("d_net"), NETS[net(r)]], [L("d_role"), r.role ? esc(L("roles")[r.role] || r.role) : "—"],
-    [best ? L("d_best") : L("d_parent"), esc(linkName(r) || "—") + (net(r) === "thread" ? `<br><small class="mut">${esc(best ? L("best_tip") : L("parent_tip"))}</small>` : "")], [L("d_signal"), signal(r)],
-    [L("d_lqi"), linkLqi(r) ?? "—"],
+    [best ? L("d_best") : L("d_parent"), `<span title="${esc(net(r) === "thread" ? (best ? L("best_tip") : L("parent_tip")) : "")}">${esc(linkName(r) || "—")}</span>`], [L("d_signal"), signal(r)],
     ...(net(r) === "wifi" ? [[L("ap"), `<form class="apf" data-bssid="${esc(r.bssid || "")}"><input name="n" value="${esc(r.access_point || "")}" placeholder="${esc(L("ap_ph"))}" maxlength="40"><button class="btn">${L("save")}</button></form><small class="mut">BSSID ${esc(r.bssid || "?")}</small>`]] : []),
     ...(net(r) === "thread" ? [[L("h_br"), r.route ? `${esc(r.route.br)}<br><small class="mut" title="${esc(L("r_cost_tip"))}">${esc(hopsTxt(r.route) + " · " + F("r_cost", {c: r.route.cost}))}</small>` : esc(L("r_unknown"))]] : []), [L("d_resp"), `${r.rtt_fail ? L("no_answer") : ms(r.rtt_ms)} · ${ms(r.rtt_avg_ms)}`],
     [L("d_power"), esc(power)], [L("d_last"), r.last_report ? ago(r.last_report) + (r.contact_src ? ` <small class="mut">(${esc(L("csrc")[r.contact_src] || r.contact_src)})</small>` : "") : L("never")]];
@@ -885,7 +893,8 @@ function renderAll() {
 }
 let busy = false;
 async function load(force) {
-  if (busy) return; busy = true;
+  if (busy) { while (busy) await new Promise(r => setTimeout(r, 100)); if (!force) return; }
+  busy = true;
   if (force) $("#refresh").disabled = true;
   try {
     const r = await fetch("api/table" + (force ? "?force=1" : ""), {cache: "no-store"});
@@ -935,6 +944,7 @@ document.addEventListener("keydown", e => {
 $("#q").value = P.q;
 $("#q").addEventListener("input", () => { P.q = $("#q").value; save(); if (D) renderList(); });
 $("#refresh").addEventListener("click", () => load(true));
+$("#clearf").addEventListener("click", () => { P.filter = "all"; P.q = ""; $("#q").value = ""; save(); renderList(); });
 $("#report").addEventListener("click", openReport);
 const layout = () => {
   const was = document.body.classList.contains("narrow");

@@ -210,7 +210,9 @@ class Advisor:
                     self.w.emit("radio_advice", t("{node}: {action} (parent {parent}, {rssi}dBm)",
                                                   node=a["node"], area=a["area"], parent=a["parent"],
                                                   rssi=dbm(a["rssi"]), action=(a.get("short") or a["actions"])[0]), node=a["node"])
-        LOG.info(tn("Advice: {n} node", "Advice: {n} nodes", len(advice)))
+        if len(advice) != getattr(self, "_logged_n", None):   # only when the count changes
+            self._logged_n = len(advice)
+            LOG.info(tn("Advice: {n} node", "Advice: {n} nodes", len(advice)))
         self._save()
 
     # ------------------------------------------------------------- MQTT
