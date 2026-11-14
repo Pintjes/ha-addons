@@ -659,6 +659,31 @@ class NodeTable:
                     "live": self.live.connected, "live_since": self.live.since})
         return out
 
+    def _ping_silent(self, rows):
+        """A node that has just gone silent gets one ping, in the background: if it answers,
+        the contact clears the silence; if not, it stays silent until the Matter Server
+        decides. One ping per silence (a node keeps the same last contact while silent)."""
+        pinged = self.__dict__.setdefault("_silent_pinged", {})
+        for r in rows:
+            if not r.get("silent_s"):
+                continue
+            nid = f"{int(r['id'], 16):016X}"
+            last = self.live.contacts.get(nid)
+            if pinged.get(nid) == last:
+                continue
+            pinged[nid] = last
+
+            def ping(nid=nid, name=r["name"]):
+                try:
+                    res = self.h.matter_command("ping_node", {"node_id": int(nid, 16)}, timeout=60)
+                    if isinstance(res, dict) and any(res.values()):
+                        self.live.note_contact(nid, src="ping")
+                        self.cache_t = 0
+                    LOG.debug("silent %s pinged: %s", name, res)
+                except Exception as err:  # noqa: BLE001
+                    LOG.debug("silent %s ping: %s", name, err)
+            threading.Thread(target=ping, daemon=True, name="ping-silent").start()
+
     def run(self):
         """Keep the parent history going even when nobody looks at the page."""
         time.sleep(60)
@@ -668,6 +693,7 @@ class NodeTable:
                     with self.lock:
                         self.cache = {"rows": self.build()}
                         self.cache_t = time.time()
+                    self._ping_silent(self.cache["rows"])
                 except Exception as err:  # noqa: BLE001
                     LOG.debug("table: %s", err)
             if self.w.stop.wait(BACKGROUND_S):
