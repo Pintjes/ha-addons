@@ -74,7 +74,7 @@ from radio import Radio  # noqa: E402
 from storm import Storm  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.3.3"
+VERSION = "2.3.4"
 
 _MQ = _load_mqtt()
 MQTT_HOST = _MQ.get("host") or os.environ.get("MQTT_HOST", "core-mosquitto")
