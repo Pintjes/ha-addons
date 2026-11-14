@@ -239,6 +239,9 @@
 // ------------------------------------------------------------ texts
 const T = {
   en: {refresh:"Refresh", report:"Report", classic:"Classic view", loading:"loading…", error:"error", live:"live", polling:"live link down: values read on demand", updated:"updated {t}",
+    silent:"silent", w_silent:"Silent", n_silent:"{n} silent node", n_silent_pl:"{n} silent nodes", silent_sub:"{name} stopped giving signs of life: probably without power.",
+    silent_tip:"No sign of life for {t}, usually every {u} at most: probably without power. Home Assistant will show it unavailable within minutes.",
+    t_rhythm:"Sign of life", rhythm_v:"every {u} at most · silence flagged after {l}", rhythm_wait:"being measured",
     all_ok:"All good", all_ok_sub:"All nodes are available.", n_down:"{n} node unavailable", n_down_pl:"{n} nodes unavailable", n_act:"{n} action advised", n_act_pl:"{n} actions advised",
     down_sub:"{name} has not answered since {t}.", down_sub_pl:"{name} and {n} others are not answering.", act_sub:"Nothing is down: see the advice below.",
     f_avail:"Available nodes", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Automatic recovery", on:"on", off:"off",
@@ -270,6 +273,9 @@ const T = {
     boot:{unspecified:"unspecified", power_on:"power on", brown_out:"brown-out", software_watchdog:"software watchdog", hardware_watchdog:"hardware watchdog", software_update:"software update", software_reset:"software reset"},
     csrc:{report:"report", event:"event", read:"read", ping:"ping", passive:"packet"}},
   fr: {refresh:"Actualiser", report:"Rapport", classic:"Vue classique", loading:"chargement…", error:"erreur", live:"en direct", polling:"lien direct coupé : valeurs lues à la demande", updated:"à jour {t}",
+    silent:"silencieuse", w_silent:"Silencieuse", n_silent:"{n} node silencieuse", n_silent_pl:"{n} nodes silencieuses", silent_sub:"{name} ne donne plus signe de vie : probablement sans courant.",
+    silent_tip:"Aucun signe de vie depuis {t}, d'habitude toutes les {u} au plus : probablement sans courant. Home Assistant l'affichera indisponible dans quelques minutes.",
+    t_rhythm:"Signe de vie", rhythm_v:"toutes les {u} au plus · silence signalé après {l}", rhythm_wait:"mesure en cours",
     all_ok:"Tout va bien", all_ok_sub:"Toutes les nodes sont disponibles.", n_down:"{n} node indisponible", n_down_pl:"{n} nodes indisponibles", n_act:"{n} action conseillée", n_act_pl:"{n} actions conseillées",
     down_sub:"{name} ne répond plus depuis {t}.", down_sub_pl:"{name} et {n} autres ne répondent plus.", act_sub:"Rien n'est coupé : voir les conseils ci-dessous.",
     f_avail:"Nodes disponibles", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Récupération auto.", on:"activée", off:"désactivée",
@@ -362,6 +368,7 @@ function ago(ts) {
   return F("ago_d", {n: Math.round(s / 86400)});
 }
 const dur = min => min == null ? "—" : !min ? "0" : min < 90 ? min + " min" : min < 2880 ? dec(min / 60) + " h" : dec(min / 1440) + (LANG === "fr" ? " j" : " d");
+const dur1 = s => s == null ? "—" : s < 90 ? Math.round(s) + " s" : dur(Math.round(s / 60));
 const ms = v => v == null ? "—" : v < 1000 ? Math.round(v) + " ms" : dec(v / 1000) + " s";
 const isRouter = r => r.role === "router" || r.role === "leader";
 const net = r => r.network || "thread";
@@ -372,9 +379,11 @@ const sigCls = v => v >= TH.rssi_good ? "ok" : v > TH.rssi_bad ? "warn" : "bad";
 const sigWord = v => L("sig")[v >= TH.rssi_good ? 2 : v > TH.rssi_bad ? 1 : 0];
 const sigBars = v => v >= TH.rssi_good + 10 ? 4 : v >= TH.rssi_good ? 3 : v > TH.rssi_bad ? 2 : 1;
 const lvl = r => r.advice_level === "low" ? "info" : "warn";
-const sev = r => !r.available ? 0 : r.advice ? (lvl(r) === "warn" ? 1 : 2) : 3;
+const sev = r => !r.available ? 0 : r.silent_s ? 1 : r.advice ? (lvl(r) === "warn" ? 1 : 2) : 3;
+const silentTip = r => F("silent_tip", {t: dur1(r.silent_s), u: dur1(r.rhythm_s)});
 const since = r => r.since ? hm(r.since) + " (" + ago(r.since) + ")" : "?";
-const status = r => r.available ? `<span class="st ok">${IC.ok}${L("available")}</span>`
+const status = r => r.available && r.silent_s ? `<span class="st warn" title="${esc(silentTip(r))}">${IC.warn}${L("silent")}</span>`
+  : r.available ? `<span class="st ok">${IC.ok}${L("available")}</span>`
   : `<span class="st bad" title="${esc(F("unav_since", {t: since(r)}))}">${IC.bad}${L("unavailable")}</span>`;
 function signal(r) {
   const v = linkRssi(r);
@@ -423,14 +432,17 @@ function link(r) {
 // ------------------------------------------------------------ summary
 function renderHero() {
   const n = D.network || {}, rows = D.rows || [], q = D.quality;
-  const down = rows.filter(r => !r.available), act = rows.filter(r => r.available && r.advice && lvl(r) === "warn");
-  const cls = down.length ? "bad" : act.length ? "warn" : "ok";
+  const down = rows.filter(r => !r.available), act = rows.filter(r => r.available && !r.silent_s && r.advice && lvl(r) === "warn");
+  const quiet = rows.filter(r => r.available && r.silent_s);
+  const cls = down.length ? "bad" : act.length || quiet.length ? "warn" : "ok";
   const parts = [];
   if (down.length) parts.push(P2("n_down", down.length));
+  if (quiet.length) parts.push(P2("n_silent", quiet.length));
   if (act.length) parts.push(P2("n_act", act.length));
   const title = parts.length ? parts.join(", ") : L("all_ok");
   const sub = down.length === 1 ? F("down_sub", {name: esc(down[0].name), t: since(down[0])})
-    : down.length ? F("down_sub_pl", {name: esc(down[0].name), n: down.length - 1}) : act.length ? L("act_sub") : L("all_ok_sub");
+    : down.length ? F("down_sub_pl", {name: esc(down[0].name), n: down.length - 1})
+    : quiet.length ? F("silent_sub", {name: esc(quiet[0].name)}) : act.length ? L("act_sub") : L("all_ok_sub");
   const nets = Object.keys(NETS).filter(k => rows.some(r => net(r) === k));
   const brs = D.border_routers || [];
   const facts = [[L("f_avail"), `${rows.length - down.length} / ${rows.length}`],
@@ -469,9 +481,9 @@ function renderTodo() {
   $("#todo").innerHTML = net.map(([k, txt]) => `<div class="card issue ${k}"><span class="ic">${k === "bad" ? IC.bad : IC.warn}</span>
       <span><span class="what">${L("w_net")}</span><span>${esc(txt)}</span></span></div>`).join("") +
     issues.map(r => {
-      const k = !r.available ? "bad" : lvl(r);
-      const what = !r.available ? L("w_down") : k === "warn" ? L("w_warn") : L("w_info");
-      const txt = !r.available ? F("down_do", {t: since(r)}) : esc(r.advice);
+      const k = !r.available ? "bad" : r.silent_s ? "warn" : lvl(r);
+      const what = !r.available ? L("w_down") : r.silent_s ? L("w_silent") : k === "warn" ? L("w_warn") : L("w_info");
+      const txt = !r.available ? F("down_do", {t: since(r)}) : r.silent_s ? esc(silentTip(r)) : esc(r.advice);
       return `<button class="card issue ${k}" data-id="${esc(r.id)}" title="${esc(r.advice_detail || "")}"><span class="ic">${k === "bad" ? IC.bad : k === "warn" ? IC.bulb : IC.info}</span>
         <span><span class="what">${what}</span><b>${esc(r.name)} <span class="mut" style="font-weight:400">${r.area ? "· " + esc(r.area) : ""}</span></b><span>${txt}</span></span></button>`;
     }).join("");
@@ -501,7 +513,7 @@ P.filter = P.filter || "all"; P.q = P.q || "";
 // sort: null = problems first; otherwise {k: column, d: 1 ascending / -1 descending}. Empty values always last.
 const SORT = {
   node: r => r.name.toLowerCase(),
-  status: r => r.available ? 1 : 0,
+  status: r => !r.available ? 0 : r.silent_s ? 0.5 : 1,
   link: r => linkRssi(r),
   resp: r => r.rtt_fail ? Infinity : r.rtt_ms,
   bat: r => r.battery_pct ?? (r.battery_level != null ? 100 - r.battery_level * 50 : null),
@@ -709,7 +721,8 @@ const head = (title, sub, extra) => `<header><div><h3>${title}</h3>${sub ? `<spa
 async function openNode(id) {
   const r = (D.rows || []).find(x => x.id === id);
   if (!r) return;
-  const adv = !r.available ? `<div class="advice bad">${IC.bad}<div><b>${esc(F("unav_since", {t: since(r)}))}</b><br>${esc(F("down_do", {t: since(r)}))}</div></div>`
+  const adv = r.available && r.silent_s ? `<div class="advice warn">${IC.warn}<div><b>${L("w_silent")}</b><br>${esc(silentTip(r))}</div></div>`
+    : !r.available ? `<div class="advice bad">${IC.bad}<div><b>${esc(F("unav_since", {t: since(r)}))}</b><br>${esc(F("down_do", {t: since(r)}))}</div></div>`
     : r.advice ? `<div class="advice ${lvl(r)}">${lvl(r) === "warn" ? IC.bulb : IC.info}<div><b>${esc(r.advice)}</b>${r.advice_detail && r.advice_detail !== r.advice ? "<br>" + esc(r.advice_detail) : ""}</div></div>` : "";
   const best = !r.parent && isRouter(r);
   const power = r.battery ? L("battery") + (r.battery_pct != null ? " " + r.battery_pct + " %" : r.battery_level != null ? " · " + L("bat_level")[r.battery_level] : "") : L("mains");
@@ -724,6 +737,7 @@ async function openNode(id) {
     [L("t_det"), c(r.detaches_24h)], [L("t_pch"), c(r.parent_changes_24h)], [L("t_partch"), c(r.partition_changes_24h)],
     [L("t_out"), `${c(r.outages_24h)} · ${c(r.outages_7d)}`], [L("t_down"), dur(r.downtime_7d_min)], [L("t_reb"), `${c(r.reboots)} · ${c(r.reboots_24h)}`],
     [L("t_boot"), r.boot_reason == null ? "—" : esc(L("boot")[r.boot_reason] || r.boot_reason)], [L("t_up"), r.uptime_h == null ? "—" : dur(Math.round(r.uptime_h * 60))],
+    [L("t_rhythm"), r.rhythm_s == null ? esc(L("rhythm_wait")) : esc(F("rhythm_v", {u: dur1(r.rhythm_s), l: dur1(r.silent_limit_s)}))],
     [L("t_src"), r.contact_src ? esc(L("csrc")[r.contact_src] || r.contact_src) : "—"], [L("t_gap"), r.active_gap_max_s == null ? "—" : dur(Math.round(r.active_gap_max_s / 60))]];
   const top = head(esc(r.name), [r.area, r.model].filter(Boolean).map(esc).join(" · "), `<div style="margin-top:8px">${status(r)}</div>`) + adv + grid(kv);
   const techBlock = `<details><summary>${L("tech")}</summary>${grid(tech)}</details>`;

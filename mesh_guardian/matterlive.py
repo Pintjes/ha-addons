@@ -33,6 +33,11 @@ def node_hex(node_id):
     return f"{int(node_id):016X}"
 
 
+RHYTHM_MIN_GAP_S = 30     # shorter silences are bursts of traffic, not the rhythm of the node
+RHYTHM_KEEP = 40          # silences kept per node
+RHYTHM_MIN_SAMPLES = 8    # silences needed before the rhythm is trusted
+
+
 class MatterLive:
     def __init__(self, watch, healer):
         self.w = watch
@@ -43,6 +48,7 @@ class MatterLive:
         self.since = None     # time of the current connection
         self.contacts = {}    # node hex -> time of the last contact, kept in /data
         self._saved = 0
+        self.t0 = time.time()   # start of the add-on: silences across a restart are not the node's
         try:
             with open(CONTACTS_FILE) as f:
                 self.contacts = {k: float(v) for k, v in json.load(f).items()}
@@ -96,6 +102,10 @@ class MatterLive:
         with self.lock:
             s = self.sources.setdefault(nid, {"src": None, "active": None, "gap": 0, "since": now})
             s["src"] = src
+            # rhythm of the node: its silences of 30 s or more between two contacts (any source)
+            prev = self.contacts.get(nid)
+            if prev and prev >= self.t0 and now - prev >= RHYTHM_MIN_GAP_S:
+                s["gaps"] = (s.get("gaps") or [])[-(RHYTHM_KEEP - 1):] + [round(now - prev)]
             if src != "passive":
                 if s["active"]:
                     s["gap"] = max(s["gap"], now - s["active"])
@@ -114,6 +124,17 @@ class MatterLive:
                 json.dump(self.sources, f)
         except OSError as err:
             LOG.warning(t("Cannot write {file}: {err}", file=SOURCES_FILE, err=err))
+
+    def rhythm(self, nid):
+        """(usual silence between two signs of life in s, or None while unknown; seconds since
+        the last contact). The usual silence is a high percentile of the silences seen, so a
+        few outages do not count; with passive contact it is close to the liveness interval
+        of the Matter subscription."""
+        with self.lock:
+            gaps = sorted((self.sources.get(nid) or {}).get("gaps") or [])
+            last = self.contacts.get(nid)
+        usual = gaps[int(len(gaps) * 0.8)] if len(gaps) >= RHYTHM_MIN_SAMPLES else None
+        return usual, (time.time() - last if last else None)
 
     def source(self, nid):
         """(source of the last contact, longest gap in s between two non-passive contacts,
