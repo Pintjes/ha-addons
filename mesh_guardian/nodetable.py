@@ -296,6 +296,7 @@ def routes_to_br(thread, labels, br_exts, rlocs, parents):
         if best:
             path, complete = walk(best[2], best[3]) if best[2] is not None else ([], True)
             out[nid] = {"br": best[0], "via": name_of(best[2]) if best[2] is not None else None, "cost": best[1],
+                        "hop_rid": best[2] if best[2] is not None else best[3],   # router id of the first hop
                         "path": path, "hops": len(path) + 1, "complete": complete}
     by_name = {v["name"]: k for k, v in thread.items()}
     for nid, p in parents.items():   # end devices: their parent, then the parent's path
@@ -371,6 +372,18 @@ class NodeTable:
         except Exception as err:  # noqa: BLE001 - never break the table for this extra
             LOG.debug("route to border router: %s", err)
             routes = {}
+        # a router has no parent: show the link it really sends through, the first hop of its
+        # route to the border router (the strongest neighbor is kept when the route is unknown)
+        for nid, r in routes.items():
+            hop = r.get("hop_rid")
+            if nid in parent_of or hop is None:
+                continue
+            for nb in thread[nid]["attrs"].get("0/53/7") or []:
+                if isinstance(nb, dict) and nb.get("2") is not None and nb["2"] >> 10 == hop and not nb["2"] & 0x3FF:
+                    rssi = nb_rssi(nb)
+                    if rssi is not None:
+                        best[nid] = (r["via"] or r["br"], rssi, nb.get("5"))
+                    break
         named = bool(meta)
         leader = None
         if self.radio and self.radio.leader_name and time.time() - self.radio.leader_t < 2400:

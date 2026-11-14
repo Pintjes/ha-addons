@@ -4,6 +4,14 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.4.1] - 2026-11-14
+
+### Changed
+
+- Router attachment: the neighbor it really sends through (first hop of its
+  route to the border router) and that link's signal, instead of its strongest
+  neighbor.
+
 ## [2.4.0] - 2026-11-14
 
 ### Changed
