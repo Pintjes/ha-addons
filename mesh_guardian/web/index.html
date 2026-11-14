@@ -200,7 +200,8 @@
   .apf input { flex: 1; min-width: 0; min-height: 36px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); padding: 0 8px; }
   .apf .btn { min-height: 36px; padding: 0 10px; }
   .kv div:has(.apf) { grid-column: 1 / -1; }
-  .acts { display: inline-flex; gap: 4px; }
+  .acts { display: inline-grid; grid-template-columns: repeat(2, 28px); gap: 4px; }
+  .act[data-act="remove"]:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); }
   .act { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--mut);
     display: inline-grid; place-items: center; cursor: pointer; padding: 0; }
   .act:hover:not(:disabled) { color: var(--acc-txt); border-color: var(--acc); }
@@ -274,7 +275,8 @@ const T = {
     best_tip:"Router: it has no parent; this is the neighbor router it hears best", link_tip:"End device: its parent. Router: the neighbor router it hears best (a router has no parent)",
     parent_tip:"The router this end device sends all its traffic through", h_br:"Border router", hop1:"1 hop", hops:"{n} hops", hops_min:"at least", t_path:"Full path",
     drag_tip:"Drag to move the column", h_act:"Actions",
-    a_ping:"Ping", a_parent:"Find a better parent", a_interview:"Interview",
+    a_ping:"Ping", a_parent:"Find a better parent", a_interview:"Interview", a_remove:"Remove", a_remove_tip:"Remove",
+    a_remove_confirm:"{n}: remove this node from the Matter network? It must then be added again (commissioned) to work.", a_remove_ok:"{n} removed",
     a_ping_tip:"Ping", a_parent_tip:"Find a new parent",
     a_interview_tip:"Reinterview", a_parent_router:"A router has no parent: nothing to search",
     a_parent_confirm:"{n}: attach again to look for a better parent? The new parent can also be weaker.", a_interview_confirm:"{n}: interview the node again? It can take a minute.",
@@ -317,7 +319,8 @@ const T = {
     best_tip:"Routeur : il n'a pas de parent ; c'est le voisin routeur qu'il capte le mieux", link_tip:"Appareil final : son parent. Routeur : le voisin routeur qu'il capte le mieux (un routeur n'a pas de parent)",
     parent_tip:"Le routeur par lequel cet appareil final fait passer tout son trafic", h_br:"Border router", hop1:"1 saut", hops:"{n} sauts", hops_min:"au moins", t_path:"Chemin complet",
     drag_tip:"Glisser pour déplacer la colonne", h_act:"Actions",
-    a_ping:"Ping", a_parent:"Chercher un meilleur parent", a_interview:"Ré-interviewer",
+    a_ping:"Ping", a_parent:"Chercher un meilleur parent", a_interview:"Ré-interviewer", a_remove:"Supprimer", a_remove_tip:"Supprimer",
+    a_remove_confirm:"{n} : supprimer cette node du réseau Matter ? Il faudra la rajouter (appairer) pour qu'elle refonctionne.", a_remove_ok:"{n} supprimée",
     a_ping_tip:"Ping", a_parent_tip:"Recherche d'un nouveau parent",
     a_interview_tip:"Reinterview", a_parent_router:"Un routeur n'a pas de parent : rien à chercher",
     a_parent_confirm:"{n} : se rattacher pour chercher un meilleur parent ? Le nouveau parent peut aussi être moins bon.", a_interview_confirm:"{n} : ré-interviewer la node ? Ça peut prendre une minute.",
@@ -576,7 +579,7 @@ const COLS = [
   {k:"bat", lab:"h_bat", w:"105px"},
   {k:"last", lab:"h_last", w:"110px"},
   {k:"adv", lab:"h_adv", w:"minmax(130px, 1.8fr)"},
-  {k:"act", lab:"h_act", w:"96px", h:r => actions(r), s:null},
+  {k:"act", lab:"h_act", w:"72px", h:r => actions(r), s:null},
   {k:"route", lab:"to_ha", w:"minmax(170px, 1.5fr)", x:true, h:r => esc(route(r) || "—"), s:r => r.route ? r.route.cost : null},
   {k:"nb", lab:"t_nb", w:"80px", r:true, x:true, h:r => n0(r.neighbors), s:r => r.neighbors},
   {k:"weak", lab:"t_weak", w:"90px", r:true, x:true, h:r => n0(r.weak), s:r => r.weak},
@@ -727,10 +730,11 @@ const ACT_ICON = {
   ping: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12a7 7 0 0 1 14 0M8.5 12a3.5 3.5 0 0 1 7 0"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>',
   parent: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v7a6 6 0 0 0 12 0V4M6 4h3M15 4h3M6 8h3M15 8h3"/></svg>',
   interview: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg>',
+  remove: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 7V4h4v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>',
 };
 const canParent = r => net(r) === "thread" && !isRouter(r) && r.role !== "leader";
 function actions(r) {
-  const list = [["ping", true], ["parent", canParent(r)], ["interview", true]];
+  const list = [["ping", true], ["parent", canParent(r)], ["interview", true], ["remove", true]];
   return `<span class="acts">${list.map(([a, ok]) => `<button class="act" data-act="${a}" data-node="${esc(r.id)}" ${ok ? "" : "disabled"}
     title="${esc(ok ? L("a_" + a + "_tip") : L("a_parent_router"))}" aria-label="${esc(L("a_" + a))}">${ACT_ICON[a]}</button>`).join("")}</span>`;
 }
@@ -739,6 +743,7 @@ async function runAction(btn) {
   if (!r) return;
   if (a === "parent" && !confirm(F("a_parent_confirm", {n: r.name}))) return;
   if (a === "interview" && !confirm(F("a_interview_confirm", {n: r.name}))) return;
+  if (a === "remove" && !confirm(F("a_remove_confirm", {n: r.name}))) return;
   document.querySelectorAll(`[data-act="${a}"][data-node="${id}"]`).forEach(b => { b.disabled = true; b.classList.add("busy"); });
   let msg;
   try {
@@ -747,6 +752,7 @@ async function runAction(btn) {
     if (!res.ok) msg = `${r.name} : ${L("error")} ${res.error || ""}`;
     else if (a === "ping") msg = F(res.ok ? "a_ping_ok" : "a_ping_ko", {n: r.name, ms: res.ms});
     else if (a === "interview") msg = F("a_interview_ok", {n: r.name, s: res.s});
+    else if (a === "remove") msg = F("a_remove_ok", {n: r.name});
     else msg = F("a_parent_" + (res.result || "unknown"), {n: r.name, b: res.rssi_before ?? "?", a: res.rssi ?? "?",
       pb: res.parent_before || "?", pa: res.parent || "?"});
   } catch (e) { msg = `${r.name} : ${L("error")}`; }
@@ -822,7 +828,7 @@ async function openNode(id) {
     [L("t_rhythm"), r.rhythm_s == null ? esc(L("rhythm_wait")) : esc(F("rhythm_v", {u: dur1(r.rhythm_s), l: dur1(r.silent_limit_s)}))],
     [L("t_src"), r.contact_src ? esc(L("csrc")[r.contact_src] || r.contact_src) : "—"], [L("t_gap"), r.active_gap_max_s == null ? "—" : dur(Math.round(r.active_gap_max_s / 60))]];
   const top = head(esc(r.name), [r.area, r.model].filter(Boolean).map(esc).join(" · "), `<div style="margin-top:8px">${status(r)}</div>`) + adv + grid(kv) +
-    `<div class="sheet-acts">${[["ping", true], ["parent", canParent(r)], ["interview", true]].map(([a, ok]) =>
+    `<div class="sheet-acts">${[["ping", true], ["parent", canParent(r)], ["interview", true], ["remove", true]].map(([a, ok]) =>
       `<button class="btn act" data-act="${a}" data-node="${esc(r.id)}" ${ok ? "" : "disabled"} title="${esc(ok ? L("a_" + a + "_tip") : L("a_parent_router"))}">${ACT_ICON[a]}<span>${L("a_" + a)}</span></button>`).join("")}</div>`;
   const techBlock = `<details><summary>${L("tech")}</summary>${grid(tech)}</details>`;
   openSheet(top + `<p class="mut">${L("loading")}</p>` + techBlock);

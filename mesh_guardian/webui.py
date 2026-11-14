@@ -142,6 +142,9 @@ class WebUI:
                             out["rssi_before"] = before["rssi"]
                         if after.get("rssi") is not None:
                             out["rssi"] = after["rssi"]
+                    elif act == "remove":
+                        h.matter_command("remove_node", {"node_id": int(nid, 16)}, timeout=120)
+                        out = {"ok": True}
                     elif act == "interview":
                         h.matter_command("interview_node", {"node_id": int(nid, 16)}, timeout=300)
                         out = {"ok": True, "s": round(time.time() - t0)}
