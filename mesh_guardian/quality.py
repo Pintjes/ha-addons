@@ -170,7 +170,7 @@ class Quality:
             if now - (r.get("nb_t") or 0) < NEIGHBOR_REFRESH_S:
                 return
             r["nb_t"] = now
-        for path in ("0/53/1", "0/53/7"):
+        for path in ("0/53/1", "0/53/7", "0/51/0"):   # role, neighbors, addresses (RLOC16)
             try:
                 res = self.h.matter_command("read_attribute", {"node_id": int(nid, 16), "attribute_path": path}, timeout=30)
                 value = res.get(path) if isinstance(res, dict) else res

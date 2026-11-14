@@ -13,6 +13,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   parent but links with several routers is shown as a router (its role and
   address were out of date).
 
+## [1.7.1] - 2026-11-14
+
+### Fixed
+
+- Weak-link advice disappears as soon as the link is above the weak threshold
+  again, without waiting for the next radio survey.
+- Mains nodes: the hourly read also refreshes their addresses, so the RLOC16
+  (and the parent derived from it) follows a change of role.
+
 ## [1.7.0] - 2026-11-14
 
 ### Added
