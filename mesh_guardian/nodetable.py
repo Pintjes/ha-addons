@@ -121,8 +121,8 @@ def rloc_of(attrs):
 def fed_parent(attrs):
     """Router id of the parent of a full end device (REED, FED), from its route table, or None.
     Such a child keeps radio links with the routers around it, like a router, but routes
-    nothing itself: every route has its parent as next hop, and the entry of the parent
-    carries the link quality with it. A router has an entry for itself and several next hops."""
+    nothing itself: every route has its parent as next hop. A router never has one next hop
+    for everything: its own entry has none, and it never routes through itself."""
     if attrs.get("0/53/1") in (2, 3):
         return None   # minimal end devices have no routes
     routes = [rt for rt in attrs.get("0/53/8") or [] if isinstance(rt, dict) and rt.get("2") is not None]
@@ -132,8 +132,7 @@ def fed_parent(attrs):
     parent = max(set(hops), key=hops.count)
     if parent in (None, 63):
         return None
-    own = [rt for rt in routes if rt["2"] == parent]
-    if len(own) != 1 or not (own[0].get("5") and own[0].get("6")):
+    if sum(1 for rt in routes if rt["2"] == parent) != 1:
         return None
     if any(rt.get("3") != parent for rt in routes if rt["2"] != parent):
         return None
