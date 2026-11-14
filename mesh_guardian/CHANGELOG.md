@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.5.1] - 2026-11-14
+
+### Fixed
+
+- The route table of mains-powered nodes is read again every hour, with the neighbor table: the first hop of a router no longer comes from an old route.
+
 ## [2.5.0] - 2026-11-14
 
 ### Changed
