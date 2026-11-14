@@ -43,20 +43,24 @@ leader, network splits and Thread storms, and recognizes when Home Assistant
 has lost its route to the Thread network (border router on another VLAN,
 IPv6 routing blocked).
 
-**4. Two buttons you will not find elsewhere.**
+**4. Three buttons you will not find elsewhere.**
 **Ping all nodes** checks every node at once, battery-powered ones included.
 **Rename nodes** writes the names you gave your devices in Home Assistant into
-the Matter nodes themselves, so tools that read the node show the same names —
-only when you press it, never automatically.
+the Matter nodes themselves, so tools that read the node show the same names.
+**Find better parents** asks the battery devices stuck on a poor parent to
+attach again and pick a better one, without removing a battery.
+All three only act when you press them, never automatically.
 
 ## Also
 
 - Everything as Home Assistant entities (MQTT): border routers, leader,
   partitions, unavailable nodes, recoveries, weak links, storms.
 - A readable event log (also kept in a file and sent over MQTT).
-- Safe: it never controls a device. It listens to mDNS, reads Home Assistant,
-  and asks the Matter Server for node data, pings and neighbor tables. The only
-  thing it ever writes is the node name, when you press **Rename nodes**.
+- Safe: it never controls a device on its own. It listens to mDNS, reads Home
+  Assistant, and asks the Matter Server for node data, pings and neighbor
+  tables. It only writes to a node when you press a button: the node name
+  (**Rename nodes**), or a request to attach again to its own Thread network
+  (**Find better parents**).
 - Local only: no cloud, no telemetry.
 - English and French.
 

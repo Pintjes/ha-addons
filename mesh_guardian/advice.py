@@ -6,7 +6,8 @@
 In Thread, a node picks its parent when it joins the network. Some firmwares
 look for a better parent on their own when the signal drops ("Periodic Parent
 Search"); many stay attached to a weak parent as long as the link holds. Nobody
-can force a parent remotely.
+can choose a parent remotely; an end device can only be asked to attach again
+(reattach.py), which makes it pick one among the routers it hears.
 
 Called after every radio survey, this module:
 - lists the nodes whose parent is weak (signal <= -85dBm) or unstable (parent
@@ -30,6 +31,7 @@ GOOD_GAIN = 6          # dB: gain from which a change counts as "better"
 UNSTABLE_DETACHES = 3  # detaches over about 24h from which a parent counts as unstable
 UNSTABLE_REBOOTS = 2   # reboots over about 24h (software updates excluded) from which a parent counts as unstable
 SETTLE_S = 86400       # s: no "Unstable parent" during this time after a move to a better parent
+FORCED_S = 7200        # s: a parent change this long after a requested parent search is not spontaneous
 
 
 def dbm(v):
@@ -44,6 +46,7 @@ class Advisor:
         self.models = {}        # model -> {"spontaneous": n, "observed_h": hours, "nodes": [..]}
         self.changes = []       # recent parent changes (text)
         self.advice = []        # current advice (dicts)
+        self.forced = {}        # child -> time of a parent search requested with the button (reattach.py)
         self.last_t = None
         self._load()
 
@@ -127,7 +130,9 @@ class Advisor:
                 gain = p["rssi"] - old["rssi"] if known else 0
                 verdict = ("?" if not known else t("▲ better") if gain >= GOOD_GAIN
                            else (t("▼ worse") if gain <= -GOOD_GAIN else t("≈ similar")))
-                if child in rebooted:
+                if now - self.forced.get(child, 0) < FORCED_S:
+                    why = t("after a parent search requested with the button")
+                elif child in rebooted:
                     why = t("after the node rebooted (battery removed or power cycled)")
                 elif old["parent"] not in by_name or old["parent"] in rebooted:
                     why = t("its old parent disappeared or rebooted")
