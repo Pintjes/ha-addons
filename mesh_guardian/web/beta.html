@@ -120,7 +120,12 @@
   .colmenu label.fixed { opacity: .55; cursor: default; }
   .colmenu hr { border: 0; border-top: 1px solid var(--line); margin: 6px 8px; }
   .colmenu .reset { all: unset; cursor: pointer; display: block; padding: 6px 12px; color: var(--acc-txt); font-size: 13px; }
-  body:not(.narrow) .cols, body:not(.narrow) .row { padding-right: 44px; min-width: var(--minw, 0); }
+  body:not(.narrow) .cols, body:not(.narrow) .row { min-width: var(--minw, 0); }
+  .tools { position: relative; }
+  .tools .colset { position: static; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); flex: none; }
+  .tools .colmenu { top: calc(100% + 6px); right: 0; }
+  .pw { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .bat-ok { color: var(--ok); } .bat-warn { color: var(--warn); } .bat-bad { color: var(--bad); }
   .scroll { overflow-x: auto; border-radius: var(--r); }
   body.narrow .colset, body.narrow .colmenu { display: none; }
   .st + .rl { display: block; font-size: 12px; color: var(--mut); margin-top: 3px; padding-left: 4px; }
@@ -213,10 +218,10 @@
   <div class="tools">
     <input type="search" id="q">
     <div class="chips" id="chips"></div>
-  </div>
-  <div class="card list">
     <button class="colset" id="colset" aria-haspopup="true" aria-expanded="false"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>
     <div class="colmenu" id="colmenu" role="menu"></div>
+  </div>
+  <div class="card list">
     <div class="scroll"><div class="cols" id="cols"></div>
     <div id="rows"></div></div>
   </div>
@@ -240,11 +245,11 @@ const T = {
     storm:"Thread storm in progress: pings are spaced out and the hourly sweep is paused.",
     brs:"Border routers", br_seen:"seen {t}", br_never:"no contact yet", br_primary:"primary", offline:"offline", detached24:"detached ×{n} in 24h", other_subnet:"other subnet than Home Assistant",
     nodes:"Nodes", search:"Filter: name, area, model…", c_all:"All", c_issues:"To handle", c_bat:"On battery",
-    h_node:"Node", h_status:"Status · Role", h_link:"Attachment · signal", h_resp:"Response", h_bat:"Battery", h_last:"Last contact", h_adv:"Advice",
+    h_node:"Node", h_status:"Status · Role", h_link:"Attachment · signal", h_resp:"Response", h_bat:"Power", h_last:"Last contact", h_adv:"Advice",
     available:"available", unavailable:"unavailable", unav_since:"unavailable since {t}", no_answer:"no answer", avg:"avg. {v}", contact:"Contact ",
     best_tip:"Router: it has no parent; this is the neighbor router it hears best", link_tip:"End device: its parent. Router: the neighbor router it hears best (a router has no parent)",
     parent_tip:"The router this end device sends all its traffic through", h_br:"Border router", hop1:"1 hop", hops:"{n} hops", hops_min:"at least", t_path:"Full path",
-    drag_tip:"Drag to move the column",
+    drag_tip:"Drag to move the column", ap:"Access point", ap_unknown:"Access point not found in Home Assistant (add your access points as devices, e.g. UniFi integration: track network devices)",
     to_ha:"Path to Home Assistant", r_direct:"{br} directly", r_via:"{br} via {via}", r_parent:"parent {p}, then ", r_cost:"cost {c}",
     r_cost_tip:"Path cost: 1 per good hop, up to 4 for a weak link. The nearest border router is the one with the lowest cost.", r_unknown:"unknown (no route table published yet)", no_parent:"Unknown parent (probably a border router)",
     sig:["weak", "fair", "good"], new_parent:"new parent", none_match:"No node matches.", columns:"Columns", cols_reset:"Default columns", t_out24:"Outages 24h", t_out7:"Outages 7d", sort_tip:"Click to sort, click again to reverse", sort_reset:"Default order (problems first)",
@@ -271,11 +276,11 @@ const T = {
     storm:"Tempête Thread en cours : les pings sont espacés et le balayage horaire est suspendu.",
     brs:"Border routers", br_seen:"vu {t}", br_never:"aucun contact pour l'instant", br_primary:"primaire", offline:"hors ligne", detached24:"détaché ×{n} en 24 h", other_subnet:"autre sous-réseau que Home Assistant",
     nodes:"Nodes", search:"Filtrer : nom, pièce, modèle…", c_all:"Toutes", c_issues:"À traiter", c_bat:"Sur pile",
-    h_node:"Node", h_status:"Statut · Rôle", h_link:"Rattachement · signal", h_resp:"Réponse", h_bat:"Pile", h_last:"Dernier contact", h_adv:"Conseil",
+    h_node:"Node", h_status:"Statut · Rôle", h_link:"Rattachement · signal", h_resp:"Réponse", h_bat:"Alimentation", h_last:"Dernier contact", h_adv:"Conseil",
     available:"disponible", unavailable:"indisponible", unav_since:"indisponible depuis {t}", no_answer:"pas de réponse", avg:"moy. {v}", contact:"Contact ",
     best_tip:"Routeur : il n'a pas de parent ; c'est le voisin routeur qu'il capte le mieux", link_tip:"Appareil final : son parent. Routeur : le voisin routeur qu'il capte le mieux (un routeur n'a pas de parent)",
     parent_tip:"Le routeur par lequel cet appareil final fait passer tout son trafic", h_br:"Border router", hop1:"1 saut", hops:"{n} sauts", hops_min:"au moins", t_path:"Chemin complet",
-    drag_tip:"Glisser pour déplacer la colonne",
+    drag_tip:"Glisser pour déplacer la colonne", ap:"Point d'accès", ap_unknown:"Point d'accès introuvable dans Home Assistant (ajouter les points d'accès comme appareils, p. ex. intégration UniFi : suivre les appareils réseau)",
     to_ha:"Chemin vers Home Assistant", r_direct:"{br} en direct", r_via:"{br} via {via}", r_parent:"parent {p}, puis ", r_cost:"coût {c}",
     r_cost_tip:"Coût du chemin : 1 par bon saut, jusqu'à 4 pour un lien faible. Le border router le plus proche est celui de plus bas coût.", r_unknown:"inconnu (table de routage pas encore publiée)", no_parent:"Parent inconnu (probablement un border router)",
     sig:["faible", "moyen", "bon"], new_parent:"nouveau parent", none_match:"Aucune node ne correspond.", columns:"Colonnes", cols_reset:"Colonnes par défaut", t_out24:"Coupures 24 h", t_out7:"Coupures 7 j", sort_tip:"Cliquer pour trier, recliquer pour inverser", sort_reset:"Ordre par défaut (problèmes d'abord)",
@@ -372,11 +377,18 @@ function signal(r) {
   if (v == null) return `<span class="mut">—</span>`;
   return `<span class="sig ${sigCls(v)}">${bars(sigBars(v))}<span class="num">${v} dBm</span> <small>${sigWord(v)}</small></span>`;
 }
+// battery drawn with its charge: green > 50 %, orange 20–50 %, red < 20 % (the percentage is always written too)
+function batIcon(pct) {
+  const k = pct > 50 ? "ok" : pct >= 20 ? "warn" : "bad", w = Math.max(1.5, Math.min(12, 12 * pct / 100));
+  return `<svg class="i bat-${k}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="8" width="16" height="9" rx="2"/><path d="M22 11v3"/><rect x="5" y="10" width="${w.toFixed(1)}" height="5" rx=".5" fill="currentColor" stroke="none"/></svg>`;
+}
+const PLUG = '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></svg>';
 function battery(r) {
-  if (r.battery_pct != null) return `<span class="${r.battery_pct < 20 ? "st bad" : ""}">${IC.bat} <span class="num">${r.battery_pct} %</span></span>`;
-  if (r.battery_level != null) return `<span class="${r.battery_level ? "st " + (r.battery_level > 1 ? "bad" : "warn") : ""}">${IC.bat} ${esc(L("bat_level")[r.battery_level] ?? "?")}</span>`;
+  if (r.battery_pct != null) return `<span class="pw">${batIcon(r.battery_pct)}<span class="num">${r.battery_pct} %</span></span>`;
+  if (r.battery_level != null) return `<span class="pw">${batIcon([80, 35, 8][r.battery_level] ?? 50)}${esc(L("bat_level")[r.battery_level] ?? "?")}</span>`;
   return "";
 }
+const power = r => r.battery ? (battery(r) || `<span class="pw">${batIcon(50)}${L("battery")}</span>`) : `<span class="pw mut">${PLUG}${L("mains")}</span>`;
 function route(r) {
   const x = r.route;
   if (!x) return null;
@@ -392,6 +404,7 @@ function fullPath(r) {
 }
 function link(r) {
   const n = linkName(r);
+  if (net(r) === "wifi" && n) return `<span class="p" title="${esc((r.access_point ? L("ap") + " : " + r.access_point + "\n" : L("ap_unknown") + "\n") + "BSSID " + (r.bssid || "?"))}">${esc(n)}</span>`;
   if (!n) return `<span class="p mut" title="${esc(L("no_parent"))}">${net(r) === "thread" ? "?" : "—"}</span>`;
   const best = !r.parent && isRouter(r);
   let np = "";
@@ -494,14 +507,14 @@ const SORT = {
 // columns: main ones (shown by default, also used by the phone cards) and extra ones (desktop only)
 const n0 = v => v == null ? `<span class="mut">—</span>` : v;
 const COLS = [
-  {k:"node", lab:"h_node", w:"minmax(190px, 2fr)", fixed:true},
+  {k:"node", lab:"h_node", w:"minmax(170px, 2fr)", fixed:true},
   {k:"status", lab:"h_status", w:"128px"},
-  {k:"link", lab:"h_link", w:"minmax(190px, 1.7fr)"},
-  {k:"br", lab:"h_br", w:"minmax(140px, 1.1fr)", h:r => r.route ? `<span title="${esc(hopsTxt(r.route) + " · " + F("r_cost", {c: r.route.cost}) + "\n" + fullPath(r))}">${esc(r.route.br)}<br><small class="num">${esc(hopsTxt(r.route))}</small></span>` : n0(null),
+  {k:"link", lab:"h_link", w:"minmax(170px, 1.7fr)"},
+  {k:"br", lab:"h_br", w:"minmax(130px, 1.1fr)", h:r => r.route ? `<span title="${esc(hopsTxt(r.route) + " · " + F("r_cost", {c: r.route.cost}) + "\n" + fullPath(r))}">${esc(r.route.br)}<br><small class="num">${esc(hopsTxt(r.route))}</small></span>` : n0(null),
     s:r => r.route ? r.route.br.toLowerCase() : null},
-  {k:"resp", lab:"h_resp", w:"150px", r:true},
-  {k:"bat", lab:"h_bat", w:"92px"},
-  {k:"last", lab:"h_last", w:"118px"},
+  {k:"resp", lab:"h_resp", w:"120px", r:true},
+  {k:"bat", lab:"h_bat", w:"105px"},
+  {k:"last", lab:"h_last", w:"110px"},
   {k:"adv", lab:"h_adv", w:"minmax(150px, 1.8fr)"},
   {k:"route", lab:"to_ha", w:"minmax(170px, 1.5fr)", x:true, h:r => esc(route(r) || "—"), s:r => r.route ? r.route.cost : null},
   {k:"lqi", lab:"d_lqi", w:"90px", r:true, x:true, h:r => n0(linkLqi(r)), s:r => linkLqi(r)},
@@ -563,7 +576,7 @@ function renderList() {
   const card = $(".list");
   card.style.setProperty("--gt", cols.map(c => c.w).join(" "));
   // minimum width of the grid: wider than the card -> horizontal scroll instead of overflow
-  const minw = cols.reduce((a, c) => a + parseInt((c.w.match(/(\d+)px/) || [0, 80])[1], 10), 0) + 12 * (cols.length - 1) + 16 + 44;
+  const minw = cols.reduce((a, c) => a + parseInt((c.w.match(/(\d+)px/) || [0, 80])[1], 10), 0) + 12 * (cols.length - 1) + 32;
   card.style.setProperty("--minw", minw + "px");
   $("#cols").innerHTML = cols.map(c => {
     const k = c.k, on = P.sort && P.sort.k === k, arrow = on ? (P.sort.d > 0 ? " ▲" : " ▼") : "";
@@ -584,7 +597,7 @@ function renderList() {
       status: `<span>${status(r)}${r.role && !narrow ? `<span class="rl">${esc(L("roles")[r.role] || r.role)}</span>` : ""}</span>`,
       link: `<span class="lk">${link(r)}${signal(r)}</span>`,
       resp: `<span class="rt r">${resp}<br><small class="num">${F("avg", {v: ms(r.rtt_avg_ms)})}</small></span>`,
-      bat: `<span class="bt">${battery(r)}</span>`,
+      bat: `<span class="bt">${narrow ? battery(r) : power(r)}</span>`,
       last: `<span class="lc"><span class="lab">${L("contact")}</span>${last}</span>`,
       adv,
     };

@@ -11,6 +11,7 @@ the next report of the node. Nothing here sends traffic to the nodes.
 """
 
 import base64
+import json
 import logging
 import threading
 import time
@@ -453,12 +454,50 @@ class NodeTable:
             del self.parents[gone]
         return rows
 
+    MAC_TEMPLATE = ("{% set ns = namespace(s=[], o=[]) %}{% for st in states %}{% set d = device_id(st.entity_id) %}"
+                    "{% if d and d not in ns.s %}{% set ns.s = ns.s + [d] %}{% for c in device_attr(d, 'connections') or [] %}"
+                    "{% if c[0] == 'mac' %}{% set ns.o = ns.o + [[c[1], device_attr(d, 'name_by_user') or device_attr(d, 'name')]] %}"
+                    "{% endif %}{% endfor %}{% endif %}{% endfor %}{{ ns.o | tojson }}")
+
+    def _macs(self):
+        """MAC address -> device name, from the Home Assistant device registry (cached 10 min)."""
+        now = time.time()
+        if now - getattr(self, "_macs_t", 0) > 600:
+            self._macs_t = now
+            try:
+                raw = self.h.render_template(self.MAC_TEMPLATE)
+                self._macs_v = {bytes.fromhex(m.replace(":", "").replace("-", "")): n
+                                for m, n in json.loads(raw or "[]") if m and n and len(m.replace(":", "").replace("-", "")) == 12}
+            except Exception as err:  # noqa: BLE001
+                LOG.debug("MAC addresses: %s", err)
+                self._macs_v = getattr(self, "_macs_v", {})
+        return getattr(self, "_macs_v", {})
+
+    def _access_point(self, bssid):
+        """(BSSID text, access point name or None). A BSSID is the MAC of one radio of the
+        access point: same bytes 2-5 as the device MAC, last byte a little higher, first
+        byte sometimes with the "locally administered" bits set."""
+        try:
+            b = base64.b64decode(bssid) if isinstance(bssid, str) else bytes(bssid or b"")
+        except Exception:  # noqa: BLE001
+            return None, None
+        if len(b) != 6:
+            return None, None
+        text = ":".join(f"{x:02x}" for x in b)
+        best = None
+        for mac, name in self._macs().items():
+            if mac[1:5] == b[1:5] and (mac[0] | 0x0E) == (b[0] | 0x0E) and 0 <= b[5] - mac[5] <= 15:
+                if best is None or b[5] - mac[5] < best[0]:
+                    best = (b[5] - mac[5], name)
+        return text, best[1] if best else None
+
     def _other_row(self, nid, v):
         """Row of a Matter node on Wi-Fi or Ethernet: no mesh, its own link only."""
         a, m = v["attrs"], v["meta"]
         wifi = v["net"] == "wifi"
         ch = a.get("0/54/3")
-        link = (t("Wi-Fi") + (f" ch {ch}" if ch else "")) if wifi else t("Ethernet")
+        bssid, ap = self._access_point(a.get("0/54/0")) if wifi else (None, None)
+        link = (ap or t("Wi-Fi")) + (f" · ch {ch}" if ch else "") if wifi else t("Ethernet")
         uptime, reboots = a.get("0/51/2"), a.get("0/51/1")
         q = getattr(self, "quality", None)
         up_read = q.uptime(nid) if q else None
@@ -491,6 +530,7 @@ class NodeTable:
             "contact_src": src[0], "active_gap_max_s": src[1], "since_active_s": src[2],
             "rtt_ms": rtt_last, "rtt_avg_ms": rtt_avg, "rtt_fail": rtt_fail,
             "last_report": v["node"].get("last"), "last_radio": None,
+            "bssid": bssid, "access_point": ap,
         }
 
     def header(self):
