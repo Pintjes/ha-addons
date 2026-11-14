@@ -211,6 +211,30 @@ FR = {
     '{time} ping of all nodes: {ok}/{total}': '{time} ping de toutes les nodes : {ok}/{total}',
     'Ping of all nodes: {ok}/{total} answer': 'Ping de toutes les nodes : {ok}/{total} répondent',
     "; no answer: {names}": " ; sans réponse : {names}",
+    # parent search
+    "Find better parents": "Chercher de meilleurs parents",
+    "Last parent search": "Dernière recherche de parents",
+    "after a parent search requested with the button": "après une recherche de parent demandée avec le bouton",
+    'Parent search already running': 'Recherche de parents déjà en cours',
+    'Parent search skipped: the network is re-forming, try again later':
+        'Recherche de parents annulée : le réseau se reforme, réessayer plus tard',
+    'Parent search interrupted: {err}': 'Recherche de parents interrompue : {err}',
+    'Parent search: checking the link of {n} end devices': 'Recherche de parents : vérification du lien de {n} appareils finaux',
+    '{node}: looking for a better parent (now {rssi}dBm, LQI {lqi})':
+        '{node} : recherche d\'un meilleur parent (actuellement {rssi}dBm, LQI {lqi})',
+    '{node}: parent search refused: {err}': '{node} : recherche de parent refusée : {err}',
+    '{node}: better parent, {before}dBm → {after}dBm (LQI {lqi_before} → {lqi})':
+        '{node} : meilleur parent, {before}dBm → {after}dBm (LQI {lqi_before} → {lqi})',
+    '{node}: weaker parent, {before}dBm → {after}dBm (LQI {lqi_before} → {lqi})':
+        '{node} : parent moins bon, {before}dBm → {after}dBm (LQI {lqi_before} → {lqi})',
+    '{node}: similar parent, {before}dBm → {after}dBm (LQI {lqi_before} → {lqi})':
+        '{node} : parent équivalent, {before}dBm → {after}dBm (LQI {lqi_before} → {lqi})',
+    '{node}: same parent kept, {after}dBm (LQI {lqi}): no better router in range':
+        '{node} : même parent conservé, {after}dBm (LQI {lqi}) : pas de meilleur routeur à portée',
+    '{node}: parent search sent, new link not read yet': '{node} : recherche de parent envoyée, nouveau lien pas encore lu',
+    'Parent search: {n} poor link, {better} better now': 'Recherche de parents : {n} lien médiocre, {better} amélioré',
+    'Parent search: {n} poor links, {better} better now': 'Recherche de parents : {n} liens médiocres, {better} améliorés',
+    'Parent search: no poor link among {n} end devices': 'Recherche de parents : aucun lien médiocre parmi {n} appareils finaux',
     # storm
     "Thread storm": "Tempête Thread",
     "Thread storm: {why}": "Tempête Thread : {why}",

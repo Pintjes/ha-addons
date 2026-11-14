@@ -68,6 +68,7 @@ from labels import LabelSync  # noqa: E402
 from matterlive import MatterLive  # noqa: E402
 from nodetable import NodeTable  # noqa: E402
 from quality import Quality  # noqa: E402
+from reattach import Reattach  # noqa: E402
 from history import History  # noqa: E402
 from radio import Radio  # noqa: E402
 from storm import Storm  # noqa: E402
@@ -130,7 +131,7 @@ STYLE = {  # event kind -> (icon, color)
     "radio_survey": ("📡", "blue"), "statistics": ("📊", "blue"), "startup": ("🚀", "blue"),
     "auto_recovery": ("🔧", "blue"), "name": ("🏷️ ", "blue"),
     "parent_change": ("🔀", "cyan"), "advice": ("💡", "yellow"),
-    "ping_all": ("📣", "yellow"),
+    "ping_all": ("📣", "yellow"), "reattach": ("🧲", "cyan"),
     "storm_start": ("⛈️ ", "magenta"), "storm_end": ("🌤️ ", "green"),
     "routing_problem": ("🚧", "red"), "routing_ok": ("🟢", "green"), "addon_stop": ("⏹️ ", "blue"),
 }
@@ -1169,6 +1170,15 @@ class Watch:
             "state_topic": rs, "value_template": "{{ value_json.parents | length }}",
             "json_attributes_topic": rs, "json_attributes_template": "{{ value_json.parents | tojson }}",
             "icon": "mdi:family-tree"})
+        ps = f"{BASE}/reattach"
+        self.disc("sensor", "parent_search", t("Last parent search"), {
+            "state_topic": ps, "value_template": "{{ value_json.date }}",
+            "json_attributes_topic": ps,
+            "json_attributes_template": "{{ {'checked': value_json.checked, 'poor_links': value_json.poor, "
+                                        "'better': value_json.better, 'nodes': value_json.nodes} | tojson }}",
+            "icon": "mdi:family-tree"})
+        self.disc("button", "find_better_parents", t("Find better parents"), {
+            "command_topic": f"{BASE}/reattach/set", "payload_press": "PRESS", "icon": "mdi:magnet"})
         ls = f"{BASE}/labels"
         self.disc("sensor", "nodes_to_rename", t("Nodes to rename"), {
             "state_topic": ls, "value_template": "{{ value_json.to_rename }}",
@@ -1242,6 +1252,8 @@ class Watch:
             self.mqtt.publish(f"{BASE}/radio", json.dumps(self.radio.summary(), ensure_ascii=False), retain=True)
         if getattr(self, "labels", None) and self.labels.last.get("date"):
             self.mqtt.publish(f"{BASE}/labels", json.dumps(self.labels.last, ensure_ascii=False), retain=True)
+        if getattr(self, "reattach", None) and self.reattach.last.get("date"):
+            self.mqtt.publish(f"{BASE}/reattach", json.dumps(self.reattach.last, ensure_ascii=False), retain=True)
         if getattr(self, "quality", None):
             self.mqtt.publish(f"{BASE}/quality", json.dumps(self.quality.summary(), ensure_ascii=False), retain=True)
         if self.storm:
@@ -1351,6 +1363,7 @@ class Watch:
         client.subscribe(f"{BASE}/healer/set")
         client.subscribe(f"{BASE}/ping_all/set")
         client.subscribe(f"{BASE}/rename/set")
+        client.subscribe(f"{BASE}/reattach/set")
         client.subscribe(f"{BASE}/reset/set")
         client.subscribe(f"{DISCOVERY}/+/{BASE}/+/config")
         self.publish_discovery()
@@ -1364,6 +1377,10 @@ class Watch:
         if msg.topic == f"{BASE}/rename/set" and getattr(self, "labels", None) and msg.payload:
             threading.Thread(target=self.labels.rename, args=(t("the button in Home Assistant"),),
                              daemon=True, name="rename").start()
+            return
+        if msg.topic == f"{BASE}/reattach/set" and getattr(self, "reattach", None) and msg.payload:
+            threading.Thread(target=self.reattach.run_now, args=(t("the button in Home Assistant"),),
+                             daemon=True, name="reattach").start()
             return
         if msg.topic == f"{BASE}/reset/set" and self.healer and msg.payload:
             threading.Thread(target=self.reset_stats, args=(t("the button in Home Assistant"),),
@@ -1393,6 +1410,9 @@ class Watch:
         self.live = MatterLive(self, self.healer)
         self.radio.live = self.live
         self.labels.live = self.live
+        self.reattach = Reattach(self, self.healer)
+        self.reattach.live = self.live
+        self.reattach.advisor = self.advisor
         self.storm = Storm(self)
         self.healer.storm = self.storm
         self.quality = Quality(self, self.healer, self.live, OPTIONS)

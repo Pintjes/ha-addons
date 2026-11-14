@@ -59,7 +59,7 @@ jobs:
         if: matrix.arch == 'amd64' && matrix.addon == 'mesh_guardian'
         run: |
           docker build -t mg-test mesh_guardian
-          docker run --rm --entrypoint python3 mg-test -c "import sys; sys.path.insert(0, '/'); import i18n, healer, radio, advice, labels, matterlive, nodetable, storm, webui; print('modules OK')"
+          docker run --rm --entrypoint python3 mg-test -c "import sys; sys.path.insert(0, '/'); import i18n, healer, radio, advice, labels, matterlive, nodetable, storm, webui, reattach; print('modules OK')"
       - name: Start test (Voice Agent Bridge)
         if: matrix.arch == 'amd64' && matrix.addon == 'voice_agent_bridge'
         run: |

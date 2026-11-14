@@ -128,6 +128,8 @@ minute, border routers browsed again every 5 minutes.
 |---|---|---|---|
 | `sensor.mesh_guardian_weak_radio_links` | links in use (child → parent, router → its best link) at or below -85dBm or LQI 1 | every survey | current |
 | `sensor.mesh_guardian_thread_parents` | number of children; parent and signal of each | every survey | current |
+| `button.mesh_guardian_find_better_parents` | reads the parent link of every end device and asks those with a poor link to attach again (see [Find better parents](#find-better-parents)) | when pressed | — |
+| `sensor.mesh_guardian_parent_search` | date of the last parent search; `checked`, `poor_links`, `better`, `nodes` | after each search | kept until the next search |
 
 **Names**
 
@@ -172,6 +174,7 @@ Every event is written to the add-on log, published on the MQTT topic
 | `ping_all`, `ping_all_done` | ping of every node requested with the button |
 | `radio_survey`, `radio_advice`, `parent_change` | radio quality and advice (also shown in the node table) |
 | `names`, `name_synced` | names Home Assistant → Matter (Rename nodes button) |
+| `reattach`, `reattach_node`, `reattach_result`, `reattach_done` | parent search (Find better parents button): start, node asked to attach again, its link before and after (`result`: `better`, `worse`, `similar`, `same`, `unknown`), summary |
 | `statistics`, `auto_recovery` | statistics rebuilt, recovery switched on / off (with who switched it) |
 
 You can trigger automations on them, for example a notification when a node
@@ -225,6 +228,39 @@ Basic Information cluster), without writing anything:
 read Matter directly (such as the Matter Server dashboard) then show the same
 names as Home Assistant. Names are cut to 32 bytes (Matter limit). Other
 ecosystems (Google Home, Apple Home…) keep their own names.
+
+## Find better parents
+
+A Thread end device (most battery sensors and remotes) picks its parent when
+it attaches, and many firmwares keep it as long as the link holds, even when a
+much better router is now in range. The usual fix is to remove the battery for
+10 seconds.
+
+**Find better parents** does it remotely. When pressed, Mesh Guardian:
+
+1. reads the parent link of every available end device (one small read each);
+2. keeps those whose link is poor: link quality (LQI) 2 or less, or signal at
+   or below -80dBm;
+3. asks each of them to connect again to the Thread network it is already on
+   (Matter commands `ArmFailSafe`, `ConnectNetwork`, `CommissioningComplete`).
+   The node restarts its Thread interface and attaches again, choosing a
+   parent among the routers it hears. It does not reboot and its configuration
+   is unchanged;
+4. reads the link again 25 seconds later and reports the result.
+
+What to know:
+
+- Thread chooses the parent, not Mesh Guardian. The new link is usually
+  better, sometimes the same parent is kept (no better router in range), and
+  it can be weaker. There is no way back to the previous parent. This is why
+  nodes with a good link are never touched.
+- Routers (mains-powered devices) are never touched: a router has no parent.
+- If a node does not confirm, the fail-safe is cancelled and the node keeps
+  the network configuration it had.
+- The search is skipped during a Thread storm or right after a global outage.
+- A sleeping node that does not answer the first read is skipped.
+- Seen working on IKEA TIMMERFLOTTE and KLIPPBOK. A node that does not accept
+  `ConnectNetwork` is reported as `unsupported` and left alone.
 
 ## Node table
 
@@ -356,7 +392,8 @@ battery-powered nodes.
 
 **Can I turn off a feature?**
 Yes: `auto_ping` (or the switch), `ping_all_interval: 0`. Node names are only
-written when you press **Rename nodes**.
+written when you press **Rename nodes**, and nodes are only asked to attach
+again when you press **Find better parents**.
 
 **A border router shows offline although it works.**
 Some border routers do not always answer mDNS queries. A border router is only
