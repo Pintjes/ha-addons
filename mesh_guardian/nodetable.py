@@ -121,17 +121,23 @@ def rloc_of(attrs):
 def fed_parent(attrs):
     """Router id of the parent of a full end device (REED, FED), from its route table, or None.
     Such a child keeps radio links with the routers around it, like a router, but routes
-    nothing itself: every route goes through its parent, even towards a router it has a
-    direct link with. A router sends directly to the routers it is linked with."""
+    nothing itself: every route has its parent as next hop, and the entry of the parent
+    carries the link quality with it. A router has an entry for itself and several next hops."""
+    if attrs.get("0/53/1") in (2, 3):
+        return None   # minimal end devices have no routes
     routes = [rt for rt in attrs.get("0/53/8") or [] if isinstance(rt, dict) and rt.get("2") is not None]
-    hops = {rt.get("3") for rt in routes if rt.get("3") not in (None, 63)}
-    if len(hops) != 1:
+    if len(routes) < 2:
         return None
-    parent = next(iter(hops))
-    linked = {nb["2"] >> 10 for nb in attrs.get("0/53/7") or []
-              if isinstance(nb, dict) and nb.get("5") and nb.get("2") is not None and not nb["2"] & 0x3FF}
-    via_parent = {rt["2"] for rt in routes if rt.get("3") == parent and rt["2"] != parent}
-    return parent if linked & via_parent else None
+    hops = [rt.get("3") for rt in routes]
+    parent = max(set(hops), key=hops.count)
+    if parent in (None, 63):
+        return None
+    own = [rt for rt in routes if rt["2"] == parent]
+    if len(own) != 1 or not (own[0].get("5") and own[0].get("6")):
+        return None
+    if any(rt.get("3") != parent for rt in routes if rt["2"] != parent):
+        return None
+    return parent
 
 
 def router_of(attrs, rloc):
