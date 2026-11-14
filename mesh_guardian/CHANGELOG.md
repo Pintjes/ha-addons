@@ -4,6 +4,13 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.5.3] - 2026-11-14
+
+### Fixed
+
+- A mains-powered node attached as a child (it keeps links with several routers but sends everything through its parent) was shown as a router: it is now an end device with its parent, and can look for a new parent.
+- "Find better parents" also covers these nodes.
+
 ## [2.5.2] - 2026-11-14
 
 ### Added

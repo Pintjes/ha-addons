@@ -118,6 +118,22 @@ def rloc_of(attrs):
     return found[0]
 
 
+def fed_parent(attrs):
+    """Router id of the parent of a full end device (REED, FED), from its route table, or None.
+    Such a child keeps radio links with the routers around it, like a router, but routes
+    nothing itself: every route goes through its parent, even towards a router it has a
+    direct link with. A router sends directly to the routers it is linked with."""
+    routes = [rt for rt in attrs.get("0/53/8") or [] if isinstance(rt, dict) and rt.get("2") is not None]
+    hops = {rt.get("3") for rt in routes if rt.get("3") not in (None, 63)}
+    if len(hops) != 1:
+        return None
+    parent = next(iter(hops))
+    linked = {nb["2"] >> 10 for nb in attrs.get("0/53/7") or []
+              if isinstance(nb, dict) and nb.get("5") and nb.get("2") is not None and not nb["2"] & 0x3FF}
+    via_parent = {rt["2"] for rt in routes if rt.get("3") == parent and rt["2"] != parent}
+    return parent if linked & via_parent else None
+
+
 def router_of(attrs, rloc):
     """True for a router. The reported role and the RLOC16 can each be out of date:
     when they agree (or only one is known) it is that one; when they disagree, the
@@ -125,6 +141,8 @@ def router_of(attrs, rloc):
     role = attrs.get("0/53/1")
     by_role = is_router_role(role) if role in (2, 3, 4, 5, 6) else None
     by_rloc = (not rloc & 0x3FF) if rloc is not None else None
+    if by_rloc is not True and fed_parent(attrs) is not None:
+        return False   # links with several routers, but everything goes through its parent: a child
     nbs = [nb for nb in attrs.get("0/53/7") or [] if isinstance(nb, dict)]
     if by_rloc is None and nbs:
         # no RLOC16 published: a node with children, or with established links to several
@@ -179,13 +197,17 @@ def find_parents(thread, labels):
     for nid, v in thread.items():
         nbs = [nb for nb in v["attrs"].get("0/53/7") or [] if isinstance(nb, dict)]
         rloc = rlocs.get(nid)
-        if not router[nid] and rloc is not None and rloc & 0x3FF:
-            prloc = rloc & 0xFC00
+        fed = fed_parent(v["attrs"]) if not router[nid] else None   # full end device: its route table names its parent
+        if not router[nid] and (fed is not None or (rloc is not None and rloc & 0x3FF)):
+            prloc = fed << 10 if fed is not None else rloc & 0xFC00
             own = [nb for nb in nbs if nb.get("2") == prloc]
             ext = own[0].get("0") if own else rloc_ext.get(prloc)
             name = match(ext, labels) if ext else None
             name = name or f"router {prloc >> 10} (0x{prloc:04x})"
-            parents[nid] = (name, nb_rssi(own[0]) if own else None, own[0].get("5") if own else None, ext or prloc)
+            # link quality in and out with the parent, from the route table of a full end device
+            rt = next((x for x in v["attrs"].get("0/53/8") or [] if isinstance(x, dict) and x.get("2") == prloc >> 10), {})
+            parents[nid] = (name, nb_rssi(own[0]) if own else None,
+                            lowest(own[0].get("5") if own else None, rt.get("5"), rt.get("6")), ext or prloc)
     for nid, v in thread.items():   # seen from the parent side
         for nb in v["attrs"].get("0/53/7") or []:
             if isinstance(nb, dict) and nb.get("13"):
