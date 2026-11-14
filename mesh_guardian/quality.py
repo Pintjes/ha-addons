@@ -161,17 +161,19 @@ class Quality:
                 self.live.set_attribute(nid, "0/51/2", value)
 
     def _refresh_thread(self, nid):
-        """Read again the role and the neighbor table of a mains node, at most hourly: some
+        """Read again the role, the neighbor and route tables of a mains node, at most hourly: some
         nodes never report them again (e.g. after becoming an end device), so the Matter
         Server cache keeps an old table and the link signal cannot be shown. The read
         updates that cache. Never for battery nodes (their batteries)."""
         now = time.time()
         with self.lock:
             r = self.rtt.setdefault(nid, {"last": None, "ok": [], "t": 0, "fails": 0})
-            if now - (r.get("nb_t") or 0) < NEIGHBOR_REFRESH_S:
+            if now - (r.get("thr_t") or 0) < NEIGHBOR_REFRESH_S:
                 return
-            r["nb_t"] = now
-        for path in ("0/53/1", "0/53/7", "0/51/0"):   # role, neighbors, addresses (RLOC16)
+            r["thr_t"] = now
+        # role, neighbors, routes (the link a router sends through comes from both tables: read
+        # together, they agree), addresses (RLOC16)
+        for path in ("0/53/1", "0/53/7", "0/53/8", "0/51/0"):
             try:
                 res = self.h.matter_command("read_attribute", {"node_id": int(nid, 16), "attribute_path": path}, timeout=30)
                 value = res.get(path) if isinstance(res, dict) else res
