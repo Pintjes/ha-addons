@@ -210,7 +210,7 @@ class Quality:
         rows = ((table.cache or {}).get("rows") or []) if table else []
         used = weak = 0
         for r in rows:
-            if not r.get("available"):
+            if not r.get("available") or r.get("network", "thread") != "thread":
                 continue
             router = r.get("role") in ("router", "leader")
             rssi, lqi = (r.get("rssi"), r.get("lqi")) if r.get("parent") else \
