@@ -222,11 +222,18 @@ class NodeTable:
             meta = {k: dict(n) for k, n in self.h.nodes.items()}
         with self.w.lock:
             labels = {b["xa"]: self.w.br_display(b) for b in self.w.br.values() if b.get("xa") is not None}
-        thread = {}
+        thread, other = {}, {}
         for node in nodes:
             attrs = node.get("attributes") or {}
             if attrs.get("0/53/1") is None and not is_thread(attrs):
-                continue  # not Thread (Wi-Fi, Ethernet, not interviewed yet)
+                net = "wifi" if any(k.startswith("0/54/") for k in attrs) else \
+                    "ethernet" if any(k.startswith("0/55/") for k in attrs) else None
+                if net:   # Matter over Wi-Fi or Ethernet (not interviewed yet: skipped)
+                    nid = f"{int(node['node_id']):016X}"
+                    m = meta.get(nid, {})
+                    other[nid] = {"node": node, "attrs": attrs, "meta": m, "net": net,
+                                  "name": m.get("name") or f"0x{nid.lstrip('0') or '0'}"}
+                continue
             nid = f"{int(node['node_id']):016X}"
             m = meta.get(nid, {})
             thread[nid] = {"node": node, "attrs": attrs, "meta": m,
@@ -305,6 +312,7 @@ class NodeTable:
             if avail is None:
                 avail = v["node"].get("available") is not False
             rows.append({
+                "network": "thread",
                 "id": f"0x{nid.lstrip('0') or '0'}", "name": v["name"], "area": m.get("area") or "",
                 "floor": m.get("floor") or "", "model": m.get("model") or "",
                 "battery": bool(m.get("battery")), "available": bool(avail),
@@ -330,9 +338,51 @@ class NodeTable:
                 "rtt_ms": rtt_last, "rtt_avg_ms": rtt_avg, "rtt_fail": rtt_fail,
                 "last_report": v["node"].get("last"), "last_radio": v["node"].get("radio"),
             })
+        for nid, v in other.items():
+            rows.append(self._other_row(nid, v))
         for gone in set(self.parents) - set(thread):
             del self.parents[gone]
         return rows
+
+    def _other_row(self, nid, v):
+        """Row of a Matter node on Wi-Fi or Ethernet: no mesh, its own link only."""
+        a, m = v["attrs"], v["meta"]
+        wifi = v["net"] == "wifi"
+        ch = a.get("0/54/3")
+        link = (t("Wi-Fi") + (f" ch {ch}" if ch else "")) if wifi else t("Ethernet")
+        uptime, reboots = a.get("0/51/2"), a.get("0/51/1")
+        q = getattr(self, "quality", None)
+        up_read = q.uptime(nid) if q else None
+        if up_read is not None:
+            uptime = up_read
+        rtt_last, rtt_avg, rtt_fail = q.response(nid) if q else (None, None, False)
+        d24, d7, down7 = self.h.node_outages(nid)
+        src = self.live.source(nid)
+        avail = m.get("available")
+        if avail is None:
+            avail = v["node"].get("available") is not False
+        bat = battery_of(a) if m.get("battery") or any(k.split("/")[1:2] == ["47"] for k in a) else (None, None)
+        return {
+            "network": v["net"], "id": f"0x{nid.lstrip('0') or '0'}", "name": v["name"],
+            "area": m.get("area") or "", "floor": m.get("floor") or "", "model": m.get("model") or "",
+            "battery": bool(m.get("battery")), "available": bool(avail),
+            "since": m.get("since") if not avail else None, "role": None,
+            "parent": link, "rssi": a.get("0/54/4") if wifi else None, "lqi": None, "new_parent": None,
+            "rloc16": None, "best_link": None, "best_rssi": None, "best_lqi": None,
+            "neighbors": None, "weak": None,
+            "detaches_24h": None, "parent_changes_24h": None,
+            "partition_changes_24h": None,
+            "outages_24h": d24, "outages_7d": d7, "downtime_7d_min": int(down7 // 60),
+            "reboots": reboots, "reboots_24h": None,
+            "boot_reason": BOOT_REASON.get(a.get("0/51/4"), a.get("0/51/4")),
+            "uptime_h": round(uptime / 3600, 1) if isinstance(uptime, (int, float)) else None,
+            "uptime_s": round(uptime) if isinstance(uptime, (int, float)) else None,
+            "battery_pct": bat[0], "battery_level": bat[1],
+            "advice": None, "advice_level": None, "advice_detail": None,
+            "contact_src": src[0], "active_gap_max_s": src[1], "since_active_s": src[2],
+            "rtt_ms": rtt_last, "rtt_avg_ms": rtt_avg, "rtt_fail": rtt_fail,
+            "last_report": v["node"].get("last"), "last_radio": None,
+        }
 
     def header(self):
         s = self.w.summary()

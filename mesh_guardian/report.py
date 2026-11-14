@@ -41,14 +41,14 @@ def build(data, version):
         roles[r.get("role")] = roles.get(r.get("role"), 0) + 1
     out.append(f"- Roles: {', '.join(f'{k} {v}' for k, v in sorted(roles.items(), key=lambda x: str(x[0])))}")
     out += ["", "### Nodes", "",
-            "| # | Model | Power | Role | Parent | RSSI | LQI | Neighbors | Outages 24h / 7d | Reboots 24h | Response avg | Advice |",
-            "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+            "| # | Network | Model | Power | Role | Parent | RSSI | LQI | Neighbors | Outages 24h / 7d | Reboots 24h | Response avg | Advice |",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in sorted(rows, key=lambda r: alias[r["name"]]):
         parent = r.get("parent")
-        parent = alias.get(parent, "border router" if parent else "—")
+        parent = parent if r.get("network", "thread") != "thread" else alias.get(parent, "border router" if parent else "—")
         rssi = r.get("rssi") if r.get("rssi") is not None else r.get("best_rssi")
         lqi = r.get("lqi") if r.get("lqi") is not None else r.get("best_lqi")
-        out.append(f"| {alias[r['name']]} | {r.get('model') or '?'} | {'battery' if r.get('battery') else 'mains'} | "
+        out.append(f"| {alias[r['name']]} | {r.get('network', 'thread')} | {r.get('model') or '?'} | {'battery' if r.get('battery') else 'mains'} | "
                    f"{r.get('role') or '?'} | {parent} | {_v(rssi)} | {_v(lqi)} | {_v(r.get('neighbors'))} | "
                    f"{_v(r.get('outages_24h'))} / {_v(r.get('outages_7d'))} | {_v(r.get('reboots_24h'))} | "
                    f"{_v(r.get('rtt_avg_ms'), ' ms')} | {'yes' if r.get('advice') else ''} |")

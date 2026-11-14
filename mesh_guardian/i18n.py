@@ -119,6 +119,8 @@ FR = {
     "Thread parents": "Parents Thread",
     "Automatic recovery": "Récupération automatique",
     "Network quality": "Qualité du réseau",
+    "Wi-Fi": "Wi-Fi",
+    "Ethernet": "Ethernet",
     "Announced on the Matter fabric but unknown to the Matter Server (removed without a factory reset?): {ids}":
         "Annoncée sur la fabric Matter mais inconnue du Matter Server (retirée sans réinitialisation ?) : {ids}",
     "Passive contact unavailable: {err}": "Contact passif indisponible : {err}",

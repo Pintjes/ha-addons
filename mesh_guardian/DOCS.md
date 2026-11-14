@@ -15,6 +15,7 @@ do about them.
 - [Radio advice](#radio-advice)
 - [Names Home Assistant → Matter](#names-home-assistant--matter)
 - [Node table](#node-table)
+- [Wi-Fi and Ethernet nodes](#wi-fi-and-ethernet-nodes)
 - [Network quality](#network-quality)
 - [Thread storms](#thread-storms)
 - [FAQ and troubleshooting](#faq-and-troubleshooting)
@@ -286,6 +287,14 @@ unavailable nodes). The page is only reachable through Home Assistant (ingress).
 
 Signal colors: RSSI ≥ -75dBm green, -75 to -85 orange, ≤ -85 red; LQI 3 green,
 2 orange, 0–1 red.
+
+## Wi-Fi and Ethernet nodes
+
+Matter nodes on Wi-Fi or Ethernet are listed too (column *Network*). They have no
+mesh: the *Parent* column shows their link (Wi-Fi with its channel, or Ethernet)
+and *RSSI* the Wi-Fi signal. Availability, outages, reboots, uptime, response
+time and last contact work as for Thread nodes; radio advice and the radio part
+of the quality score only concern Thread.
 
 ## Network quality
 
