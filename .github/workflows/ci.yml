@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install tools
+        run: pip install ruff yamllint
+      - name: Python syntax and common errors
+        run: ruff check --select E9,F63,F7,F82,F401,F811 mesh_guardian voice_agent_bridge
+      - name: YAML
+        run: >-
+          yamllint -d "{extends: relaxed, rules: {line-length: disable}}"
+          repository.yaml mesh_guardian/config.yaml mesh_guardian/translations
+          voice_agent_bridge/config.yaml voice_agent_bridge/translations
+      - name: Hadolint (Mesh Guardian)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: mesh_guardian/Dockerfile
+          ignore: DL3018,DL3013
+      - name: Hadolint (Voice Agent Bridge)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: voice_agent_bridge/Dockerfile
+          ignore: DL3008,DL3013
+
+  build:
+    name: Build ${{ matrix.addon }} ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      matrix:
+        addon: [mesh_guardian, voice_agent_bridge]
+        arch: [amd64, aarch64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.addon }}
+          platforms: ${{ matrix.arch == 'amd64' && 'linux/amd64' || 'linux/arm64' }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.addon }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.addon }}-${{ matrix.arch }}
+      - name: Start test (Mesh Guardian)
+        if: matrix.arch == 'amd64' && matrix.addon == 'mesh_guardian'
+        run: |
+          docker build -t mg-test mesh_guardian
+          docker run --rm --entrypoint python3 mg-test -c "import sys; sys.path.insert(0, '/'); import i18n, healer, radio, advice, labels, matterlive, nodetable, storm, webui; print('modules OK')"
+      - name: Start test (Voice Agent Bridge)
+        if: matrix.arch == 'amd64' && matrix.addon == 'voice_agent_bridge'
+        run: |
+          docker build -t vab-test voice_agent_bridge
+          docker run --rm --entrypoint bash vab-test -c "claude --version && which ha-mcp-web && python3 -c 'import sys; sys.path.insert(0, \"/app\"); import gateway, prompts; print(\"modules OK\")'"

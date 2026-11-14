@@ -1,0 +1,66 @@
+blueprint:
+  name: Mesh Guardian – network alert
+  description: >-
+    Notify when the Thread network needs attention: a border router offline, the
+    network partitioned, or the network quality below a threshold.
+  domain: automation
+  source_url: https://github.com/Pintjes/ha-addons/blob/main/blueprints/mesh_guardian_network_alert.yaml
+  input:
+    quality:
+      name: Network quality sensor
+      default: sensor.mesh_guardian_network_quality
+      selector:
+        entity:
+          domain: sensor
+    threshold:
+      name: Quality threshold (%)
+      default: 80
+      selector:
+        number: {min: 50, max: 99, unit_of_measurement: "%"}
+    border_routers:
+      name: Border router sensors
+      description: The sensor.mesh_guardian_br_* entities to watch.
+      default: []
+      selector:
+        entity:
+          domain: sensor
+          multiple: true
+    partitioned:
+      name: Partition sensor
+      default: binary_sensor.mesh_guardian_thread_network_partitioned
+      selector:
+        entity:
+          domain: binary_sensor
+    delay:
+      name: Delay
+      default: {minutes: 15}
+      selector:
+        duration: {}
+    notify:
+      name: Notification
+      description: Action(s) to run. The text is in the variable `message`.
+      selector:
+        action: {}
+mode: queued
+trigger:
+  - trigger: numeric_state
+    entity_id: !input quality
+    below: !input threshold
+    for: !input delay
+    id: quality
+  - trigger: state
+    entity_id: !input border_routers
+    to: offline
+    for: !input delay
+    id: border_router
+  - trigger: state
+    entity_id: !input partitioned
+    to: "on"
+    for: !input delay
+    id: partition
+variables:
+  message: >-
+    {% if trigger.id == 'quality' %}Thread network quality: {{ trigger.to_state.state }} %
+    {% elif trigger.id == 'border_router' %}Border router offline: {{ trigger.to_state.attributes.name | default(trigger.to_state.name) }}
+    {% else %}Thread network partitioned{% endif %}
+action: !input notify

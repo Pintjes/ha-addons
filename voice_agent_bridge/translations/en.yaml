@@ -1,0 +1,56 @@
+configuration:
+  language:
+    name: Language
+    description: Language of the spoken answers, error messages and the house notes template.
+  claude_token:
+    name: Claude token
+    description: Long-lived token from `claude setup-token` (Claude Pro or Max plan). Leave empty to use an API key.
+  anthropic_api_key:
+    name: Anthropic API key
+    description: Alternative to the Claude token, billed per use on console.anthropic.com.
+  model:
+    name: Model
+    description: haiku (fastest, cheapest), sonnet or opus, or a full model name.
+  effort:
+    name: Effort
+    description: Thinking effort. Low keeps voice answers fast.
+  web_search:
+    name: Web search
+    description: Let Claude search the web for questions outside the home.
+  read_only:
+    name: Read-only
+    description: Claude can read your home but not change anything.
+  forward_ha_prompt:
+    name: Use the Home Assistant prompt
+    description: Pass the prompt of the conversation agent (for example the room of the satellite) to Claude.
+  max_turns:
+    name: Maximum steps
+    description: Maximum number of tool steps per request.
+  max_budget_usd:
+    name: Budget per request (USD)
+    description: Claude stops a request above this cost. 0 means no limit.
+  timeout:
+    name: Timeout (seconds)
+    description: Maximum time for one request.
+  gateway_api_key:
+    name: Gateway key
+    description: Optional. If set, clients must send it as API key.
+  tool_search:
+    name: Load tools on demand
+    description: Claude loads the Home Assistant tools it needs instead of receiving all of them with every request. Much cheaper.
+  ha_tool_modules:
+    name: Home Assistant tool modules
+    description: all, or a comma-separated list of ha-mcp modules (advanced).
+  notes_file:
+    name: House notes file
+    description: Optional. Path in the Home Assistant config folder (for example claude_notes.md), editable with the File editor. Empty uses CLAUDE.md in the add-on config folder.
+  logbook:
+    name: Logbook
+    description: Write each question and answer in the Home Assistant logbook.
+  history_days:
+    name: History (days)
+    description: How long the conversations stay in the conversation panel.
+  log_level:
+    name: Log level
+network:
+  8791/tcp: OpenAI-compatible endpoint (only needed outside Home Assistant)

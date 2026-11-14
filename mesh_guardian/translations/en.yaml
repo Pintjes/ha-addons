@@ -1,0 +1,38 @@
+---
+configuration:
+  language:
+    name: "Language"
+    description: "Language of the log and entities."
+  ping_after:
+    name: "First ping after (s)"
+    description: "Delay before pinging an unavailable node."
+  ping_retry:
+    name: "Delay between pings (s)"
+    description: "Delay before pinging the same node again."
+  ping_max_attempts:
+    name: "Maximum pings"
+    description: "Number of pings before giving up."
+  ping_all_interval:
+    name: "Sweep (min)"
+    description: "Regular ping of mains-powered nodes. 0 = never."
+  radio_interval:
+    name: "Radio survey (min)"
+    description: "Delay between two radio surveys."
+  rebuild_history:
+    name: "Take over the history"
+    description: "On first start, take over the outages of the last 7 days."
+  all_thread_networks:
+    name: "Other Thread networks"
+    description: "Also follow the Thread networks other than the one of the Matter nodes."
+  log_events_to_file:
+    name: "Event file"
+    description: "Save the events in /share/mesh_guardian."
+  passive_contact:
+    name: "Passive contact"
+    description: "Count every IPv6 packet of a node as a contact (NET_RAW privilege)."
+  matter_fabric:
+    name: "Matter fabric"
+    description: "Leave empty: detected automatically."
+  matter_server_url:
+    name: "Matter Server address"
+    description: "Leave empty: Matter Server add-on."

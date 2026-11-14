@@ -1,0 +1,50 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to report a problem! Please remove any personal information (names, addresses) from logs before posting.
+  - type: dropdown
+    id: addon
+    attributes:
+      label: Add-on
+      options:
+        - Mesh Guardian
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Add-on version
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: ha
+    attributes:
+      label: Home Assistant version
+      placeholder: "2026.11.0"
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: Your setup
+      description: Border routers (brand / number), approximate number of Matter nodes, Matter Server version.
+  - type: textarea
+    id: log
+    attributes:
+      label: Add-on log
+      description: The relevant lines of the add-on log (Settings → Add-ons → Mesh Guardian → Log).
+      render: text
+  - type: textarea
+    id: config
+    attributes:
+      label: Add-on configuration
+      render: yaml

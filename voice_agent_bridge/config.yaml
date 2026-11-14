@@ -1,0 +1,65 @@
+name: Voice Agent Bridge
+version: "1.0.2"
+slug: voice_agent_bridge
+url: https://github.com/Pintjes/ha-addons
+description: >-
+  Talk to Claude through Assist and your voice satellites, with your Claude
+  plan (no API key) and the full Home Assistant toolset.
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: application
+boot: auto
+ingress: true
+ingress_port: 8791
+panel_icon: mdi:account-voice
+panel_title: Voice Agent
+homeassistant_api: true
+hassio_api: true
+hassio_role: manager
+map:
+  - addon_config:rw
+  - homeassistant_config:rw
+ports:
+  8791/tcp: null
+ports_description:
+  8791/tcp: OpenAI-compatible endpoint (only needed outside Home Assistant)
+options:
+  language: en
+  claude_token: ""
+  anthropic_api_key: ""
+  model: haiku
+  effort: low
+  web_search: true
+  read_only: false
+  forward_ha_prompt: true
+  max_turns: 12
+  max_budget_usd: 0.5
+  timeout: 90
+  gateway_api_key: ""
+  tool_search: true
+  ha_tool_modules: all
+  notes_file: ""
+  logbook: true
+  history_days: 90
+  log_level: info
+schema:
+  language: list(en|fr)
+  claude_token: password?
+  anthropic_api_key: password?
+  model: str
+  effort: list(low|medium|high)
+  web_search: bool
+  read_only: bool
+  forward_ha_prompt: bool
+  max_turns: int(1,50)
+  max_budget_usd: float(0,10)
+  timeout: int(10,600)
+  gateway_api_key: password?
+  tool_search: bool
+  ha_tool_modules: str
+  notes_file: str?
+  logbook: bool
+  history_days: int(1,3650)
+  log_level: list(debug|info|warning|error)

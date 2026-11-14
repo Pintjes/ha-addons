@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mesh Guardian</title>
+<style>
+  :root { --bg:#111418; --panel:#1b2027; --panel2:#151a20; --line:#2a313b; --txt:#e6e9ee; --mut:#8b95a3;
+          --good:#22c55e; --mid:#f59e0b; --bad:#ef4444; --acc:#38bdf8; --lead:#facc15; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--txt);
+              font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  body { display:flex; flex-direction:column; }
+  header { flex:none; display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center;
+           padding:10px 14px; background:var(--panel); border-bottom:1px solid var(--line); }
+  header h1 { font-size:16px; margin:0 6px 0 0; font-weight:600; white-space:nowrap; }
+  .muted { color:var(--mut); }
+  input[type=search],button,select { background:#0d1015; color:var(--txt); border:1px solid var(--line);
+           border-radius:6px; padding:5px 9px; font:inherit; }
+  button { cursor:pointer; } button:hover { border-color:var(--acc); }
+  label.chk { display:inline-flex; gap:5px; align-items:center; color:var(--mut); cursor:pointer; user-select:none; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+  main { flex:1; min-height:0; display:flex; flex-direction:column; padding:12px 14px 8px; }
+  #banners, .cards, footer { flex:none; }
+  .cards { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:12px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:9px 12px; }
+  .card h2 { font-size:12px; font-weight:600; color:var(--mut); margin:0 0 6px; text-transform:uppercase; letter-spacing:.04em; }
+  .kv { display:grid; grid-template-columns:auto auto; gap:2px 14px; }
+  .kv > span:nth-child(odd) { color:var(--mut); }
+  .brs { border-collapse:collapse; }
+  .brs td { padding:2px 12px 2px 0; white-space:nowrap; }
+  .banner { border-radius:8px; padding:8px 12px; margin-bottom:10px; border:1px solid; }
+  .banner.bad { background:#3a1414; border-color:#7f1d1d; }
+  .banner.storm { background:#2d1838; border-color:#6b21a8; }
+  .wrap { flex:1; min-height:0; overflow:auto; border:1px solid var(--line); border-radius:10px; }
+  table.nodes { border-collapse:separate; border-spacing:0; width:auto; }
+  table.nodes th { position:sticky; top:0; z-index:2; background:var(--panel); text-align:left; font-weight:600;
+                   padding:7px 9px; border-bottom:1px solid var(--line); cursor:pointer; white-space:nowrap; user-select:none; }
+  table.nodes th:hover { color:var(--acc); }
+  table.nodes th .arr { color:var(--acc); margin-left:3px; }
+  .narrow { display:none; }
+  @media (max-width:700px) {
+    table.nodes td, table.nodes th { padding:5px 6px; white-space:normal; }
+    header { gap:6px 10px; }
+    .wide { display:none; } .narrow { display:inline; }
+    .card h2 { cursor:pointer; } .card h2::after { content:" ▾"; }
+    .card.fold h2::after { content:" ▸"; } .card.fold > :not(h2) { display:none; }
+  }
+  table.nodes td { padding:5px 9px; border-bottom:1px solid #1f252d; white-space:nowrap; }
+  table.nodes td.wrapc { white-space:normal; min-width:260px; max-width:420px; color:var(--mut); }
+  table.nodes th.stick { left:var(--l,0); z-index:3; }
+  table.nodes td.stick { position:sticky; left:var(--l,0); z-index:1; background:var(--bg); }
+  table.nodes tbody tr:hover td { background:#2d3a4a; }
+  table.nodes tr.down td:first-child { box-shadow:inset 3px 0 var(--bad); }
+  table.nodes td.wrapc { white-space:nowrap; }
+  td.num, table.nodes th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .good { color:var(--good); } .mid { color:var(--mid); } .bad { color:var(--bad); font-weight:600; }
+  .zero { color:#4b5563; }
+  .np { font-size:10px; margin-left:5px; cursor:help; vertical-align:1px; }
+  .np.better { color:var(--good); } .np.worse { color:var(--bad); } .np.same { color:var(--mut); }
+  #cols { position:absolute; z-index:10; background:var(--panel); border:1px solid var(--line); border-radius:8px;
+          padding:8px 12px; display:none; columns:2; column-gap:22px; box-shadow:0 8px 30px #000a; }
+  #cols label { display:flex; gap:6px; padding:2px 0; break-inside:avoid; cursor:pointer; }
+  #panel textarea { width:100%; height:50vh; background:#0d1117; color:var(--txt); border:1px solid var(--line);
+                    border-radius:6px; font:12px monospace; box-sizing:border-box; }
+  #score { margin-left:auto; padding:3px 10px; border-radius:999px; border:1px solid var(--line); font-weight:600;
+           font-variant-numeric:tabular-nums; cursor:help; white-space:nowrap; }
+  #score.good { color:var(--good); border-color:#14532d; } #score.mid { color:var(--mid); border-color:#78350f; }
+  #score.bad { color:var(--bad); border-color:#7f1d1d; } #score:empty { display:none; }
+  table.nodes tbody tr { cursor:pointer; }
+  #panel { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:10; }
+  #panel.on { display:flex; }
+  #panel .box { background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:14px 18px; width:min(760px,94vw);
+                max-height:90vh; overflow:auto; }
+  #panel h3 { margin:0 0 8px; } #panel .x { float:right; cursor:pointer; font-size:20px; }
+  #panel svg { width:100%; display:block; margin:2px 0 12px; }
+  #panel ul { margin:4px 0 10px; padding-left:18px; }
+  footer { margin-top:6px; font-size:11px; color:var(--mut); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛡️ Mesh Guardian</h1>
+  <input type="search" id="q" size="24">
+  <button id="refresh"></button>
+  <button id="report"></button>
+  <button id="colsbtn"></button>
+  <span class="muted" id="status"></span>
+  <span id="info" style="cursor:help" class="muted">ⓘ</span>
+  <span id="score"></span>
+</header>
+<div id="cols"></div>
+<main>
+  <div id="banners"></div>
+  <div class="cards">
+    <div class="card"><h2 id="h_net"></h2><div class="kv" id="net"></div></div>
+    <div class="card"><h2 id="h_brs"></h2><table class="brs" id="brs"></table></div>
+  </div>
+  <div id="panel"><div class="box"><span class="x">✕</span><div id="pbody"></div></div></div>
+  <div class="wrap"><table class="nodes"><thead><tr id="head"></tr></thead><tbody id="body"></tbody></table></div>
+</main>
+<script>
+"use strict";
+const I18N = {
+  en: {search:"Filter: name, area, model…", refresh:"↻ Refresh", columns:"Columns",
+       network:"Network", brs:"Border routers", partitions:"Partitions", omr:"OMR prefix", leader:"Leader",
+       unavailable:"Unavailable nodes", recovery:"Automatic recovery", on:"on", off:"off", none:"none",
+       live:"live values", polling:"live link down: values read on demand", loading:"loading…", error:"error",
+       updated:"updated", thread_shown:"Thread nodes shown",
+       storm:"⛈️ Thread storm in progress: pings are spaced out and the hourly sweep is paused.",
+       detached24:"detached ×{n} in 24h", other_subnet:"other subnet than Home Assistant", offline:"offline",
+       available:"available", unav_short:"unavailable", unav_since:"unavailable since {t}", battery:"battery", mains:"mains",
+       ago_s:"{n}s ago", ago_m:"{n}min ago", ago_h:"{n}h ago", ago_d:"{n}d ago", never:"no contact yet",
+       best_tip:"Best link: a router has no parent",
+       leader_tip:"Thread leader", src_mdns:"local network", src_thread:"Thread", bbr_primary:"Primary backbone border router (multicast and domain addresses for the whole network)",
+       no_parent:"Unknown: the node does not publish its RLOC16 and no Matter node lists it as its child (its parent is probably a border router)",
+       bat_level:["ok", "low", "critical"],
+       csrc:{report:"report", event:"event", read:"read", ping:"ping", passive:"packet"},
+       report:"Report", report_tip:"Anonymized report (no names, areas or addresses) to paste in an issue",
+       copy:"Copy", copied:"Copied", download:"Download",
+       h_title:"Last 7 days", h_signal:"Signal", h_resp:"Response", h_now:"now", h_avg:"average", h_outages:"Outages",
+       h_parents:"Parent changes", h_none:"none", h_wait:"History is built every 15 minutes: come back later.",
+       quality:"Network quality", q_parts:{availability:"Availability", radio:"Radio", outages:"Outages", backbone:"Backbone", partition:"Partition"},
+       q_scale:"≥ 95 excellent · 90–95 good · 80–90 to watch · < 80 poor", q_trend:"vs 24h",
+       q_24h:"24h", q_capped:"capped: partitioned network", q_window:"last {n} min",
+       new_parent:"new", np_tip:"New parent {ago}. Before: {p} ({r}dBm) → now {r2}dBm",
+       note:"Radio values come from the reports of the nodes (Matter Server cache, no radio traffic). Battery nodes report less often: check “Last contact”. 24h columns compare with the radio survey of about 24h ago. The page refreshes every minute.",
+       roles:{leader:"Router leader", router:"Router", reed:"End device", end_device:"End device", sleepy_end_device:"Sleepy end device",
+              unassigned:"unassigned", unspecified:"unspecified", detached:"detached", child:"End device", offline:"offline"},
+       boot:{unspecified:"unspecified", power_on:"power on", brown_out:"brown-out", software_watchdog:"software watchdog",
+             hardware_watchdog:"hardware watchdog", software_update:"software update", software_reset:"software reset"},
+       c:{name:"Node", area:"Area", floor:"Floor", model:"Model", power:"Power", id:"Id", avail:"Status",
+          role:"Thread role", parent:"Parent", rloc:"RLOC16", rssi:"RSSI", lqi:"LQI", neighbors:"Neighbors", weak:"Weak links",
+          detaches:"Detaches 24h", pchanges:"Parent chg. 24h", partchanges:"Partition chg. 24h",
+          out24:"Outages 24h", out7:"Outages 7d", down7:"Downtime 7d", reboots:"Reboots", reboots24:"Reboots 24h",
+          boot:"Last boot reason", uptime:"Uptime", last:"Last contact", advice:"Advice", bat:"Battery",
+          rtt:"Response", rttavg:"Avg response"},
+       t:{avail:"Available or unavailable in Home Assistant", parent:"Child: the router it is attached to. Router (↔): its strongest link, since a router has no parent",
+          rssi:"Signal of the link in the Parent column (dBm)", lqi:"Link quality 0–3 (3 = best)",
+          weak:"Neighbor links at or below the red signal threshold, or LQI 1",
+          reboots:"Reboot counter of the node (since it was commissioned or reset)", last:"Last packet, report, read or ping answer of the node (kept across restarts)",
+          rtt:"Time taken by the node to answer the last read (every 15 min on mains, every hour on battery). ✕ = no answer",
+          rttavg:"Average of the last 20 answers", uptime:"Time since the node started, read with the response time",
+          down7:"Cumulated unavailable time over 7 days (global outages excluded)"}},
+  fr: {search:"Filtre : nom, pièce, modèle…", refresh:"↻ Actualiser", columns:"Colonnes",
+       network:"Réseau", brs:"Border routers", partitions:"Partitions", omr:"Préfixe OMR", leader:"Leader",
+       unavailable:"Nodes indisponibles", recovery:"Récupération automatique", on:"activée", off:"désactivée", none:"aucun",
+       live:"valeurs en direct", polling:"lien direct coupé : valeurs lues à la demande", loading:"chargement…", error:"erreur",
+       updated:"mis à jour", thread_shown:"Nodes Thread affichées",
+       storm:"⛈️ Tempête Thread en cours : les pings sont espacés et le balayage horaire est suspendu.",
+       detached24:"détaché ×{n} en 24h", other_subnet:"autre sous-réseau que Home Assistant", offline:"hors ligne",
+       available:"disponible", unav_short:"indisponible", unav_since:"indisponible depuis {t}", battery:"pile", mains:"secteur",
+       ago_s:"il y a {n}s", ago_m:"il y a {n}min", ago_h:"il y a {n}h", ago_d:"il y a {n}j", never:"aucun contact pour l'instant",
+       best_tip:"Meilleur lien : un routeur n'a pas de parent",
+       leader_tip:"Leader Thread", src_mdns:"réseau local", src_thread:"Thread", bbr_primary:"Border router primaire (multicast et adresses de domaine pour tout le réseau)",
+       no_parent:"Inconnu : la node ne publie pas son RLOC16 et aucune node Matter ne la déclare comme enfant (son parent est probablement un border router)",
+       bat_level:["ok", "faible", "critique"],
+       csrc:{report:"rapport", event:"événement", read:"lecture", ping:"ping", passive:"paquet"},
+       report:"Rapport", report_tip:"Rapport anonymisé (sans noms, pièces ni adresses) à coller dans une issue",
+       copy:"Copier", copied:"Copié", download:"Télécharger",
+       h_title:"7 derniers jours", h_signal:"Signal", h_resp:"Réponse", h_now:"actuel", h_avg:"moyenne", h_outages:"Coupures",
+       h_parents:"Changements de parent", h_none:"aucun", h_wait:"L'historique se construit toutes les 15 minutes : revenez plus tard.",
+       quality:"Qualité du réseau", q_parts:{availability:"Disponibilité", radio:"Radio", outages:"Coupures", backbone:"Ossature", partition:"Partition"},
+       q_scale:"≥ 95 excellent · 90–95 bon · 80–90 à surveiller · < 80 mauvais", q_trend:"vs 24h",
+       q_24h:"24h", q_capped:"plafonnée : réseau partitionné", q_window:"dernières {n} min",
+       new_parent:"nouveau", np_tip:"Nouveau parent {ago}. Avant : {p} ({r}dBm) → maintenant {r2}dBm",
+       note:"Les valeurs radio viennent des rapports des nodes (cache du Matter Server, sans trafic radio). Les nodes sur pile se mettent à jour moins souvent : voir « Dernier contact ». Les colonnes 24h comparent avec le relevé radio d'il y a environ 24h. La page se rafraîchit toutes les minutes.",
+       roles:{leader:"Routeur leader", router:"Routeur", reed:"Appareil final", end_device:"Appareil final", sleepy_end_device:"Appareil final dormant",
+              unassigned:"non attribué", unspecified:"non précisé", detached:"détaché", child:"Appareil final", offline:"hors ligne"},
+       boot:{unspecified:"non précisée", power_on:"mise sous tension", brown_out:"baisse de tension", software_watchdog:"watchdog logiciel",
+             hardware_watchdog:"watchdog matériel", software_update:"mise à jour", software_reset:"redémarrage logiciel"},
+       c:{name:"Node", area:"Pièce", floor:"Étage", model:"Modèle", power:"Alimentation", id:"Id", avail:"Statut",
+          role:"Rôle Thread", parent:"Parent", rloc:"RLOC16", rssi:"RSSI", lqi:"LQI", neighbors:"Voisins", weak:"Liens faibles",
+          detaches:"Décrochages 24h", pchanges:"Chgt parent 24h", partchanges:"Chgt partition 24h",
+          out24:"Coupures 24h", out7:"Coupures 7j", down7:"Durée coupée 7j", reboots:"Redémarrages", reboots24:"Redém. 24h",
+          boot:"Raison du dernier démarrage", uptime:"En marche depuis", last:"Dernier contact", advice:"Conseil", bat:"Pile",
+          rtt:"Réponse", rttavg:"Réponse moy."},
+       t:{avail:"Disponible ou indisponible dans Home Assistant", parent:"Enfant : le routeur auquel il est accroché. Routeur (↔) : son lien le plus fort, car un routeur n'a pas de parent",
+          rssi:"Signal du lien de la colonne Parent (dBm)", lqi:"Qualité du lien 0–3 (3 = meilleure)",
+          weak:"Liens vers des voisins au seuil rouge ou en dessous, ou LQI 1",
+          reboots:"Compteur de redémarrages de la node (depuis sa mise en service ou sa réinitialisation)", last:"Dernier paquet, rapport, lecture ou réponse à un ping de la node (gardé après un redémarrage)",
+          rtt:"Temps de réponse de la node à la dernière lecture (toutes les 15 min sur secteur, toutes les heures sur pile). ✕ = pas de réponse",
+          rttavg:"Moyenne des 20 dernières réponses", uptime:"Temps depuis le démarrage de la node, lu avec le temps de réponse",
+          down7:"Durée cumulée d'indisponibilité sur 7 jours (pannes générales exclues)"}}
+};
+let LANG = "en";
+const L = k => { const v = (I18N[LANG] || I18N.en)[k]; return v === undefined ? I18N.en[k] : v; };
+const F = (k, o) => L(k).replace(/\{(\w+)\}/g, (_, x) => o[x]);
+const $ = s => document.querySelector(s);
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let D = null, TH = {rssi_good:-75, rssi_bad:-85, lqi_good:3, lqi_bad:1};
+
+// ---------------------------------------------------------------- storage (per browser)
+const KEY = "mesh_guardian_table_v2";
+function loadPrefs() { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; } }
+function savePrefs() { try { localStorage.setItem(KEY, JSON.stringify(P)); } catch (e) { /* storage unavailable */ } }
+const P = Object.assign({sort:"rssi", dir:1, q:"", hidden:null}, loadPrefs());
+
+// ---------------------------------------------------------------- formatting
+const clsRssi = v => v == null ? "" : v >= TH.rssi_good ? "good" : v > TH.rssi_bad ? "mid" : "bad";
+const clsLqi = v => v == null ? "" : v >= TH.lqi_good ? "good" : v > TH.lqi_bad ? "mid" : "bad";
+const hm = ts => new Date(ts * 1000).toLocaleTimeString(LANG, {hour:"2-digit", minute:"2-digit"});
+function ago(ts) {
+  if (!ts) return "—";
+  const s = Math.max(0, Date.now() / 1000 - ts);
+  if (s < 90) return F("ago_s", {n: Math.round(s)});
+  if (s < 5400) return F("ago_m", {n: Math.round(s / 60)});
+  if (s < 172800) return F("ago_h", {n: Math.round(s / 3600)});
+  return F("ago_d", {n: Math.round(s / 86400)});
+}
+function dur(min) { if (min == null) return "—"; if (!min) return "0";
+  return min < 90 ? min + "min" : (min < 2880 ? (min / 60).toFixed(1) + "h" : (min / 1440).toFixed(1) + (LANG === "fr" ? "j" : "d")); }
+function brLast(b) {
+  if (!b.last_contact) return `<td class="num"><span class="zero" title="${esc(L("never"))}">—</span></td>`;
+  const age = Date.now() / 1000 - b.last_contact;
+  const cls = age >= 900 ? "bad" : age >= 300 ? "mid" : "";
+  const tip = new Date(b.last_contact * 1000).toLocaleString(LANG) + " · " + L(b.contact_src === "thread" ? "src_thread" : "src_mdns");
+  return `<td class="num"><span class="${cls}" title="${esc(tip)}">${ago(b.last_contact)}</span></td>`;
+}
+const ms = v => v == null ? `<span class="zero">—</span>` : v < 1000 ? v + " ms" : (v / 1000).toFixed(1) + " s";
+const cnt = v => v == null ? `<span class="zero">—</span>` : v === 0 ? `<span class="zero">0</span>` : v;
+const warn = (v, lim) => v == null ? cnt(v) : v === 0 ? cnt(0) : `<span class="${v >= lim ? "bad" : "mid"}">${v}</span>`;
+
+// ---------------------------------------------------------------- columns
+// One definition per column: add a column by adding an entry here.
+// num: numeric sort (empty values last); v: sort value; h: cell html; hide: hidden by default
+const COLS = [
+  {k:"id", v:r => parseInt(r.id, 16), num:true, h:r => `<span class="muted">${esc(r.id)}</span>`},
+  {k:"name", v:r => r.name.toLowerCase(), h:r => `<b>${esc(r.name)}</b>`},
+  {k:"area", v:r => r.area.toLowerCase(), h:r => esc(r.area)},
+  {k:"floor", v:r => r.floor.toLowerCase(), h:r => esc(r.floor), hide:true},
+  {k:"model", v:r => r.model.toLowerCase(), h:r => esc(r.model)},
+  {k:"power", v:r => r.battery ? 0 : 1, h:r => r.battery ? "🔋 " + L("battery") : "🔌 " + L("mains")},
+  {k:"bat", num:true, v:r => r.battery_pct ?? (r.battery_level == null ? null : 100 - 50 * r.battery_level), h:r => {
+      if (r.battery_pct != null) return `<span class="${r.battery_pct >= 50 ? "good" : r.battery_pct >= 20 ? "mid" : "bad"}">${r.battery_pct}%</span>`;
+      if (r.battery_level != null) return `<span class="${["good", "mid", "bad"][r.battery_level] || ""}">${esc(L("bat_level")[r.battery_level] ?? "?")}</span>`;
+      return `<span class="zero">—</span>`; }},
+  {k:"avail", v:r => r.available ? 1 : 0, h:r => r.available ? `<span class="good" title="${esc(L("available"))}"><span class="wide">${L("available")}</span><span class="narrow">●</span></span>` :
+      `<span class="bad" style="cursor:help" title="${esc(F("unav_since", {t: r.since ? hm(r.since) + " (" + ago(r.since) + ")" : "?"}))}"><span class="wide">${L("unav_short")}</span><span class="narrow">●</span></span>`},
+  {k:"role", v:r => ["leader","router","reed","end_device","sleepy_end_device"].indexOf(r.role),
+      h:r => r.role == null ? `<span class="zero">—</span>` : (r.role === "leader" ? "👑 " : "") + esc((L("roles")[r.role]) || r.role)},
+  {k:"parent", v:r => (r.parent || (isRouter(r) && r.best_link) || "~").toLowerCase(), h:r => {
+      if (!r.parent && isRouter(r) && r.best_link)
+        return `<span class="muted wide" title="${esc(L("best_tip"))}">↔ </span>${esc(r.best_link)}`;
+      if (!r.parent) return ["reed", "end_device", "sleepy_end_device"].includes(r.role)
+        ? `<span class="muted" title="${esc(L("no_parent"))}">?</span>` : `<span class="zero">—</span>`;
+      let b = "";
+      if (r.new_parent) {
+        const g = r.rssi - (r.new_parent.before_rssi ?? r.rssi), c = g >= 6 ? "better" : g <= -6 ? "worse" : "same";
+        const tip = F("np_tip", {ago: ago(r.new_parent.at), p: r.new_parent.before, r: r.new_parent.before_rssi ?? "?", r2: r.rssi ?? "?"});
+        b = `<span class="np ${c}" title="${esc(tip)}">${c === "better" ? "▲" : c === "worse" ? "▼" : "●"}</span>`;
+      }
+      return esc(r.parent) + b; }},
+  {k:"rssi", num:true, v:r => linkRssi(r), h:r => linkRssi(r) == null ? `<span class="zero">—</span>` : `<span class="${clsRssi(linkRssi(r))}">${linkRssi(r)}</span>`},
+  {k:"lqi", num:true, v:r => linkLqi(r), h:r => linkLqi(r) == null ? `<span class="zero">—</span>` : `<span class="${clsLqi(linkLqi(r))}">${linkLqi(r)}</span>`},
+  {k:"rloc", v:r => r.rloc16 ? parseInt(r.rloc16, 16) : null, num:true, h:r => `<span class="muted">${esc(r.rloc16 || "—")}</span>`, hide:true},
+  {k:"neighbors", num:true, v:r => r.neighbors, h:r => cnt(r.neighbors)},
+  {k:"weak", num:true, v:r => r.weak, h:r => warn(r.weak, 3)},
+  {k:"detaches", num:true, v:r => r.detaches_24h, h:r => warn(r.detaches_24h, 2)},
+  {k:"pchanges", num:true, v:r => r.parent_changes_24h, h:r => warn(r.parent_changes_24h, 3)},
+  {k:"partchanges", num:true, v:r => r.partition_changes_24h, h:r => warn(r.partition_changes_24h, 2)},
+  {k:"out24", num:true, v:r => r.outages_24h, h:r => warn(r.outages_24h, 2)},
+  {k:"out7", num:true, v:r => r.outages_7d, h:r => warn(r.outages_7d, 3)},
+  {k:"down7", num:true, v:r => r.downtime_7d_min, h:r => r.downtime_7d_min ? dur(r.downtime_7d_min) : cnt(0)},
+  {k:"reboots", num:true, v:r => r.reboots, h:r => cnt(r.reboots)},
+  {k:"reboots24", num:true, v:r => r.reboots_24h, h:r => warn(r.reboots_24h, 2)},
+  {k:"boot", v:r => r.boot_reason || "", h:r => r.boot_reason == null ? `<span class="zero">—</span>` : esc((L("boot")[r.boot_reason]) || r.boot_reason)},
+  {k:"uptime", num:true, v:r => r.uptime_h, h:r => r.uptime_h == null ? cnt(null) : dur(Math.round(r.uptime_h * 60)), hide:true},
+  {k:"last", num:true, v:r => r.last_report ? -r.last_report : null,
+      h:r => r.last_report ? `<span title="${esc(new Date(r.last_report * 1000).toLocaleString(LANG) + (r.contact_src ? " · " + ((L("csrc")[r.contact_src]) || r.contact_src) : ""))}">${ago(r.last_report)}</span>` :
+        `<span class="zero" title="${esc(L("never"))}">—</span>`},
+  {k:"rtt", num:true, v:r => r.rtt_ms, h:r => r.rtt_fail ? `<span class="bad">✕</span>` : ms(r.rtt_ms)},
+  {k:"rttavg", num:true, v:r => r.rtt_avg_ms, h:r => ms(r.rtt_avg_ms)},
+  {k:"advice", v:r => r.advice ? 0 : 1, h:r => r.advice ? `<span class="${r.advice_level === "low" ? "muted" : ""}" title="${esc(r.advice_detail || "")}">${r.advice_level === "low" ? "ℹ️" : "💡"} ${esc(r.advice)}</span>` : ""},
+];
+const isRouter = r => r.role === "router" || r.role === "leader";
+const linkRssi = r => r.parent ? r.rssi : (isRouter(r) ? r.best_rssi : null);
+const linkLqi = r => r.parent ? r.lqi : (isRouter(r) ? r.best_lqi : null);
+// narrow screen (phone): a compact set of columns, with its own choice kept apart
+const COMPACT = ["name", "avail", "parent", "rssi", "rtt"];
+const narrow = () => window.matchMedia("(max-width: 700px)").matches;
+const hiddenKey = () => narrow() ? "hidden_m" : "hidden";
+const visibleCols = () => COLS.filter(c => c.k === "name" || (P[hiddenKey()] ? !P[hiddenKey()].includes(c.k)
+  : narrow() ? COMPACT.includes(c.k) : !c.hide));
+
+// ---------------------------------------------------------------- rendering
+function applyLang() {
+  document.documentElement.lang = LANG;
+  $("#q").placeholder = L("search"); $("#refresh").textContent = L("refresh");
+  $("#report").textContent = "⬇ " + L("report"); $("#report").title = L("report_tip");
+  $("#colsbtn").textContent = "☰ " + L("columns");
+  $("#h_net").textContent = L("network"); $("#h_brs").textContent = L("brs"); $("#info").title = L("note");
+  $("#cols").innerHTML = COLS.map(c => `<label><input type="checkbox" data-k="${c.k}"> ${esc(L("c")[c.k])}</label>`).join("");
+  $("#cols").querySelectorAll("input").forEach(i => {
+    i.checked = visibleCols().some(c => c.k === i.dataset.k);
+    i.disabled = i.dataset.k === "name";
+    i.addEventListener("change", () => {
+      P[hiddenKey()] = COLS.filter(c => !$(`#cols input[data-k="${c.k}"]`).checked).map(c => c.k); savePrefs(); render(); });
+  });
+}
+
+function renderHeader() {
+  const n = D.network || {};
+  const rows = [
+    [L("partitions"), n.partitions > 1 ? `<span class="bad">${n.partitions}</span>` : n.partitions],
+    [L("omr"), (n.omr || []).length ? (n.omr.length > 1 ? `<span class="bad">${n.omr.map(esc).join("<br>")}</span>` : esc(n.omr[0])) : L("none")],
+    [L("leader"), esc(n.leader)],
+    [L("unavailable"), `<span class="${n.unavailable ? "bad" : "good"}">${n.unavailable}</span> / ${n.nodes}`],
+    [L("thread_shown"), `<span id="shown"></span>`],
+    [L("recovery"), n.auto_recovery ? L("on") : `<span class="mid">${L("off")}</span>`],
+  ];
+  $("#net").innerHTML = rows.map(([k, v]) => `<span>${k}</span><span>${v}</span>`).join("");
+  $("#brs").innerHTML = (D.border_routers || []).map(b => {
+    const col = !b.online ? "var(--bad)" : b.role === "leader" ? "var(--lead)" : b.role === "detached" ? "var(--mid)" : "var(--good)";
+    const extra = [];
+    if (b.detached_24h) extra.push(`<span class="mid" title="${esc(b.last_detached || "")}">${F("detached24", {n: b.detached_24h})}</span>`);
+    if (b.same_subnet === false) extra.push(`<span class="bad">${L("other_subnet")}</span>`);
+    return `<tr><td><span class="dot" style="background:${col}"></span>${esc(b.name)}${b.role === "leader" || b.primary ? " " : ""}${b.role === "leader" ? `<span title="${esc(L("leader_tip"))}">👑</span>` : ""}${b.primary ? `<span title="${esc(L("bbr_primary"))}">⭐</span>` : ""}</td>
+      <td>${esc(b.online ? ((L("roles")[b.role]) || b.role) : L("offline"))}</td>
+      <td class="muted">${esc(b.partition || "")}</td><td class="muted">${esc(b.omr || "")}</td>${brLast(b)}<td>${extra.join(" · ")}</td></tr>`;
+  }).join("");
+  const q = D.quality, sc = $("#score");
+  if (q && q.score != null) {
+    sc.className = q.color || "";
+    const d = q.score_24h != null && q.minutes >= 30 ? q.score - q.score_24h : 0;
+    sc.textContent = "🛡️ " + q.score.toFixed(1) + " %" + (Math.abs(d) >= 1 ? (d > 0 ? " ▲" : " ▼") : "");
+    const parts = Object.entries(q.parts || {}).map(([k, v]) => `${L("q_parts")[k] || k} : ${v} %`);
+    sc.title = [L("quality") + " — " + F("q_window", {n: q.minutes}), ...parts,
+      q.score_24h != null ? `${L("q_24h")} : ${q.score_24h} %` : null, L("q_scale"), q.capped ? L("q_capped") : null,
+      ].filter(Boolean).join("\n");
+  } else { sc.textContent = ""; }
+  const ban = [];
+  if (n.storm) ban.push(`<div class="banner storm">${L("storm")}</div>`);
+  if (n.routing_problem) ban.push(`<div class="banner bad">🚧 ${esc(n.routing_problem)}</div>`);
+  $("#banners").innerHTML = ban.join("");
+}
+
+function render() {
+  if (!D) return;
+  const cols = visibleCols();
+  if (!cols.some(c => c.k === P.sort)) P.sort = cols[0].k;
+  $("#head").innerHTML = cols.map(c => `<th data-k="${c.k}" class="${c.num ? "num" : ""}" title="${esc((L("t")[c.k]) || "")}">` +
+    `${esc(L("c")[c.k])}${c.k === P.sort ? `<span class="arr">${P.dir > 0 ? "▲" : "▼"}</span>` : ""}</th>`).join("");
+  $("#head").querySelectorAll("th").forEach(th => th.addEventListener("click", () => {
+    if (P.sort === th.dataset.k) P.dir = -P.dir; else { P.sort = th.dataset.k; P.dir = 1; }
+    savePrefs(); render(); }));
+  const q = P.q.trim().toLowerCase();
+  let rows = D.rows.filter(r => !q || [r.name, r.area, r.model, r.id, r.parent].some(x => (x || "").toLowerCase().includes(q)));
+  const col = COLS.find(c => c.k === P.sort);
+  rows.sort((a, b) => {
+    const x = col.v(a), y = col.v(b);
+    const ex = x == null || x === "" || Number.isNaN(x), ey = y == null || y === "" || Number.isNaN(y);
+    if (ex || ey) return ex === ey ? 0 : ex ? 1 : -1;     // empty values always last
+    return (x < y ? -1 : x > y ? 1 : 0) * P.dir || a.name.localeCompare(b.name);
+  });
+  // the first column, and the name when the id comes first, stay visible when scrolling sideways
+  const nStick = cols[0].k === "id" && cols[1] && cols[1].k === "name" ? 2 : 1;
+  $("#body").innerHTML = rows.map(r => `<tr class="${r.available ? "" : "down"}" data-id="${esc(r.id)}" data-name="${esc(r.name)}">` +
+    cols.map((c, i) => `<td class="${c.num ? "num" : ""}${i < nStick ? " stick" : ""}">${c.h(r)}</td>`).join("") + "</tr>").join("");
+  const ths = $("#head").querySelectorAll("th");
+  for (let i = 0; i < nStick; i++) ths[i].classList.add("stick");
+  if (nStick === 2) {
+    const w = ths[0].offsetWidth + "px";
+    ths[1].style.setProperty("--l", w);
+    $("#body").querySelectorAll("tr").forEach(tr => tr.children[1].style.setProperty("--l", w));
+  }
+  $("#shown").textContent = `${rows.length}/${D.rows.length}`;
+  status();
+}
+
+function status() {
+  if (!D) return;
+  $("#status").innerHTML = `<span class="dot" title="${esc(D.live ? L("live") : L("polling"))}" ` +
+    `style="background:${D.live ? "var(--good)" : "var(--mid)"}"></span>${L("updated")} ${hm(D.time)}`;
+}
+
+let busy = false;
+async function load(force) {
+  if (busy) return; busy = true;
+  if (force) $("#refresh").disabled = true;
+  try {
+    const r = await fetch("api/table" + (force ? "?force=1" : ""), {cache: "no-store"});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.status);
+    D = d; TH = d.thresholds || TH;
+    if (d.lang && d.lang !== LANG) { LANG = d.lang; applyLang(); }
+    renderHeader(); render();
+  } catch (e) {
+    $("#status").textContent = L("error") + ": " + e.message;
+  } finally { busy = false; $("#refresh").disabled = false; }
+}
+
+// ---------------------------------------------------------------- events
+$("#q").value = P.q;
+$("#q").addEventListener("input", () => { P.q = $("#q").value; savePrefs(); render(); });
+$("#refresh").addEventListener("click", () => load(true));
+$("#colsbtn").addEventListener("click", ev => {
+  const m = $("#cols"), b = ev.target.getBoundingClientRect();
+  m.style.left = b.left + "px"; m.style.top = (b.bottom + window.scrollY + 4) + "px";
+  m.style.display = m.style.display === "block" ? "none" : "block"; ev.stopPropagation(); });
+document.addEventListener("click", ev => { if (!$("#cols").contains(ev.target)) $("#cols").style.display = "none"; });
+applyLang(); load(false);
+setInterval(() => { if (!document.hidden) load(false); }, 60000);
+function spark(pts, color, unit, warn) {
+  const v = pts.filter(p => p[1] != null);
+  if (!v.length) return `<div class="muted">—</div>`;
+  const vals = v.map(p => p[1]), cur = vals[vals.length - 1];
+  const avg = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (warn != null) { lo = Math.min(lo, warn); hi = Math.max(hi, warn); }
+  if (hi === lo) { hi += 1; lo -= 1; }
+  const pad = (hi - lo) * 0.1; lo -= pad; hi += pad;
+  const t0 = v[0][0], t1 = Math.max(v[v.length - 1][0], t0 + 1);
+  const W = 700, H = 90, L0 = 50;
+  const X = t => L0 + (t - t0) / (t1 - t0) * (W - L0 - 10), Y = y => 8 + (hi - y) / (hi - lo) * (H - 26);
+  const fmt = x => unit === "ms" && x >= 1000 ? (x / 1000).toFixed(1) + " s" : Math.round(x) + " " + unit;
+  const grid = [hi - pad, (hi + lo) / 2, lo + pad].map(y =>
+    `<line x1="${L0}" x2="${W - 10}" y1="${Y(y)}" y2="${Y(y)}" stroke="#30363d"/><text x="${L0 - 4}" y="${Y(y) + 3}" font-size="10" fill="#8b949e" text-anchor="end">${fmt(y)}</text>`).join("");
+  const w = warn != null ? `<line x1="${L0}" x2="${W - 10}" y1="${Y(warn)}" y2="${Y(warn)}" stroke="#f85149" stroke-dasharray="4 3"/>` : "";
+  const line = v.length > 1 ? `<polyline fill="none" stroke="${color}" stroke-width="2" points="${v.map(p => X(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1)).join(" ")}"/>` : "";
+  const dots = v.map(p => `<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="2.5" fill="${color}"><title>${dt(p[0])} : ${fmt(p[1])}</title></circle>`).join("");
+  const ax = `<text x="${L0}" y="${H - 2}" font-size="10" fill="#8b949e">${dt(t0)}</text><text x="${W - 10}" y="${H - 2}" font-size="10" fill="#8b949e" text-anchor="end">${dt(t1)}</text>`;
+  return `<div class="muted">${L("h_now")} <b style="color:${color}">${fmt(cur)}</b> · ${L("h_avg")} ${fmt(avg)} · min ${fmt(Math.min(...vals))} · max ${fmt(Math.max(...vals))}</div>
+    <svg viewBox="0 0 ${W} ${H}" style="height:${H}px">${grid}${w}${line}${dots}${ax}</svg>`;
+}
+const dt = s => new Date(s * 1000).toLocaleString(LANG, {weekday:"short", hour:"2-digit", minute:"2-digit"});
+async function openNode(id, name) {
+  $("#pbody").innerHTML = `<h3>${esc(name)}</h3>…`; $("#panel").classList.add("on");
+  try {
+    const d = await (await fetch("api/node?id=" + encodeURIComponent(id))).json();
+    const s = d.series || [];
+    const out = (d.outages || []).slice(-15).reverse().map(o => `<li>${dt(o[0])} → ${o[1] ? dt(o[1]) : "…"}</li>`).join("");
+    const pc = (d.parent_changes || []).slice(-15).reverse().map(c => `<li>${dt(c[0])} : ${esc(c[1])} → ${esc(c[2])}</li>`).join("");
+    $("#pbody").innerHTML = `<h3>${esc(name)} <span class="muted">— ${L("h_title")}</span></h3>` +
+      (s.length < 2 ? `<p class="muted">${L("h_wait")}</p>` : "") +
+      `<b>${L("h_signal")}</b>${spark(s.map(x => [x[0], x[3]]), "#58a6ff", "dBm", -85)}` +
+      `<b>${L("h_resp")}</b>${spark(s.map(x => [x[0], x[4]]), "#d29922", "ms")}` +
+      `<b>${L("h_outages")}</b>${out ? `<ul>${out}</ul>` : `<p class="muted">${L("h_none")}</p>`}` +
+      `<b>${L("h_parents")}</b>${pc ? `<ul>${pc}</ul>` : `<p class="muted">${L("h_none")}</p>`}`;
+  } catch (e) { $("#pbody").innerHTML += " ✕"; }
+}
+async function openReport() {
+  $("#pbody").innerHTML = `<h3>${L("report")}</h3>…`; $("#panel").classList.add("on");
+  try {
+    const txt = await (await fetch("api/report")).text();
+    $("#pbody").innerHTML = `<h3>${L("report")}</h3><p><button id="rcopy">${L("copy")}</button> <button id="rdl">${L("download")}</button></p><textarea id="rtext" readonly></textarea>`;
+    $("#rtext").value = txt;
+    $("#rcopy").onclick = async () => {
+      try { await navigator.clipboard.writeText(txt); } catch (e) { $("#rtext").select(); document.execCommand("copy"); }
+      $("#rcopy").textContent = L("copied");
+    };
+    $("#rdl").onclick = () => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([txt], {type: "text/markdown"}));
+      a.download = "mesh-guardian-report.md"; document.body.appendChild(a); a.click(); a.remove();
+    };
+  } catch (e) { $("#pbody").innerHTML += " ✕"; }
+}
+$("#report").addEventListener("click", openReport);
+document.querySelectorAll(".card").forEach(c => {
+  if (window.matchMedia("(max-width: 700px)").matches) c.classList.add("fold");
+  c.querySelector("h2").addEventListener("click", () => c.classList.toggle("fold"));
+});
+$("#body").addEventListener("click", e => { const tr = e.target.closest("tr[data-id]"); if (tr) openNode(tr.dataset.id, tr.dataset.name); });
+$("#panel").addEventListener("click", e => { if (e.target.id === "panel" || e.target.classList.contains("x")) $("#panel").classList.remove("on"); });
+window.matchMedia("(max-width: 700px)").addEventListener("change", () => { applyLang(); render(); });
+setInterval(() => { if (D) render(); }, 30000);   // keep the "x min ago" texts current
+</script>
+</body>
+</html>

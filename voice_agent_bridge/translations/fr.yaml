@@ -1,0 +1,56 @@
+configuration:
+  language:
+    name: Langue
+    description: Langue des réponses parlées, des messages d'erreur et du modèle de notes de la maison.
+  claude_token:
+    name: Jeton Claude
+    description: Jeton longue durée obtenu avec `claude setup-token` (abonnement Claude Pro ou Max). Laisser vide pour utiliser une clé API.
+  anthropic_api_key:
+    name: Clé API Anthropic
+    description: Alternative au jeton Claude, facturée à l'usage sur console.anthropic.com.
+  model:
+    name: Modèle
+    description: haiku (le plus rapide et économique), sonnet ou opus, ou un nom de modèle complet.
+  effort:
+    name: Effort
+    description: Effort de réflexion. Low garde des réponses vocales rapides.
+  web_search:
+    name: Recherche web
+    description: Permet à Claude de chercher sur le web pour les questions hors maison.
+  read_only:
+    name: Lecture seule
+    description: Claude peut lire la maison mais ne peut rien modifier.
+  forward_ha_prompt:
+    name: Utiliser le prompt de Home Assistant
+    description: Transmet à Claude le prompt de l'agent de conversation (par exemple la pièce du satellite).
+  max_turns:
+    name: Étapes maximum
+    description: Nombre maximum d'étapes d'outils par demande.
+  max_budget_usd:
+    name: Budget par demande (USD)
+    description: Claude arrête une demande au-delà de ce coût. 0 = pas de limite.
+  timeout:
+    name: Délai maximum (secondes)
+    description: Durée maximum d'une demande.
+  gateway_api_key:
+    name: Clé de la passerelle
+    description: Facultatif. Si elle est définie, les clients doivent l'envoyer comme clé API.
+  tool_search:
+    name: Outils à la demande
+    description: Claude charge les outils Home Assistant dont il a besoin au lieu de tous les recevoir à chaque demande. Beaucoup moins cher.
+  ha_tool_modules:
+    name: Modules d'outils Home Assistant
+    description: all, ou une liste de modules ha-mcp séparés par des virgules (avancé).
+  notes_file:
+    name: Fichier de notes de la maison
+    description: Facultatif. Chemin dans le dossier de configuration de Home Assistant (par exemple claude_notes.md), modifiable avec le File editor. Vide = CLAUDE.md dans le dossier de configuration de l'add-on.
+  logbook:
+    name: Journal de bord
+    description: Inscrit chaque question et réponse dans le journal de bord de Home Assistant.
+  history_days:
+    name: Historique (jours)
+    description: Durée de conservation des conversations dans le panneau des conversations.
+  log_level:
+    name: Niveau de journal
+network:
+  8791/tcp: Point d'accès compatible OpenAI (utile seulement hors de Home Assistant)
