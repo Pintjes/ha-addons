@@ -186,6 +186,8 @@ class Reattach:
             LOG.debug("read after parent search of %s: %s", name, err)
         res = verdict(before, after)
         row["result"] = res
+        if self.advisor:
+            self.advisor.tried[name] = (time.time(), res)
         if after:
             row |= {"rssi": after["rssi"], "lqi": after["lqi"], "rloc": after["rloc"]}
         texts = {

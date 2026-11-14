@@ -4,6 +4,17 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] - 2026-11-14
+
+### Changed
+
+- Advice: *Finding a new parent could improve the situation* (button on the line)
+  replaces *Remove the battery 10s* / *Unplug 10s* / *change the parent*; when a
+  parent search found nothing better in the last 7 days, *Add a router near…*.
+- Fewer columns: the id is in the *Node* column, the link quality (LQI) next to
+  the signal, outages 24h and 7d in one column.
+- Parent search result: says that the signal is the one received by the node.
+
 ## [2.0.2] - 2026-11-14
 
 ### Changed

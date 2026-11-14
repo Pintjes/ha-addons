@@ -282,7 +282,7 @@ const T = {
     a_parent_better:"{n}: better parent, {pb} ({b} dBm) → {pa} ({a} dBm)", a_parent_worse:"{n}: weaker parent, {pb} ({b} dBm) → {pa} ({a} dBm)", a_parent_similar:"{n}: similar parent, {pb} ({b} dBm) → {pa} ({a} dBm)",
     a_parent_same:"{n}: same parent kept, {pa} ({a} dBm): no better router in range", a_parent_unknown:"{n}: request sent, new link not read yet",
     a_parent_unsupported:"{n}: this node does not accept the request", a_parent_failed:"{n}: request refused by the node",
-    a_parent_router:"A router has no parent: nothing to search", a_parent_busy:"A parent search is already running", ap_ph:"Name of this access point", save:"Save", saved:"Saved", ap:"Access point", ap_unknown:"Access point not named: name it in the node panel, or add your access points to Home Assistant as devices",
+    a_rssi_note:"(signal received by the node; the table shows the one received by its parent)", a_parent_router:"A router has no parent: nothing to search", a_parent_busy:"A parent search is already running", ap_ph:"Name of this access point", save:"Save", saved:"Saved", ap:"Access point", ap_unknown:"Access point not named: name it in the node panel, or add your access points to Home Assistant as devices",
     to_ha:"Path to Home Assistant", r_direct:"{br} directly", r_via:"{br} via {via}", r_parent:"parent {p}, then ", r_cost:"cost {c}",
     r_cost_tip:"Path cost: 1 per good hop, up to 4 for a weak link. The nearest border router is the one with the lowest cost.", r_unknown:"unknown (no route table published yet)", no_parent:"Unknown parent (probably a border router)",
     sig:["weak", "fair", "good"], new_parent:"new parent", none_match:"No node matches.", columns:"Columns", cols_reset:"Default columns", t_out24:"Outages 24h", t_out7:"Outages 7d", sort_tip:"Click to sort, click again to reverse", sort_reset:"Default order (problems first)",
@@ -325,7 +325,7 @@ const T = {
     a_parent_better:"{n} : meilleur parent, {pb} ({b} dBm) → {pa} ({a} dBm)", a_parent_worse:"{n} : parent moins bon, {pb} ({b} dBm) → {pa} ({a} dBm)", a_parent_similar:"{n} : parent équivalent, {pb} ({b} dBm) → {pa} ({a} dBm)",
     a_parent_same:"{n} : même parent gardé, {pa} ({a} dBm) : pas de meilleur routeur à portée", a_parent_unknown:"{n} : demande envoyée, nouveau lien pas encore lu",
     a_parent_unsupported:"{n} : cette node n'accepte pas la demande", a_parent_failed:"{n} : demande refusée par la node",
-    a_parent_router:"Un routeur n'a pas de parent : rien à chercher", a_parent_busy:"Une recherche de parent est déjà en cours", ap_ph:"Nom de ce point d'accès", save:"Enregistrer", saved:"Enregistré", ap:"Point d'accès", ap_unknown:"Point d'accès sans nom : le nommer dans la fiche de la node, ou ajouter les points d'accès à Home Assistant comme appareils",
+    a_rssi_note:"(signal reçu par la node ; le tableau montre celui reçu par son parent)", a_parent_router:"Un routeur n'a pas de parent : rien à chercher", a_parent_busy:"Une recherche de parent est déjà en cours", ap_ph:"Nom de ce point d'accès", save:"Enregistrer", saved:"Enregistré", ap:"Point d'accès", ap_unknown:"Point d'accès sans nom : le nommer dans la fiche de la node, ou ajouter les points d'accès à Home Assistant comme appareils",
     to_ha:"Chemin vers Home Assistant", r_direct:"{br} en direct", r_via:"{br} via {via}", r_parent:"parent {p}, puis ", r_cost:"coût {c}",
     r_cost_tip:"Coût du chemin : 1 par bon saut, jusqu'à 4 pour un lien faible. Le border router le plus proche est celui de plus bas coût.", r_unknown:"inconnu (table de routage pas encore publiée)", no_parent:"Parent inconnu (probablement un border router)",
     sig:["faible", "moyen", "bon"], new_parent:"nouveau parent", none_match:"Aucune node ne correspond.", columns:"Colonnes", cols_reset:"Colonnes par défaut", t_out24:"Coupures 24 h", t_out7:"Coupures 7 j", sort_tip:"Cliquer pour trier, recliquer pour inverser", sort_reset:"Ordre par défaut (problèmes d'abord)",
@@ -423,7 +423,8 @@ const status = r => r.available && r.silent_s ? `<span class="st warn" title="${
 function signal(r) {
   const v = linkRssi(r);
   if (v == null) return `<span class="mut">—</span>`;
-  return `<span class="sig ${sigCls(v)}">${bars(sigBars(v))}<span class="num">${v} dBm</span> <small>${sigWord(v)}</small></span>`;
+  const q = linkLqi(r);
+  return `<span class="sig ${sigCls(v)}">${bars(sigBars(v))}<span class="num">${v} dBm</span> <small>${sigWord(v)}${q != null ? ` · <span title="${esc(L("d_lqi"))}">LQI ${q}</span>` : ""}</small></span>`;
 }
 // battery drawn with its charge: green > 50 %, orange 20–50 %, red < 20 % (the percentage is always written too)
 function batIcon(pct) {
@@ -577,18 +578,15 @@ const COLS = [
   {k:"adv", lab:"h_adv", w:"minmax(130px, 1.8fr)"},
   {k:"act", lab:"h_act", w:"96px", h:r => actions(r), s:null},
   {k:"route", lab:"to_ha", w:"minmax(170px, 1.5fr)", x:true, h:r => esc(route(r) || "—"), s:r => r.route ? r.route.cost : null},
-  {k:"lqi", lab:"d_lqi", w:"90px", r:true, x:true, h:r => n0(linkLqi(r)), s:r => linkLqi(r)},
   {k:"nb", lab:"t_nb", w:"80px", r:true, x:true, h:r => n0(r.neighbors), s:r => r.neighbors},
   {k:"weak", lab:"t_weak", w:"90px", r:true, x:true, h:r => n0(r.weak), s:r => r.weak},
   {k:"det", lab:"t_det", w:"100px", r:true, x:true, h:r => n0(r.detaches_24h), s:r => r.detaches_24h},
   {k:"pch", lab:"t_pch", w:"110px", r:true, x:true, h:r => n0(r.parent_changes_24h), s:r => r.parent_changes_24h},
-  {k:"out24", lab:"t_out24", w:"95px", r:true, x:true, h:r => n0(r.outages_24h), s:r => r.outages_24h},
-  {k:"out7", lab:"t_out7", w:"95px", r:true, x:true, h:r => n0(r.outages_7d), s:r => r.outages_7d},
+  {k:"out", lab:"t_out", w:"120px", r:true, x:true, h:r => `${r.outages_24h ?? "—"} · ${r.outages_7d ?? "—"}`, s:r => (r.outages_24h || 0) * 1000 + (r.outages_7d || 0)},
   {k:"down7", lab:"t_down", w:"105px", r:true, x:true, h:r => dur(r.downtime_7d_min), s:r => r.downtime_7d_min},
   {k:"reb", lab:"t_reb", w:"120px", r:true, x:true, h:r => `${r.reboots ?? "—"} · ${r.reboots_24h ?? "—"}`, s:r => r.reboots_24h},
   {k:"up", lab:"t_up", w:"105px", r:true, x:true, h:r => r.uptime_h == null ? n0(null) : dur(Math.round(r.uptime_h * 60)), s:r => r.uptime_h},
   {k:"rloc", lab:"t_rloc", w:"90px", x:true, h:r => n0(r.rloc16 ? esc(r.rloc16) : null), s:r => r.rloc16 || null},
-  {k:"id", lab:"t_id", w:"80px", x:true, h:r => esc(r.id), s:r => parseInt(r.id, 16)},
 ];
 const COLKEYS = COLS.filter(c => !c.x).map(c => [c.k, c.lab]);
 for (const c of COLS) if (c.s) SORT[c.k] = c.s;
@@ -650,7 +648,7 @@ function renderList() {
     .sort(sorter());
   $("#rows").innerHTML = list.map(r => {
     const adv = r.advice ? `<span class="adv ${lvl(r)}" title="${esc(r.advice_detail || "")}">${lvl(r) === "warn" ? IC.bulb : IC.info}<span>${esc(r.advice)}</span></span>` : `<span class="adv"></span>`;
-    const meta = [r.area, r.model, NETS[net(r)]].filter(Boolean).map(esc).join(" · ");
+    const meta = [r.area, r.model, NETS[net(r)], r.id].filter(Boolean).map(esc).join(" · ");
     const resp = r.rtt_fail ? `<span class="st bad">${IC.bad}${L("no_answer")}</span>` : `<span class="num">${ms(r.rtt_ms)}</span>`;
     const last = r.last_report ? `<span title="${esc(new Date(r.last_report * 1000).toLocaleString(LANG) + (r.contact_src ? " · " + (L("csrc")[r.contact_src] || r.contact_src) : ""))}">${ago(r.last_report)}</span>` : `<span class="mut">${L("never")}</span>`;
     const cell = {
@@ -750,7 +748,7 @@ async function runAction(btn) {
     else if (a === "ping") msg = F(res.ok ? "a_ping_ok" : "a_ping_ko", {n: r.name, ms: res.ms});
     else if (a === "interview") msg = F("a_interview_ok", {n: r.name, s: res.s});
     else msg = F("a_parent_" + (res.result || "unknown"), {n: r.name, b: res.rssi_before ?? "?", a: res.rssi ?? "?",
-      pb: res.parent_before || "?", pa: res.parent || "?"});
+      pb: res.parent_before || "?", pa: res.parent || "?"}) + (res.rssi_before != null ? " " + L("a_rssi_note") : "");
   } catch (e) { msg = `${r.name} : ${L("error")}`; }
   toast(msg);
   document.querySelectorAll(`[data-act="${a}"][data-node="${id}"]`).forEach(b => { b.disabled = false; b.classList.remove("busy"); });

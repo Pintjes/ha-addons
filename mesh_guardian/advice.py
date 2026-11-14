@@ -47,6 +47,7 @@ class Advisor:
         self.changes = []       # recent parent changes (text)
         self.advice = []        # current advice (dicts)
         self.forced = {}        # child -> time of a parent search requested with the button (reattach.py)
+        self.tried = {}         # child -> (time, result) of the last parent search (reattach.py)
         self.last_t = None
         self._load()
 
@@ -171,29 +172,28 @@ class Advisor:
             model = n.get("model") or "?"
             autonomous = self.models.get(model, {}).get("spontaneous", 0) > 0
             actions, short = [], []
+            tried = self.tried.get(child)
+            no_better = bool(tried and now - tried[0] < 7 * 86400 and tried[1] in ("same", "similar", "worse"))
             if weak:
-                if child in rebooted or (autonomous and days > 1):
+                if no_better or child in rebooted or (autonomous and days > 1):
                     actions.append(t("add a mains-powered Thread router (e.g. a Matter smart plug) near \"{area}\": "
                                      "the node already had a chance to find a better parent and did not",
                                      area=n.get("area", "?")))
                     short.append(t("Add a router near {area}", area=n.get("area", "?")))
-                elif n.get("battery"):
-                    actions.append(t("remove the battery for 10s and put it back: it will pick the best parent available"))
-                    short.append(t("Remove the battery 10s"))
                 else:
-                    actions.append(t("unplug it for 10s and plug it back: it will pick the best parent available"))
-                    short.append(t("Unplug 10s"))
+                    actions.append(t("press Find a new parent on its line: it attaches again and picks the best parent it hears "
+                                     "(if it refuses: remove the battery or unplug it for 10s)"))
+                    short.append(t("Finding a new parent could improve the situation"))
             if shaky:
                 kind, cnt = unstable_parents[p["parent"]]
                 if kind == "reboots":
-                    short.append(t("{parent} restarts (×{n} in 24h): change the parent", parent=p["parent"], n=cnt))
+                    short.append(t("{parent} restarts (×{n} in 24h): finding a new parent could improve the situation", parent=p["parent"], n=cnt))
                     why = t("{parent} restarted {n} times in 24h", parent=p["parent"], n=cnt)
                 else:
-                    short.append(t("{parent} detaches (×{n} in 24h): change the parent", parent=p["parent"], n=cnt))
+                    short.append(t("{parent} detaches (×{n} in 24h): finding a new parent could improve the situation", parent=p["parent"], n=cnt))
                     why = t("{parent} detached {n} times in 24h", parent=p["parent"], n=cnt)
                 actions.append(why + t(": this node loses its parent each time. ") +
-                               (t("Remove its battery for 10s so it picks a steadier parent") if n.get("battery")
-                                else t("Unplug it for 10s so it picks a steadier parent")))
+                               t("Press Find a new parent on its line so it picks a steadier parent"))
             advice.append({
                 "node": child, "area": n.get("area", "?"), "model": model,
                 "battery": bool(n.get("battery")), "parent": p["parent"], "rssi": p["rssi"],
