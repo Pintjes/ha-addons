@@ -217,11 +217,18 @@ class Reattach:
         except Exception as err:  # noqa: BLE001
             LOG.debug("read after parent search of %s: %s", name, err)
         res = verdict(before, after)
+        try:   # addresses of the node: its RLOC16 (and so its parent) can have changed
+            res_a = self.h.matter_command("read_attribute", {"node_id": node_id, "attribute_path": "0/51/0"}, timeout=30)
+            addrs = res_a.get("0/51/0") if isinstance(res_a, dict) else None
+            if isinstance(addrs, list) and self.live:
+                self.live.set_attribute(nid, "0/51/0", addrs)
+        except Exception as err:  # noqa: BLE001
+            LOG.debug("addresses of %s: %s", name, err)
+        parent, rssi = self._view(nid, read_parent=True)   # only the values of the table: no other source
+        if parent and parent == parent_before and res != "unknown":
+            res = "same"
         if self.advisor:
             self.advisor.tried[name] = (time.time(), res)
-        parent, rssi = self._view(nid, read_parent=True)
-        if rssi is None and after:
-            rssi = after["rssi"]
         row.update({"result": res, "parent": parent, "rssi": rssi})
         if after:
             row |= {"lqi": after["lqi"], "rloc": after["rloc"]}
