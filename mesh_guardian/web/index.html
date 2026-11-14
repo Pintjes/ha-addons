@@ -287,7 +287,7 @@ const T = {
     a_interview_tip:"Reinterview", a_parent_router:"A router has no parent: nothing to search",
     a_parent_confirm:"{n}: find a new parent? The new one may be weaker.", a_interview_confirm:"{n}: interview the node again? It can take a minute.",
     a_ping_ok:"{n}: answers the ping", a_ping_ko:"{n}: no answer to ping", a_interview_ok:"{n} interviewed again ({s} s)",
-    a_parent_same:"{n}: same parent {l}", a_parent_unknown:"{n}: new parent not known yet",
+    a_parent_same:"{n}: same parent {l}", a_parent_unknown:"{n}: waiting for the node…",
     a_parent_unsupported:"{n}: parent search not supported", a_parent_failed:"{n}: parent search refused",
     a_parent_busy:"A parent search is already running", ap_ph:"Name of this access point", save:"Save", saved:"Saved", ap:"Access point", ap_unknown:"Unnamed access point: name it in the node panel",
     to_ha:"Path to Home Assistant", r_direct:"{br} directly", r_via:"{br} via {via}", r_parent:"parent {p}, then ", r_cost:"cost {c}",
@@ -330,7 +330,7 @@ const T = {
     a_interview_tip:"Reinterview", a_parent_router:"Un routeur n'a pas de parent : rien à chercher",
     a_parent_confirm:"{n} : rechercher un nouveau parent ? Le nouveau peut être moins bon.", a_interview_confirm:"{n} : ré-interviewer la node ? Ça peut prendre une minute.",
     a_ping_ok:"{n} : répond au ping", a_ping_ko:"{n} : pas de réponse au ping", a_interview_ok:"{n} ré-interviewée ({s} s)",
-    a_parent_same:"{n} : même parent {l}", a_parent_unknown:"{n} : nouveau parent pas encore connu",
+    a_parent_same:"{n} : même parent {l}", a_parent_unknown:"{n} : en attente de la node…",
     a_parent_unsupported:"{n} : recherche de parent non prise en charge", a_parent_failed:"{n} : recherche de parent refusée",
     a_parent_busy:"Une recherche de parent est déjà en cours", ap_ph:"Nom de ce point d'accès", save:"Enregistrer", saved:"Enregistré", ap:"Point d'accès", ap_unknown:"Point d'accès sans nom : à nommer dans la fiche",
     to_ha:"Chemin vers Home Assistant", r_direct:"{br} en direct", r_via:"{br} via {via}", r_parent:"parent {p}, puis ", r_cost:"coût {c}",
@@ -794,12 +794,28 @@ async function runAction(btn) {
       // the parent (new or same) and its link now, as the table shows them
       const lk = [res.parent, res.lqi ? "LQI " + res.lqi : null, res.rssi != null ? res.rssi + " dBm" : null].filter(Boolean).join(" · ");
       msg = F("a_parent_" + (res.parent ? k : k === "new" || k === "same" ? "unknown" : k), {n: r.name, l: lk});
+      if (res.result === "unknown") followSearch(id);   // the add-on keeps reading the node: its result comes later
     }
   } catch (e) { msg = F("a_failed", {n: r.name}); }
   toast(msg);
   document.querySelectorAll(`[data-act="${a}"][data-node="${id}"]`).forEach(b => { b.disabled = false; b.classList.remove("busy"); });
   await load(true);
   if ($("#sheet").classList.contains("on") && openId === id) openNode(id);   // the panel shows the new values
+}
+// result of a parent search not known yet: the add-on reads the node and its parent again for
+// 5 minutes; the page reloads meanwhile and shows the result (row, panel, message) when it comes
+async function followSearch(id) {
+  const end = Date.now() + 6 * 60e3;
+  while (Date.now() < end) {
+    await new Promise(r => setTimeout(r, 20e3));
+    await load(true);
+    const r = (D.rows || []).find(x => x.id === id);
+    if (r && r.search && r.search.state === "done") {
+      toast(r.search.text);
+      if ($("#sheet").classList.contains("on") && openId === id) openNode(id);
+      return;
+    }
+  }
 }
 function toast(text) {
   let el = $("#toast");
