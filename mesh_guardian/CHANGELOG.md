@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.4.5] - 2026-11-14
+
+### Fixed
+
+- "new" badge: the date a node was added was not passed to the table.
+
 ## [2.4.4] - 2026-11-14
 
 ### Added

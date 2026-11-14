@@ -214,7 +214,7 @@ class MatterLive:
         """Nodes in the get_nodes format (for the radio survey and the table)."""
         with self.lock:
             return [{"node_id": int(k, 16), "available": n["available"], "attributes": dict(n["attributes"]),
-                     "last": n["last"], "radio": n["radio"]} for k, n in self.nodes.items()]
+                     "last": n["last"], "radio": n["radio"], "date_commissioned": n.get("date_commissioned")} for k, n in self.nodes.items()]
 
     def leaders(self):
         """Hex ids of the available nodes whose Thread role is leader (cheap: no copy)."""
