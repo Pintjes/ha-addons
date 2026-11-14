@@ -195,7 +195,11 @@ def find_parents(thread, labels):
                     continue   # router since: stale entry
                 cur = parents.get(child)
                 if cur is None or cur[0] == v["name"] or cur[0].startswith("router "):
-                    parents[child] = (v["name"], nb_rssi(nb), nb.get("5"), ext_of(v["attrs"]) or nid)   # signal heard by the parent
+                    rssi = nb_rssi(nb)
+                    if rssi is None and cur and cur[0] == v["name"]:
+                        rssi = cur[1]   # the parent does not give it: keep the one read on the child side
+                    parents[child] = (v["name"], rssi, nb.get("5") or (cur[2] if cur else None),
+                                      ext_of(v["attrs"]) or nid)   # signal heard by the parent
     for nid, v in thread.items():   # an end device only keeps its parent in its table
         if nid in parents or v["attrs"].get("0/53/1") not in (2, 3):
             continue

@@ -4,6 +4,16 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.3.2] - 2026-11-14
+
+### Fixed
+
+- Parent search result: only the signal of the table is given (no other source);
+  "same parent" when the parent did not change even if the node got a new
+  address; the node addresses are read again after the search.
+- Attachment signal: when the parent does not give it, the one read on the node
+  side is kept instead of "—".
+
 ## [2.3.1] - 2026-11-14
 
 ### Changed
