@@ -659,7 +659,7 @@ function renderList() {
   const list = rows.filter(f).filter(r => !q || [r.name, r.area, r.model, r.id, linkName(r)].some(x => (x || "").toLowerCase().includes(q)))
     .sort(sorter());
   $("#rows").innerHTML = list.map(r => {
-    const adv = r.advice ? `<span class="adv ${lvl(r)}" title="${esc(r.advice_detail || "")}">${lvl(r) === "warn" ? IC.bulb : IC.info}<span>${esc(r.advice)}</span></span>` : `<span class="adv"></span>`;
+    const adv = r.advice ? `<span class="adv ${lvl(r)}" title="${esc(r.advice_detail || "")}">${IC.bulb}<span>${esc(r.advice)}</span></span>` : `<span class="adv"></span>`;
     const meta = [r.area, r.model, NETS[net(r)], r.id].filter(Boolean).map(esc).join(" · ");
     const resp = r.rtt_fail ? `<span class="st bad">${IC.bad}${L("no_answer")}</span>` : `<span class="num">${ms(r.rtt_ms)}</span>`;
     const last = r.last_report ? `<span title="${esc(new Date(r.last_report * 1000).toLocaleString(LANG) + (r.contact_src ? " · " + (L("csrc")[r.contact_src] || r.contact_src) : ""))}">${ago(r.last_report)}</span>` : `<span class="mut">${L("never")}</span>`;

@@ -17,6 +17,10 @@ node of your mesh in one table, and tells you what to fix — in plain language.
 > **Requirements:** Home Assistant OS or Supervised, the Matter integration,
 > an **MQTT broker** (Mosquitto broker add-on) and the **MQTT** integration.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Pintjes/ha-addons/main/mesh_guardian/images/screenshot.png" alt="Mesh Guardian page (demo data)" width="900">
+</p>
+
 ## Why this add-on
 
 **1. Lost nodes come back on their own.**
