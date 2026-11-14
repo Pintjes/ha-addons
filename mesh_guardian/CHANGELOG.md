@@ -4,6 +4,13 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.3.1] - 2026-11-14
+
+### Changed
+
+- Silent nodes: only their status (with its tooltip) shows it, no card in *To
+  handle* nor line in the verdict (often short-lived).
+
 ## [2.3.0] - 2026-11-14
 
 Texts audit: short and to the point.

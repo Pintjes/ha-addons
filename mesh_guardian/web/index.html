@@ -416,7 +416,8 @@ const sigCls = v => v >= TH.rssi_good ? "ok" : v > TH.rssi_bad ? "warn" : "bad";
 const sigWord = v => L("sig")[v >= TH.rssi_good ? 2 : v > TH.rssi_bad ? 1 : 0];
 const sigBars = v => v >= TH.rssi_good + 10 ? 4 : v >= TH.rssi_good ? 3 : v > TH.rssi_bad ? 2 : 1;
 const lvl = r => r.advice_level === "low" ? "info" : "warn";
-const sev = r => !r.available ? 0 : r.silent_s ? 1 : r.advice ? (lvl(r) === "warn" ? 1 : 2) : 3;
+// a silent node is only shown by its status (often short-lived): not in "To handle" nor the verdict
+const sev = r => !r.available ? 0 : r.advice ? (lvl(r) === "warn" ? 1 : 2) : 3;
 const silentTip = r => F("silent_tip", {t: dur1(r.silent_s), u: dur1(r.rhythm_s)});
 const since = r => !r.since ? "?" : (Date.now() / 1000 - r.since > 86400 ? dt(r.since) : hm(r.since)) + " (" + ago(r.since) + ")";
 const status = r => r.available && r.silent_s ? `<span class="st warn" title="${esc(silentTip(r))}">${IC.warn}${L("silent")}</span>`
@@ -479,7 +480,7 @@ function bar(v, v24) {
 function renderHero() {
   const n = D.network || {}, rows = D.rows || [], q = D.quality;
   const down = rows.filter(r => !r.available), act = rows.filter(r => r.available && !r.silent_s && r.advice && lvl(r) === "warn");
-  const quiet = rows.filter(r => r.available && r.silent_s);
+  const quiet = [];
   const cls = down.length ? "bad" : act.length || quiet.length ? "warn" : "ok";
   const parts = [];
   if (down.length) parts.push(P2("n_down", down.length));
