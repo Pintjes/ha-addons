@@ -1,0 +1,51 @@
+name: Mesh Guardian
+version: "1.0.0"
+slug: mesh_guardian
+url: https://github.com/Pintjes/ha-addons
+description: >-
+  Keeps your Thread / Matter devices online: automatic recovery of lost nodes,
+  a live table of every node, border router monitoring and radio advice.
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: application
+boot: auto
+host_network: true
+privileged:
+  - NET_RAW
+ingress: true
+ingress_port: 8790
+panel_icon: mdi:table-network
+panel_title: Mesh Guardian
+homeassistant_api: true
+services:
+  - mqtt:need
+map:
+  - share:rw
+options:
+  language: en
+  ping_after: 120
+  ping_retry: 300
+  ping_max_attempts: 6
+  ping_all_interval: 60
+  radio_interval: 30
+  rebuild_history: true
+  all_thread_networks: false
+  log_events_to_file: true
+  passive_contact: false
+  matter_fabric: ""
+  matter_server_url: ""
+schema:
+  language: list(en|fr)
+  ping_after: int(30,3600)
+  ping_retry: int(60,3600)
+  ping_max_attempts: int(1,20)
+  ping_all_interval: int(0,1440)
+  radio_interval: int(10,1440)
+  rebuild_history: bool
+  all_thread_networks: bool
+  log_events_to_file: bool
+  passive_contact: bool
+  matter_fabric: str?
+  matter_server_url: str?

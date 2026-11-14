@@ -1,0 +1,38 @@
+---
+configuration:
+  language:
+    name: "Langue"
+    description: "Langue du journal et des entités."
+  ping_after:
+    name: "Premier ping après (s)"
+    description: "Délai avant de pinguer une node indisponible."
+  ping_retry:
+    name: "Délai entre deux pings (s)"
+    description: "Délai avant de pinguer à nouveau la même node."
+  ping_max_attempts:
+    name: "Pings au maximum"
+    description: "Nombre de pings avant d'abandonner."
+  ping_all_interval:
+    name: "Balayage (min)"
+    description: "Ping régulier des nodes sur secteur. 0 = jamais."
+  radio_interval:
+    name: "Relevé radio (min)"
+    description: "Délai entre deux relevés radio."
+  rebuild_history:
+    name: "Reprendre l'historique"
+    description: "Au premier démarrage, reprendre les coupures des 7 derniers jours."
+  all_thread_networks:
+    name: "Autres réseaux Thread"
+    description: "Suivre aussi les réseaux Thread qui ne sont pas celui des nodes Matter."
+  log_events_to_file:
+    name: "Fichier des événements"
+    description: "Enregistrer les événements dans /share/mesh_guardian."
+  passive_contact:
+    name: "Contact passif"
+    description: "Compter chaque paquet IPv6 d'une node comme un contact (droit NET_RAW)."
+  matter_fabric:
+    name: "Fabric Matter"
+    description: "Laisser vide : détection automatique."
+  matter_server_url:
+    name: "Adresse du Matter Server"
+    description: "Laisser vide : add-on Matter Server."

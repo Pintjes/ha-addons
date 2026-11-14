@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Agent Bridge</title>
+<style>
+  :root {
+    --bg: #111318; --card: #1c1f26; --text: #e6e6e6; --muted: #9aa0a6;
+    --accent: #3b5bdb; --user: #3b6fd8; --user-text: #fff; --divider: #2c3038;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: Roboto, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text);
+         display: flex; flex-direction: column; font-size: 15px; }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--divider); }
+  header img { width: 28px; height: 28px; border-radius: 7px; }
+  header h1 { font-size: 18px; font-weight: 500; margin: 0; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header .grow { flex: 1; }
+  select, button.flat { background: transparent; color: var(--text); border: 1px solid var(--divider);
+         border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+  select option { background: var(--card); color: var(--text); }
+  #feed { flex: 1; overflow-y: auto; padding: 16px; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  .day { text-align: center; color: var(--muted); font-size: 12px; margin: 22px 0 8px; text-transform: capitalize; }
+  .conv { text-align: center; margin: 14px 0 6px; }
+  .conv span { color: var(--muted); font-size: 12px; border: 1px solid var(--divider); border-radius: 12px; padding: 2px 10px; }
+  .row { display: flex; margin: 6px 0; align-items: flex-end; gap: 8px; }
+  .row.user { justify-content: flex-end; }
+  .bubble { max-width: 75%; padding: 9px 13px; border-radius: 16px; line-height: 1.4; white-space: pre-wrap;
+            overflow-wrap: anywhere; }
+  .row.claude .bubble { background: var(--card); border-bottom-left-radius: 4px; }
+  .row.user .bubble { background: var(--user); color: var(--user-text); border-bottom-right-radius: 4px; }
+  .avatar { width: 26px; height: 26px; border-radius: 7px; flex: none; }
+  .avatar.home { display: grid; place-items: center; font-size: 18px; }
+  .time { font-size: 11px; color: var(--muted); margin: 0 4px 2px; flex: none; }
+  .pending .bubble { opacity: .75; }
+  .dots::after { content: "…"; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: .2; } }
+  .empty { color: var(--muted); text-align: center; margin-top: 30vh; }
+  footer { border-top: 1px solid var(--divider); padding: 10px 16px 14px; }
+  .bar { max-width: 860px; margin: 0 auto; display: flex; gap: 8px; align-items: center;
+         background: var(--card); border-radius: 12px; padding: 4px 6px 4px 14px; }
+  .bar input { flex: 1; background: transparent; border: none; color: var(--text); font: inherit; padding: 10px 0; outline: none; }
+  .icon { width: 40px; height: 40px; border-radius: 50%; border: none; background: transparent; color: var(--text);
+          cursor: pointer; display: grid; place-items: center; }
+  .icon:hover { background: rgba(127,127,127,.15); }
+  .icon:disabled { opacity: .35; cursor: default; }
+  .icon.rec { background: var(--accent); color: #fff; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 8px rgba(217,119,87,.25); } }
+  .icon svg { width: 22px; height: 22px; fill: currentColor; }
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 10; }
+  .overlay[hidden] { display: none; }
+  .sheet { background: var(--bg); border: 1px solid var(--divider); border-radius: 14px; width: min(920px, 94vw);
+           height: min(760px, 90vh); display: flex; flex-direction: column; padding: 14px; gap: 10px; }
+  .sheethead { display: flex; align-items: center; gap: 8px; }
+  .sheethead .grow { flex: 1; }
+  .sheet textarea { flex: 1; resize: none; background: var(--card); color: var(--text); border: 1px solid var(--divider);
+           border-radius: 10px; padding: 12px; font: 14px/1.5 ui-monospace, Consolas, monospace; outline: none; }
+  button.flat.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.flat .ico { margin-right: 6px; }
+  @media (max-width: 640px) {
+    header { padding: 8px 10px; gap: 8px; }
+    header .sub { display: none; }
+    header h1 { font-size: 17px; }
+    button.flat .lbl { display: none; }
+    button.flat .ico { margin: 0; font-size: 16px; }
+    button.flat { padding: 6px 9px; }
+    select { max-width: 120px; }
+    #feed { padding: 10px; }
+    .bubble { max-width: 85%; }
+    footer { padding: 8px 10px 10px; }
+  }
+  .hint { max-width: 860px; margin: 6px auto 0; color: var(--muted); font-size: 12px; min-height: 15px; }
+</style>
+</head>
+<body>
+<header>
+  <img src="icon.png" alt="">
+  <div><h1>Voice Agent Bridge</h1><div class="sub" id="sub"></div></div>
+  <div class="grow"></div>
+  <button class="flat" id="notesbtn"><span class="ico">✎</span><span class="lbl" id="noteslbl"></span></button>
+  <select id="pipeline" title=""></select>
+  <button class="flat" id="newconv"><span class="ico">＋</span><span class="lbl" id="newlbl"></span></button>
+</header>
+<div id="feed"><div class="wrap" id="list"></div></div>
+<div id="notes" class="overlay" hidden>
+  <div class="sheet">
+    <div class="sheethead"><div><b id="notestitle"></b><div class="sub" id="notespath"></div></div>
+      <div class="grow"></div>
+      <button class="flat" id="notescancel"></button><button class="flat primary" id="notessave"></button></div>
+    <textarea id="notestext" spellcheck="true"></textarea>
+    <div class="hint" id="noteshint"></div>
+  </div>
+</div>
+<footer>
+  <div class="bar">
+    <input id="input" autocomplete="off">
+    <button class="icon" id="send" title=""><svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg></button>
+    <button class="icon" id="mic" title=""><svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11z"/></svg></button>
+  </div>
+  <div class="hint" id="hint"></div>
+</footer>
+<script>
+const T = {
+  en: { notes: "House notes", save: "Save", cancel: "Cancel", saved: "Saved: Claude uses it from the next request.", unsaved: "Unsaved changes: close anyway?",
+        sub: "Conversation history", placeholder: "Type a request", send: "Send", mic: "Talk",
+        newconv: "New conversation", empty: "No conversation yet. Say the wake word to a satellite or type below.",
+        local: "Home Assistant", assist: "Assist", thinking: "Claude is thinking", listening: "Listening…",
+        nohass: "Open this panel from the Home Assistant sidebar to talk through Assist.",
+        nomic: "Microphone unavailable: it needs HTTPS (for example your Nabu Casa address) and permission.",
+        micframe: "Microphone access enabled, reloading the panel…", error: "Error", today: "Today", yesterday: "Yesterday",
+        pipeline: "Assistant", newstarted: "New conversation: the next request starts from scratch.",
+        appmic: "Microphone of the Home Assistant app: the exchange will appear here." },
+  fr: { notes: "Notes de la maison", save: "Enregistrer", cancel: "Annuler", saved: "Enregistré : Claude l'utilise dès la prochaine demande.", unsaved: "Modifications non enregistrées : fermer quand même ?",
+        sub: "Historique des conversations", placeholder: "Saisir une demande", send: "Envoyer", mic: "Parler",
+        newconv: "Nouvelle conversation", empty: "Aucune conversation pour l'instant. Parle à un satellite ou écris ci-dessous.",
+        local: "Home Assistant", assist: "Assist", thinking: "Claude réfléchit", listening: "J'écoute…",
+        nohass: "Ouvre ce panneau depuis la barre latérale de Home Assistant pour passer par Assist.",
+        nomic: "Micro indisponible : il faut une connexion HTTPS (par exemple ton adresse Nabu Casa) et l'autorisation du navigateur.",
+        micframe: "Accès au micro activé, rechargement du panneau…", error: "Erreur", today: "Aujourd'hui", yesterday: "Hier",
+        pipeline: "Assistant", newstarted: "Nouvelle conversation : la prochaine demande repart de zéro.",
+        appmic: "Micro de l'appli Home Assistant : l'échange apparaîtra ici." },
+};
+let L = T.en, lang = "en";
+const $ = (id) => document.getElementById(id);
+const list = $("list"), feed = $("feed");
+let lastId = 0, lastConv = null, lastDay = null, items = [];
+let pipelineId = null, conversationId = null, busy = false, pipelines = [];
+
+// ---------- Home Assistant connection (from the parent frame) ----------
+function getHass() {
+  try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; }
+}
+function copyTheme() {
+  try {
+    const cs = getComputedStyle(window.parent.document.querySelector("home-assistant"));
+    const map = { "--bg": "--primary-background-color", "--card": "--card-background-color",
+                  "--text": "--primary-text-color", "--muted": "--secondary-text-color",
+                  "--user": "--primary-color", "--divider": "--divider-color" };
+    for (const [ours, theirs] of Object.entries(map)) {
+      const v = cs.getPropertyValue(theirs).trim();
+      if (v) document.documentElement.style.setProperty(ours, v);
+    }
+    const t = cs.getPropertyValue("--text-primary-color").trim();
+    if (t) document.documentElement.style.setProperty("--user-text", t);
+  } catch (e) { /* standalone */ }
+}
+
+// ---------- History ----------
+function fmtDay(ts) {
+  const d = new Date(ts * 1000), now = new Date();
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === now.toDateString()) return L.today;
+  if (d.toDateString() === y.toDateString()) return L.yesterday;
+  return d.toLocaleDateString(lang, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+}
+function fmtTime(ts) { return new Date(ts * 1000).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" }); }
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function row(who, text, ts, extra, home) {
+  const r = el("div", "row " + who + (extra ? " " + extra : ""));
+  const b = el("div", "bubble", text);
+  if (who === "claude") { let a; if (home) { a = el("span", "avatar home", "🏠"); } else { a = el("img", "avatar"); a.src = "icon.png"; } r.append(a, b); if (ts) r.append(el("span", "time", fmtTime(ts))); }
+  else { if (ts) r.append(el("span", "time", fmtTime(ts))); r.append(b); }
+  return r;
+}
+function sourceLabel(it) {
+  if (it.source === "local") return "🏠 " + (it.place || L.local);
+  return it.place ? "🎙️ " + it.place : "💬 " + L.assist;
+}
+function renderItem(it) {
+  const day = fmtDay(it.ts);
+  if (day !== lastDay) { list.append(el("div", "day", day)); lastDay = day; lastConv = null; }
+  if (it.conv !== lastConv) {
+    const c = el("div", "conv"); c.append(el("span", null, sourceLabel(it) + " · " + fmtTime(it.ts)));
+    list.append(c); lastConv = it.conv;
+  }
+  list.append(row("user", it.user, null), row("claude", it.assistant, it.ts, null, it.source === "local"));
+}
+function nearBottom() { return feed.scrollHeight - feed.scrollTop - feed.clientHeight < 120; }
+function scrollDown() { feed.scrollTop = feed.scrollHeight; }
+async function refresh(force) {
+  try {
+    const r = await fetch("api/history?after=" + lastId, { cache: "no-store" });
+    const data = await r.json();
+    if (data.lang && T[data.lang] && data.lang !== lang) { lang = data.lang; L = T[lang]; applyTexts(); }
+    const stick = nearBottom() || force;
+    const empty = list.querySelector(".empty"); if (empty && data.items.length) empty.remove();
+    const pending = list.querySelector(".pendingblock");
+    let older = false;
+    for (const it of data.items) {
+      lastId = Math.max(lastId, it.id);
+      if (items.length && it.ts < items[items.length - 1].ts) older = true;
+      items.push(it);
+    }
+    if (data.items.length && pending && pending.isConnected) pending.remove();
+    if (older) {
+      items.sort((a, b) => a.ts - b.ts);
+      list.innerHTML = ""; lastDay = null; lastConv = null;
+      for (const it of items) renderItem(it);
+    } else {
+      for (const it of data.items) renderItem(it);
+    }
+    if (!items.length && !list.children.length) list.append(el("div", "empty", L.empty));
+    if (data.items.length && stick) scrollDown();
+  } catch (e) { /* retry later */ }
+}
+
+// ---------- Pending exchange (while a request runs from the panel) ----------
+let pend = null;
+function startPending(userText) {
+  const empty = list.querySelector(".empty"); if (empty) empty.remove();
+  const block = el("div", "pendingblock");
+  const u = row("user", userText || "", null, "pending");
+  const c = row("claude", "", null, "pending");
+  c.querySelector(".bubble").classList.add("dots"); c.querySelector(".bubble").textContent = L.thinking;
+  block.append(u, c); list.append(block); scrollDown();
+  pend = { block, user: u.querySelector(".bubble"), claude: c.querySelector(".bubble"), text: "" };
+}
+function pendingUser(text) { if (pend) { pend.user.textContent = text; } }
+function pendingDelta(text) {
+  if (!pend) return;
+  if (!pend.text) pend.claude.classList.remove("dots");
+  pend.text += text; pend.claude.textContent = pend.text; if (nearBottom()) scrollDown();
+}
+function pendingFinal(text) { if (pend) { pend.claude.classList.remove("dots"); pend.claude.textContent = text || pend.text; } }
+
+// ---------- Assist pipeline ----------
+async function loadPipelines() {
+  const hass = getHass(); const sel = $("pipeline");
+  if (!hass) { sel.style.display = "none"; return; }
+  try {
+    const res = await hass.connection.sendMessagePromise({ type: "assist_pipeline/pipeline/list" });
+    const saved = localStorage.getItem("voice_agent_bridge_pipeline");
+    pipelines = res.pipelines;
+    sel.innerHTML = "";
+    for (const p of res.pipelines) { const o = el("option", null, p.name); o.value = p.id; sel.append(o); }
+    const guess = res.pipelines.find((p) => /claude/i.test(p.name) || /claude/i.test(p.conversation_engine || ""));
+    pipelineId = (saved && res.pipelines.some((p) => p.id === saved)) ? saved : (guess ? guess.id : res.preferred_pipeline);
+    sel.value = pipelineId;
+  } catch (e) { sel.style.display = "none"; }
+}
+$("pipeline").onchange = (e) => { pipelineId = e.target.value; conversationId = null;
+  try { localStorage.setItem("voice_agent_bridge_pipeline", pipelineId); } catch (err) {} };
+
+async function runPipeline(msg, handlers) {
+  const hass = getHass();
+  const payload = Object.assign({ type: "assist_pipeline/run", pipeline: pipelineId || undefined,
+                                  conversation_id: conversationId || undefined }, msg);
+  let unsub = null, done = false;
+  return new Promise(async (resolve) => {
+    const finish = () => { if (done) return; done = true; if (unsub) unsub(); resolve(); };
+    try {
+      unsub = await hass.connection.subscribeMessage((ev) => {
+        try { handlers(ev); } catch (e) { console.error(e); }
+        if (ev.type === "run-end" || ev.type === "error") finish();
+      }, payload);
+    } catch (e) { setHint(L.error + ": " + (e.message || e.code || e)); finish(); }
+  });
+}
+function handleIntent(ev, userText) {
+  if (ev.type === "intent-progress" && ev.data && ev.data.chat_log_delta && ev.data.chat_log_delta.content) {
+    pendingDelta(ev.data.chat_log_delta.content);
+  } else if (ev.type === "intent-end") {
+    const out = ev.data.intent_output || {};
+    conversationId = out.conversation_id || conversationId;
+    const speech = (((out.response || {}).speech || {}).plain || {}).speech || "";
+    pendingFinal(speech);
+    if (ev.data.processed_locally) setTimeout(syncLocal, 300);
+  } else if (ev.type === "error") {
+    pendingFinal(L.error + ": " + ((ev.data && ev.data.message) || ""));
+  }
+}
+
+async function sendText() {
+  const input = $("input"); const text = input.value.trim();
+  if (!text || busy) return;
+  input.value = ""; busy = true; setButtons();
+  startPending(text);
+  if (getHass()) {
+    await runPipeline({ start_stage: "intent", end_stage: "intent", input: { text } }, (ev) => handleIntent(ev, () => text));
+  } else {
+    await directChat(text);
+  }
+  busy = false; setButtons();
+  setTimeout(() => refresh(true), 400);
+}
+
+// Fallback outside Home Assistant: straight to the gateway (no local intents)
+let directHistory = [];
+async function directChat(text) {
+  directHistory.push({ role: "user", content: text });
+  try {
+    const r = await fetch("v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "claude", messages: directHistory, stream: false }) });
+    const data = await r.json();
+    const answer = data.choices[0].message.content;
+    directHistory.push({ role: "assistant", content: answer }); pendingFinal(answer);
+  } catch (e) { pendingFinal(L.error); }
+}
+
+// ---------- Microphone (16 kHz PCM streamed to the Assist pipeline) ----------
+let rec = null;
+async function ensureFramePermission() {
+  try {
+    const f = window.frameElement;
+    if (f && !(f.getAttribute("allow") || "").includes("microphone")) {
+      f.setAttribute("allow", ((f.getAttribute("allow") || "") + "; microphone").replace(/^; /, ""));
+      setHint(L.micframe);
+      setTimeout(() => location.reload(), 300);
+      return false;
+    }
+  } catch (e) { /* not framed */ }
+  return true;
+}
+// In the Home Assistant companion app, the microphone button always opens the app's own Assist
+function appAssist() {
+  try {
+    const ext = getHass().auth.external;
+    if (!ext || !ext.fireMessage || !ext.config || !ext.config.hasAssist) return false;
+    ext.fireMessage({ type: "assist/show", payload: { pipeline_id: pipelineId || undefined, start_listening: true } });
+    setHint(L.appmic); setTimeout(() => setHint(""), 6000);
+    return true;
+  } catch (e) { return false; }
+}
+async function startMic() {
+  if (busy) return;
+  const hass = getHass();
+  if (!hass) { setHint(L.nohass); return; }
+  if (appAssist()) return;  // Home Assistant app: always use its own Assist microphone
+  if (!window.isSecureContext || !navigator.mediaDevices) { setHint(L.nomic); return; }
+  if (!(await ensureFramePermission())) return;
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+  catch (e) { setHint(L.nomic); return; }
+  busy = true; setButtons(); $("mic").classList.add("rec"); setHint(L.listening);
+  const ctx = new AudioContext({ sampleRate: 16000 });
+  const src = ctx.createMediaStreamSource(stream);
+  const code = "class R extends AudioWorkletProcessor{process(i){const c=i[0]&&i[0][0];if(c)this.port.postMessage(c.slice(0));return true}}registerProcessor('rec',R)";
+  await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([code], { type: "application/javascript" })));
+  const node = new AudioWorkletNode(ctx, "rec");
+  src.connect(node);
+  rec = { ctx, stream, node, handler: null, open: true };
+  startPending("");
+  let heard = "";
+  node.port.onmessage = (e) => {
+    if (!rec || !rec.open || rec.handler == null) return;
+    const f = e.data, pcm = new Int16Array(f.length);
+    for (let i = 0; i < f.length; i++) { const v = Math.max(-1, Math.min(1, f[i])); pcm[i] = v < 0 ? v * 0x8000 : v * 0x7fff; }
+    const buf = new Uint8Array(1 + pcm.byteLength); buf[0] = rec.handler; buf.set(new Uint8Array(pcm.buffer), 1);
+    try { hass.connection.socket.send(buf); } catch (err) {}
+  };
+  await runPipeline({ start_stage: "stt", end_stage: "tts", input: { sample_rate: 16000 } }, (ev) => {
+    if (ev.type === "run-start") { rec.handler = ev.data.runner_data.stt_binary_handler_id; }
+    else if (ev.type === "stt-vad-end") { stopMic(); }
+    else if (ev.type === "stt-end") { stopMic(); heard = (ev.data.stt_output || {}).text || ""; pendingUser(heard); setHint(""); }
+    else if (ev.type === "tts-end") { const url = ev.data.tts_output && ev.data.tts_output.url; if (url) new Audio(url).play().catch(() => {}); }
+    else if (ev.type === "error") { stopMic(); setHint(L.error + ": " + ((ev.data && ev.data.message) || "")); }
+    handleIntent(ev, () => heard);
+  });
+  stopMic();
+  busy = false; setButtons(); setTimeout(() => refresh(true), 400);
+}
+function stopMic() {
+  if (!rec || !rec.open) return;
+  rec.open = false;
+  try { if (rec.handler != null) getHass().connection.socket.send(new Uint8Array([rec.handler])); } catch (e) {}
+  try { rec.stream.getTracks().forEach((t) => t.stop()); rec.ctx.close(); } catch (e) {}
+  $("mic").classList.remove("rec"); setHint("");
+}
+
+// ---------- Answers given by Home Assistant itself (local intents) ----------
+// Home Assistant keeps the last runs of each assistant in memory (Voice assistants → Debug).
+// The panel copies the ones answered locally into the history, so every source shows up.
+let checked = new Set(), syncing = false;
+try { checked = new Set(JSON.parse(localStorage.getItem("voice_agent_bridge_runs") || "[]")); } catch (e) {}
+function saveChecked() {
+  try { localStorage.setItem("voice_agent_bridge_runs", JSON.stringify([...checked].slice(-1000))); } catch (e) {}
+}
+function placeOf(hass, deviceId) {
+  try {
+    const dev = deviceId && hass.devices && hass.devices[deviceId];
+    const area = dev && dev.area_id && hass.areas && hass.areas[dev.area_id];
+    return area ? area.name : "";
+  } catch (e) { return ""; }
+}
+async function syncLocal() {
+  const hass = getHass();
+  if (!hass || syncing || !pipelines.length) return;
+  syncing = true;
+  let added = false;
+  try {
+    for (const p of pipelines) {
+      let runs;
+      try { runs = (await hass.connection.sendMessagePromise({ type: "assist_pipeline/pipeline_debug/list", pipeline_id: p.id })).pipeline_runs || []; }
+      catch (e) { continue; }
+      for (const r of runs) {
+        if (checked.has(r.pipeline_run_id)) continue;
+        let evs;
+        try { evs = (await hass.connection.sendMessagePromise({ type: "assist_pipeline/pipeline_debug/get", pipeline_id: p.id, pipeline_run_id: r.pipeline_run_id })).events || []; }
+        catch (e) { continue; }
+        if (!evs.some((e) => e.type === "run-end" || e.type === "error")) continue;  // still running: retry later
+        checked.add(r.pipeline_run_id);
+        const start = evs.find((e) => e.type === "intent-start"), end = evs.find((e) => e.type === "intent-end");
+        if (!start || !end || !end.data.processed_locally) continue;
+        const out = end.data.intent_output || {};
+        const speech = (((out.response || {}).speech || {}).plain || {}).speech || "";
+        const text = start.data.intent_input || "";
+        if (!speech || !text) continue;
+        const res = await fetch("api/log", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ run: r.pipeline_run_id, conv: out.conversation_id, user: text, assistant: speech,
+                                 place: placeOf(hass, start.data.device_id), ts: Date.parse(end.timestamp) / 1000 }) });
+        if (res.ok && (await res.json()).added) added = true;
+      }
+    }
+  } finally { saveChecked(); syncing = false; }
+  if (added) refresh();
+}
+
+// ---------- House notes ----------
+let notesOrig = "";
+async function openNotes() {
+  try {
+    const r = await fetch("api/notes", { cache: "no-store" }); const d = await r.json();
+    notesOrig = d.text || ""; $("notestext").value = notesOrig; $("notespath").textContent = d.path || "";
+    $("noteshint").textContent = ""; $("notes").hidden = false; $("notestext").focus();
+  } catch (e) { setHint(L.error); }
+}
+function closeNotes() {
+  if ($("notestext").value !== notesOrig && !confirm(L.unsaved)) return;
+  $("notes").hidden = true;
+}
+async function saveNotes() {
+  const text = $("notestext").value;
+  try {
+    const r = await fetch("api/notes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+    if (!r.ok) throw new Error((await r.json()).error || r.status);
+    notesOrig = text; $("notes").hidden = true; setHint(L.saved); setTimeout(() => setHint(""), 4000);
+  } catch (e) { $("noteshint").textContent = L.error + ": " + e.message; }
+}
+$("notesbtn").onclick = openNotes;
+$("notescancel").onclick = closeNotes;
+$("notessave").onclick = saveNotes;
+$("notestext").onkeydown = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); saveNotes(); }
+                                    if (e.key === "Escape") closeNotes(); };
+$("notes").onclick = (e) => { if (e.target.id === "notes") closeNotes(); };
+
+// ---------- UI ----------
+function setHint(t) { $("hint").textContent = t || ""; }
+function setButtons() { $("send").disabled = busy; $("mic").disabled = busy && !(rec && rec.open); }
+function applyTexts() {
+  $("sub").textContent = L.sub; $("input").placeholder = L.placeholder; $("send").title = L.send;
+  $("mic").title = L.mic; $("newlbl").textContent = L.newconv; $("newconv").title = L.newconv;
+  $("noteslbl").textContent = L.notes; $("notesbtn").title = L.notes;
+  $("notestitle").textContent = L.notes; $("notessave").textContent = L.save; $("notescancel").textContent = L.cancel; $("pipeline").title = L.pipeline;
+  const empty = list.querySelector(".empty"); if (empty) empty.textContent = L.empty;
+}
+$("send").onclick = sendText;
+$("input").onkeydown = (e) => { if (e.key === "Enter") sendText(); };
+$("mic").onclick = () => { if (rec && rec.open) stopMic(); else startMic(); };
+$("newconv").onclick = () => { conversationId = null; directHistory = []; lastConv = null; setHint(L.newstarted); setTimeout(() => setHint(""), 3000); };
+
+copyTheme(); applyTexts();
+refresh(true).then(scrollDown);
+loadPipelines().then(syncLocal);
+setInterval(refresh, 3000);
+setInterval(syncLocal, 10000);
+</script>
+</body>
+</html>

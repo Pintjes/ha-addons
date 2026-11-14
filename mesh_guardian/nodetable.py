@@ -1,0 +1,392 @@
+# Mesh Guardian — Home Assistant add-on
+# Author: Pintjes — https://github.com/Pintjes/ha-addons
+# License: GPL-3.0-or-later (see LICENSE)
+"""Rows of the node table (sidebar page).
+
+Every Thread node of Home Assistant with its radio link to its parent, its
+neighbors, its instability over 24h, its outages and its reboots. Radio values
+are the current ones of the Matter Server cache (live link, matterlive.py), so
+the effect of an action (battery removed, plug moved) shows within seconds of
+the next report of the node. Nothing here sends traffic to the nodes.
+"""
+
+import base64
+import logging
+import threading
+import time
+
+from i18n import lang, t
+
+LOG = logging.getLogger("mg.table")
+
+ROLE = {0: "unspecified", 1: "unassigned", 2: "sleepy_end_device", 3: "end_device", 4: "reed",
+        5: "router", 6: "leader"}
+BOOT_REASON = {0: "unspecified", 1: "power_on", 2: "brown_out", 3: "software_watchdog",
+               4: "hardware_watchdog", 5: "software_update", 6: "software_reset"}
+COUNTERS = {"detached": "0/53/14", "partition_changes": "0/53/19", "parent_changes": "0/53/21"}
+# signal colors, shared with the page (sent in every answer)
+THRESHOLDS = {"rssi_good": -75, "rssi_bad": -85, "lqi_good": 3, "lqi_bad": 1}
+NEW_PARENT_S = 30 * 60
+BACKGROUND_S = 20
+
+
+def ext_of(attrs):
+    """Thread extended address of a node (General Diagnostics network interfaces)."""
+    for itf in attrs.get("0/51/0") or []:
+        if not isinstance(itf, dict):
+            continue
+        if itf.get("7") == 4 or (itf.get("0") is not None and itf.get("0") == attrs.get("0/53/2")):
+            try:
+                raw = base64.b64decode(itf.get("4") or "")
+            except Exception:  # noqa: BLE001
+                continue
+            if len(raw) == 8:
+                return int.from_bytes(raw, "big")
+    return None
+
+
+BATTERY_LOW = 20   # % : below this, "change the batteries"
+
+
+def battery_of(attrs):
+    """(percent, level) from the Power Source cluster: BatPercentRemaining (x/47/12, in half
+    percent) and BatChargeLevel (x/47/14: 0 ok, 1 warning, 2 critical)."""
+    pct = lvl = None
+    for k, v in attrs.items():
+        parts = k.split("/")
+        if len(parts) != 3 or parts[1] != "47":
+            continue
+        if parts[2] == "12" and isinstance(v, (int, float)):
+            pct = round(v / 2)
+        elif parts[2] == "14" and isinstance(v, int):
+            lvl = v
+    return pct, lvl
+
+
+def is_thread(attrs):
+    """Thread interface in General Diagnostics, even without the Thread diagnostics cluster
+    (some devices, e.g. locks, do not expose it)."""
+    return any(isinstance(i, dict) and i.get("7") == 4 for i in attrs.get("0/51/0") or [])
+
+
+def is_router_role(role):
+    return role in (5, 6)
+
+
+def rloc_of(attrs):
+    """RLOC16 of a node, read from its mesh-local RLOC address (…:0:ff:fe00:RLOC16).
+
+    The address list may still hold an old RLOC address (e.g. a child that became a
+    router): when there are several, the one that matches the role of the node is kept."""
+    found = []
+    for itf in attrs.get("0/51/0") or []:
+        if not isinstance(itf, dict) or itf.get("7") != 4:
+            continue
+        for addr in itf.get("6") or []:
+            try:
+                raw = base64.b64decode(addr)
+            except Exception:  # noqa: BLE001
+                continue
+            if len(raw) == 16 and raw[8:14] == b"\x00\x00\x00\xff\xfe\x00":
+                rloc = int.from_bytes(raw[14:16], "big")
+                if rloc < 0xFC00 and rloc not in found:   # 0xFCxx: anycast locators, not a node
+                    found.append(rloc)
+    if not found:
+        return None
+    role = attrs.get("0/53/1")
+    if role in (2, 3, 4, 5, 6):
+        router = is_router_role(role)
+        for rloc in found:
+            if router == (not rloc & 0x3FF):
+                return rloc
+    return found[0]
+
+
+def router_of(attrs, rloc):
+    """True for a router. The reported role and the RLOC16 can each be out of date:
+    when they agree (or only one is known) it is that one; when they disagree, the
+    neighbor table decides (an end device only has a link with its parent)."""
+    role = attrs.get("0/53/1")
+    by_role = is_router_role(role) if role in (2, 3, 4, 5, 6) else None
+    by_rloc = (not rloc & 0x3FF) if rloc is not None else None
+    nbs = [nb for nb in attrs.get("0/53/7") or [] if isinstance(nb, dict)]
+    if by_rloc is None and nbs:
+        # no RLOC16 published: a node with children, or with established links to several
+        # routers, is a router whatever its (possibly stale) reported role
+        if any(nb.get("13") for nb in nbs):
+            return True
+        routers = [nb for nb in nbs if nb.get("5") and nb.get("2") is not None and not nb["2"] & 0x3FF]
+        if len(routers) >= 2:
+            return True
+    if by_role is None or by_rloc is None or by_role == by_rloc:
+        return by_role if by_role is not None else bool(by_rloc)
+    links = [nb for nb in attrs.get("0/53/7") or [] if isinstance(nb, dict) and (nb.get("5") or nb.get("13"))]
+    return len(links) >= 2
+
+
+def find_parents(thread, labels):
+    """Parent of every child node, and best link of every router.
+
+    thread: node hex -> {"name", "attrs"}; labels: extended address -> name
+    (Matter nodes and border routers). Returns (parents, rlocs, best):
+    parents: node hex -> (parent name, rssi, lqi, stable key of the parent); rlocs: node hex -> RLOC16;
+    best: node hex -> (name, rssi, lqi) of the strongest established link.
+
+    1. RLOC16: a child's RLOC16 is its parent's router RLOC16 plus a child id
+       (rloc & 0x03FF != 0), so the parent is the router with rloc & 0xFC00.
+       Works when the parent is a border router (not a Matter node).
+    2. Otherwise the neighbor entry flagged "is child" in the parent's table.
+    3. Otherwise the only neighbor of an end device.
+    A router (see router_of) has no parent.
+    """
+    by_name = {v["name"]: k for k, v in thread.items()}
+    rlocs = {nid: rloc_of(v["attrs"]) for nid, v in thread.items()}
+    router = {nid: router_of(v["attrs"], rlocs[nid]) for nid, v in thread.items()}
+    rloc_ext = {}   # RLOC16 of routers -> extended address, from every table of the mesh
+    for v in thread.values():
+        for nb in v["attrs"].get("0/53/7") or []:
+            if isinstance(nb, dict) and nb.get("2") is not None and nb.get("0") and not (nb["2"] & 0x3FF):
+                rloc_ext.setdefault(nb["2"], nb["0"])
+        for rt in v["attrs"].get("0/53/8") or []:
+            if isinstance(rt, dict) and rt.get("0") and rt.get("1") is not None:
+                rloc_ext.setdefault(rt["1"], rt["0"])
+    parents, best = {}, {}
+    for nid, v in thread.items():
+        nbs = [nb for nb in v["attrs"].get("0/53/7") or [] if isinstance(nb, dict)]
+        rloc = rlocs.get(nid)
+        if not router[nid] and rloc is not None and rloc & 0x3FF:
+            prloc = rloc & 0xFC00
+            own = [nb for nb in nbs if nb.get("2") == prloc]
+            ext = own[0].get("0") if own else rloc_ext.get(prloc)
+            name = match(ext, labels) if ext else None
+            name = name or f"router {prloc >> 10} (0x{prloc:04x})"
+            parents[nid] = (name, own[0].get("6") if own else None, own[0].get("5") if own else None, ext or prloc)
+        linked = [nb for nb in nbs if nb.get("5") and nb.get("6") is not None and not nb.get("13")]
+        if linked and router[nid]:
+            nb = max(linked, key=lambda x: x["6"])
+            best[nid] = (match(nb.get("0"), labels) or f"0x{(nb.get('2') or 0):04x}", nb.get("6"), nb.get("5"))
+    for nid, v in thread.items():   # seen from the parent side
+        for nb in v["attrs"].get("0/53/7") or []:
+            if isinstance(nb, dict) and nb.get("13"):
+                child = by_name.get(match(nb.get("0"), labels))
+                if not child or router[child]:
+                    continue   # router since: stale entry
+                cur = parents.get(child)
+                if cur is None or cur[0] == v["name"] or cur[0].startswith("router "):
+                    parents[child] = (v["name"], nb.get("6"), nb.get("5"), ext_of(v["attrs"]) or nid)   # signal heard by the parent
+    for nid, v in thread.items():   # an end device only keeps its parent in its table
+        if nid in parents or v["attrs"].get("0/53/1") not in (2, 3):
+            continue
+        nbs = [nb for nb in v["attrs"].get("0/53/7") or [] if isinstance(nb, dict) and nb.get("6") is not None]
+        if len(nbs) == 1:
+            parents[nid] = (match(nbs[0].get("0"), labels) or f"0x{(nbs[0].get('2') or 0):04x}",
+                            nbs[0].get("6"), nbs[0].get("5"), nbs[0].get("0"))
+    for nid in [k for k in parents if router[k]]:
+        del parents[nid]   # a router has no parent (stale "is child" entry in a neighbor table)
+    return parents, rlocs, best
+
+
+def match(ext, table):
+    """The Matter Server may round 64-bit integers (JSON): allow a small tolerance."""
+    if ext is None:
+        return None
+    if ext in table:
+        return table[ext]
+    for k, v in table.items():
+        if abs(k - ext) <= 4096:
+            return v
+    return None
+
+
+class NodeTable:
+    def __init__(self, watch, healer, radio, live, advisor):
+        self.w, self.h, self.radio, self.live, self.advisor = watch, healer, radio, live, advisor
+        self.lock = threading.Lock()
+        self.parents = {}     # node hex -> {"parent", "rssi", "since", "prev", "prev_rssi"}
+        self.cache = None
+        self.cache_t = 0
+
+    # ---------------------------------------------------------- data
+    def _nodes(self):
+        if self.live.connected:
+            return self.live.snapshot()
+        nodes = self.h.matter_command("get_nodes", {}, timeout=120)
+        if not isinstance(nodes, list):
+            raise RuntimeError("unexpected get_nodes answer")
+        return [{**n, "last": None, "radio": None} for n in nodes]
+
+    def build(self):
+        now = time.time()
+        nodes = self._nodes()
+        with self.h.lock:
+            meta = {k: dict(n) for k, n in self.h.nodes.items()}
+        with self.w.lock:
+            labels = {b["xa"]: self.w.br_display(b) for b in self.w.br.values() if b.get("xa") is not None}
+        thread = {}
+        for node in nodes:
+            attrs = node.get("attributes") or {}
+            if attrs.get("0/53/1") is None and not is_thread(attrs):
+                continue  # not Thread (Wi-Fi, Ethernet, not interviewed yet)
+            nid = f"{int(node['node_id']):016X}"
+            m = meta.get(nid, {})
+            thread[nid] = {"node": node, "attrs": attrs, "meta": m,
+                           "name": m.get("name") or f"0x{nid.lstrip('0') or '0'}"}
+            ext = ext_of(attrs)
+            if ext is not None:
+                labels[ext] = thread[nid]["name"]
+        parent_of, rlocs, best = find_parents(thread, labels)
+        named = bool(meta)
+        leader = None
+        if self.radio and self.radio.leader_name and time.time() - self.radio.leader_t < 2400:
+            leader = self.radio.leader_name   # Home Assistant names loaded: parent history can start
+        ref = (self.radio.reference(now, min_age=3600) or {}).get("nodes", {}) if self.radio else {}
+        advice = {a["node"]: ("; ".join(a.get("short") or a["actions"]), "; ".join(a["actions"]), a.get("severity", "high"))
+                  for a in (self.advisor.advice if self.advisor else [])}
+        rows = []
+        for nid, v in thread.items():
+            a, m = v["attrs"], v["meta"]
+            role = a.get("0/53/1")
+            rloc = rlocs.get(nid)
+            if role in (2, 3, 4, 5, 6) or rloc is not None:
+                if router_of(a, rloc):
+                    role = role if role in (5, 6) else 5
+                else:
+                    role = role if role in (2, 3, 4) else 4
+            # the leader found by asking the mesh (cached roles are not updated by the Matter Server)
+            if leader is not None:
+                if v["name"] == leader:
+                    role = 6
+                elif role == 6:
+                    role = 5
+            bl = best.get(nid)
+            bat = battery_of(a) if m.get("battery") or any(k.split("/")[1:2] == ["47"] for k in a) else (None, None)
+            low = (bat[0] is not None and bat[0] < BATTERY_LOW) or bat[1] == 2
+            bat_short = t("Change the batteries") if low and m.get("battery") else None
+            # parent and its history
+            p = parent_of.get(nid)
+            hist = self.parents.get(nid)
+            if p and named:
+                # compared by a stable key (extended address), not by the name shown
+                if hist is None:
+                    hist = self.parents[nid] = {"key": p[3], "parent": p[0], "rssi": p[1], "since": None,
+                                                "prev": None, "prev_rssi": None}
+                elif hist["key"] != p[3]:
+                    hist.update({"prev": hist["parent"], "prev_rssi": hist["rssi"], "since": now, "key": p[3]})
+                hist["parent"], hist["rssi"] = p[0], p[1]
+            new_parent = None
+            if p and hist and hist.get("since") and now - hist["since"] <= NEW_PARENT_S and hist.get("prev"):
+                new_parent = {"before": hist["prev"], "before_rssi": hist["prev_rssi"], "at": hist["since"]}
+            # neighbors
+            nbs = [nb for nb in a.get("0/53/7") or [] if isinstance(nb, dict) and (nb.get("5") or nb.get("13"))]
+            weak = [nb for nb in nbs if (nb.get("6") is not None and nb.get("6") <= THRESHOLDS["rssi_bad"])
+                    or nb.get("5") == 1]
+            # instability over 24h (difference with the survey of about 24h ago)
+            old = ref.get(nid)
+            uptime, reboots = a.get("0/51/2"), a.get("0/51/1")
+            rebooted = bool(old and uptime is not None and (old.get("u") or 0) > uptime)
+            diff = {}
+            for key, path in COUNTERS.items():
+                cur, before = a.get(path), ((old or {}).get("c") or {}).get(key)
+                if cur is None or before is None:
+                    diff[key] = None
+                else:
+                    diff[key] = cur if rebooted else max(0, cur - before)
+            reb_24 = None
+            if old and reboots is not None and old.get("r") is not None:
+                reb_24 = max(0, reboots - old["r"])
+            d24, d7, down7 = self.h.node_outages(nid)
+            src = self.live.source(nid)
+            up_read = self.quality.uptime(nid) if getattr(self, "quality", None) else None
+            if up_read is not None:
+                uptime = up_read
+            q = getattr(self, "quality", None)
+            rtt_last, rtt_avg, rtt_fail = q.response(nid) if q else (None, None, False)
+            avail = m.get("available")
+            if avail is None:
+                avail = v["node"].get("available") is not False
+            rows.append({
+                "id": f"0x{nid.lstrip('0') or '0'}", "name": v["name"], "area": m.get("area") or "",
+                "floor": m.get("floor") or "", "model": m.get("model") or "",
+                "battery": bool(m.get("battery")), "available": bool(avail),
+                "since": m.get("since") if not avail else None,
+                "role": ROLE.get(role, str(role)) if role is not None else None,
+                "parent": p[0] if p else None, "rssi": p[1] if p else None, "lqi": p[2] if p else None,
+                "new_parent": new_parent,
+                "rloc16": f"0x{rloc:04x}" if rloc is not None else None,
+                "best_link": bl[0] if bl else None, "best_rssi": bl[1] if bl else None, "best_lqi": bl[2] if bl else None,
+                "neighbors": len(nbs), "weak": len(weak),
+                "detaches_24h": diff["detached"], "parent_changes_24h": diff["parent_changes"],
+                "partition_changes_24h": diff["partition_changes"],
+                "outages_24h": d24, "outages_7d": d7, "downtime_7d_min": int(down7 // 60),
+                "reboots": reboots, "reboots_24h": reb_24,
+                "boot_reason": BOOT_REASON.get(a.get("0/51/4"), a.get("0/51/4")),
+                "uptime_h": round(uptime / 3600, 1) if isinstance(uptime, (int, float)) else None,
+                "uptime_s": round(uptime) if isinstance(uptime, (int, float)) else None,
+                "battery_pct": bat[0], "battery_level": bat[1],
+                "advice": "; ".join(x for x in (bat_short, (advice.get(v["name"]) or (None, None, None))[0]) if x) or None,
+                "advice_level": "high" if low else (advice.get(v["name"]) or (None, None, None))[2],
+                "advice_detail": "; ".join(x for x in (bat_short, (advice.get(v["name"]) or (None, None, None))[1]) if x) or None,
+                "contact_src": src[0], "active_gap_max_s": src[1], "since_active_s": src[2],
+                "rtt_ms": rtt_last, "rtt_avg_ms": rtt_avg, "rtt_fail": rtt_fail,
+                "last_report": v["node"].get("last"), "last_radio": v["node"].get("radio"),
+            })
+        for gone in set(self.parents) - set(thread):
+            del self.parents[gone]
+        return rows
+
+    def header(self):
+        s = self.w.summary()
+        with self.w.lock:
+            brs = []
+            for key, b in self.w.br.items():
+                if not self.w.br_relevant(b):
+                    continue
+                st = self.w.br_stats(key)
+                brs.append({"name": self.w.br_label(b), "key": key[:16], "role": b.get("role") if b["online"] else "offline",
+                            "online": bool(b["online"]), "partition": b.get("partition"), "omr": b.get("omr"),
+                            "primary": bool(b.get("bbr_primary")) and bool(b["online"]),
+                            "last_contact": self.w.br_contact(b)[0], "contact_src": self.w.br_contact(b)[1],
+                            "detached_24h": st["detached_24h"], "last_detached": st["last_detached"],
+                            "same_subnet": self.h.same_subnet(b.get("addrs"))})
+        brs.sort(key=lambda x: (not x["online"], x["name"].lower()))
+        with self.h.lock:
+            unavailable = sum(1 for n in self.h.nodes.values() if not n["available"])
+            total = len(self.h.nodes)
+        storm = self.w.storm.summary() if getattr(self.w, "storm", None) else {}
+        q = getattr(self, "quality", None)
+        return {"quality": q.summary() if q else None, "border_routers": brs,
+                "network": {"partitions": s["partitions"], "omr": s["omr_list"], "leader": s["leader"],
+                            "unavailable": unavailable, "nodes": total, "storm": storm.get("state") == "ON",
+                            "routing_problem": self.h.routing.get("details") if self.h.routing.get("problem") else None,
+                            "auto_recovery": self.h.enabled}}
+
+    def get(self, force=False):
+        """Answer of /api/table. Cached a few seconds (several open pages share it)."""
+        with self.lock:
+            fresh = time.time() - self.cache_t < (2 if force else 10)
+            if not fresh or self.cache is None:
+                if force and not self.live.connected:
+                    self.live.resync()
+                rows = self.build()
+                self.cache = {"rows": rows}
+                self.cache_t = time.time()
+            out = dict(self.cache)
+        out.update(self.header())
+        out.update({"time": time.time(), "lang": lang(), "thresholds": THRESHOLDS,
+                    "live": self.live.connected, "live_since": self.live.since})
+        return out
+
+    def run(self):
+        """Keep the parent history going even when nobody looks at the page."""
+        time.sleep(60)
+        while not self.w.stop.is_set():
+            if self.live.connected:
+                try:
+                    with self.lock:
+                        self.cache = {"rows": self.build()}
+                        self.cache_t = time.time()
+                except Exception as err:  # noqa: BLE001
+                    LOG.debug("table: %s", err)
+            if self.w.stop.wait(BACKGROUND_S):
+                return
+

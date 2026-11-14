@@ -1,0 +1,38 @@
+blueprint:
+  name: Mesh Guardian – node unavailable
+  description: >-
+    Notify when Mesh Guardian reports unavailable Matter nodes for longer than
+    a delay. Uses sensor.mesh_guardian_matter_nodes_unavailable (list of nodes
+    in its "nodes" attribute).
+  domain: automation
+  source_url: https://github.com/Pintjes/ha-addons/blob/main/blueprints/mesh_guardian_node_unavailable.yaml
+  input:
+    sensor:
+      name: Unavailable nodes sensor
+      default: sensor.mesh_guardian_matter_nodes_unavailable
+      selector:
+        entity:
+          domain: sensor
+    delay:
+      name: Delay
+      description: How long nodes must stay unavailable before notifying.
+      default: {minutes: 10}
+      selector:
+        duration: {}
+    notify:
+      name: Notification
+      description: Action(s) to run, e.g. a notify action. The text is in the variable `message`.
+      selector:
+        action: {}
+mode: restart
+trigger:
+  - trigger: numeric_state
+    entity_id: !input sensor
+    above: 0
+    for: !input delay
+variables:
+  sensor: !input sensor
+  message: >-
+    {{ states(sensor) }} Matter node(s) unavailable:
+    {{ state_attr(sensor, 'nodes') | map(attribute='name') | join(', ') }}
+action: !input notify
