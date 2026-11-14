@@ -229,7 +229,7 @@
 <body>
 <div class="app">
   <div class="top">
-    <h1><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.6-3.2 8-8 9-4.8-1-8-4.4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5" stroke-linecap="round"/></svg>Mesh Guardian</h1>
+    <h1><svg aria-hidden="true" viewBox="0 0 24 24"><path fill="#1f6feb" d="M11.8 1 20.1 3.7V11.5C20.1 16.6 16.8 20.6 11.8 23 6.8 20.6 3.6 16.6 3.6 11.5V3.7Z"/><path fill="none" stroke="#fff" stroke-width=".75" d="M12 6 8.2 7.4 7.5 12.6 11.8 17.6 15.9 12.6 15.6 7.5Z M12 6V17.6 M8.2 7.4 12 11.5 15.6 7.5 M7.5 12.6 12 11.5 15.9 12.6"/><g fill="#fff"><circle cx="12" cy="6" r=".95"/><circle cx="8.2" cy="7.4" r=".95"/><circle cx="15.6" cy="7.5" r=".95"/><circle cx="7.5" cy="12.6" r=".95"/><circle cx="15.9" cy="12.6" r=".95"/><circle cx="11.8" cy="17.6" r=".95"/><circle cx="12" cy="11.5" r="1.35"/></g></svg>Mesh Guardian</h1>
     <span class="live" id="live"></span>
     <span class="sp"></span>
     <button class="btn" id="refresh"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg><span></span></button>
@@ -492,7 +492,9 @@ function renderHero() {
   const parts = [];
   if (down.length) parts.push(P2("n_down", down.length));
   if (quiet.length) parts.push(P2("n_silent", quiet.length));
-  if (act.length) parts.push(P2("n_act", act.length));
+  // as many actions as advice cards in "To handle" (identical advice is one card)
+  const nAct = todoGroups(act).length;
+  if (nAct) parts.push(P2("n_act", nAct));
   const title = parts.length ? parts.join(", ") : L("all_ok");
   const sub = down.length === 1 ? F("down_sub", {name: esc(down[0].name), t: since(down[0])})
     : down.length ? F("down_sub_pl", {names: down.slice(0, 3).map(x => esc(x.name)).join(", ") + (down.length > 3 ? " " + F("more", {n: down.length - 3}) : "")})
@@ -524,18 +526,22 @@ function renderHero() {
     <div class="score">${score}</div>`;
 }
 
+// same advice for several nodes (e.g. "add a router near Outdoor"): one card listing the nodes
+function todoGroups(issues) {
+  const groups = [];
+  for (const r of issues) {
+    const g = r.available && !r.silent_s && r.advice && groups.find(x => x.advice === r.advice && x.rows[0].available && !x.rows[0].silent_s);
+    if (g) g.rows.push(r); else groups.push({advice: r.advice, rows: [r]});
+  }
+  return groups;
+}
 function renderTodo() {
   const n = D.network || {};
   const issues = (D.rows || []).filter(r => sev(r) < 3).sort((a, b) => sev(a) - sev(b) || a.name.localeCompare(b.name));
   const net = [];
   if (n.storm) net.push(["warn", L("storm")]);
   if (n.routing_problem) net.push(["bad", n.routing_problem]);
-  // same advice for several nodes (e.g. "add a router near Outdoor"): one card listing the nodes
-  const groups = [];
-  for (const r of issues) {
-    const g = r.available && !r.silent_s && r.advice && groups.find(x => x.multi !== false && x.advice === r.advice && x.rows[0].available && !x.rows[0].silent_s);
-    if (g) g.rows.push(r); else groups.push({advice: r.advice, rows: [r]});
-  }
+  const groups = todoGroups(issues);
   const total = groups.length + net.length;
   $("#todoTitle").textContent = total ? F("todo", {n: total}) : L("todo_none");
   $("#todo").innerHTML = net.map(([k, txt]) => `<div class="card issue ${k}"><span class="ic">${k === "bad" ? IC.bad : IC.warn}</span>
