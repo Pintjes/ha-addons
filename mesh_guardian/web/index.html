@@ -527,11 +527,20 @@ function renderTodo() {
   const net = [];
   if (n.storm) net.push(["warn", L("storm")]);
   if (n.routing_problem) net.push(["bad", n.routing_problem]);
-  const total = issues.length + net.length;
+  // same advice for several nodes (e.g. "add a router near Outdoor"): one card listing the nodes
+  const groups = [];
+  for (const r of issues) {
+    const g = r.available && !r.silent_s && r.advice && groups.find(x => x.multi !== false && x.advice === r.advice && x.rows[0].available && !x.rows[0].silent_s);
+    if (g) g.rows.push(r); else groups.push({advice: r.advice, rows: [r]});
+  }
+  const total = groups.length + net.length;
   $("#todoTitle").textContent = total ? F("todo", {n: total}) : L("todo_none");
   $("#todo").innerHTML = net.map(([k, txt]) => `<div class="card issue ${k}"><span class="ic">${k === "bad" ? IC.bad : IC.warn}</span>
       <span><span class="what">${L("w_net")}</span><span>${esc(txt)}</span></span></div>`).join("") +
-    issues.map(r => {
+    groups.map(({rows}) => {
+      const r = rows[0];
+      if (rows.length > 1) return `<button class="card issue info" data-id="${esc(r.id)}" title="${esc(r.advice_detail || "")}"><span class="ic">${IC.bulb}</span>
+        <span><span class="what">${L("w_warn")}</span><b>${esc(r.advice)}</b><span class="mut">${rows.map(x => esc(x.name)).join(", ")}</span></span></button>`;
       // every advice is an action: one kind, in blue (orange looked like a serious problem)
       const k = !r.available ? "bad" : "info";
       const what = !r.available ? L("w_down") : L("w_warn");
