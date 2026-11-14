@@ -13,6 +13,7 @@ the next report of the node. Nothing here sends traffic to the nodes.
 import base64
 import json
 import logging
+import os
 import threading
 import time
 
@@ -473,6 +474,34 @@ class NodeTable:
                 self._macs_v = getattr(self, "_macs_v", {})
         return getattr(self, "_macs_v", {})
 
+    AP_FILE = "/data/ap_names.json"
+
+    def _ap_names(self):
+        if not hasattr(self, "_ap_names_v"):
+            try:
+                with open(self.AP_FILE, encoding="utf-8") as f:
+                    self._ap_names_v = {k.lower(): v for k, v in json.load(f).items()}
+            except (OSError, ValueError):
+                self._ap_names_v = {}
+        return self._ap_names_v
+
+    def set_ap_name(self, bssid, name):
+        """Name given in the node panel to an access point (BSSID); empty name: forget it."""
+        b = bssid.strip().lower()
+        if len(b.replace(":", "")) != 12:
+            raise ValueError("bad BSSID")
+        names = dict(self._ap_names())
+        name = name.strip()[:40]
+        if name:
+            names[b] = name
+        else:
+            names.pop(b, None)
+        with open(self.AP_FILE + ".tmp", "w", encoding="utf-8") as f:
+            json.dump(names, f, ensure_ascii=False)
+        os.replace(self.AP_FILE + ".tmp", self.AP_FILE)
+        self._ap_names_v = names
+        self.cache_t = 0   # next /api/table rebuilds with the new name
+
     def _access_point(self, bssid):
         """(BSSID text, access point name or None). A BSSID is the MAC of one radio of the
         access point: same bytes 2-5 as the device MAC, last byte a little higher, first
@@ -489,7 +518,9 @@ class NodeTable:
             if mac[1:5] == b[1:5] and (mac[0] | 0x0E) == (b[0] | 0x0E) and 0 <= b[5] - mac[5] <= 15:
                 if best is None or b[5] - mac[5] < best[0]:
                     best = (b[5] - mac[5], name)
-        return text, best[1] if best else None
+        if best:
+            return text, best[1]
+        return text, self._ap_names().get(text)
 
     def _other_row(self, nid, v):
         """Row of a Matter node on Wi-Fi or Ethernet: no mesh, its own link only."""

@@ -31,7 +31,8 @@ STATE_FILE = "/data/quality.json"
 
 PROBE_MAINS_S = 15 * 60
 PROBE_BATTERY_S = 60 * 60
-PROBE_RETRY_S = 2 * 60   # first new try after a failed read
+PROBE_RETRY_S = 2 * 60
+NEIGHBOR_REFRESH_S = 60 * 60   # mains nodes: role and neighbor table read again at most hourly   # first new try after a failed read
 PROBE_GAP_S = 5            # between two reads
 RTT_KEEP = 20              # answers kept for the average
 
@@ -151,10 +152,33 @@ class Quality:
                 r["last"] = None
                 r["fails"] = r.get("fails", 0) + 1
                 r["streak"] = r.get("streak", 0) + 1
+        if ok and not battery:
+            self._refresh_thread(nid)
         if ok:
             self.live.note_contact(nid, src="read")
             if isinstance(value, (int, float)):
                 self.live.set_attribute(nid, "0/51/2", value)
+
+    def _refresh_thread(self, nid):
+        """Read again the role and the neighbor table of a mains node, at most hourly: some
+        nodes never report them again (e.g. after becoming an end device), so the Matter
+        Server cache keeps an old table and the link signal cannot be shown. The read
+        updates that cache. Never for battery nodes (their batteries)."""
+        now = time.time()
+        with self.lock:
+            r = self.rtt.setdefault(nid, {"last": None, "ok": [], "t": 0, "fails": 0})
+            if now - (r.get("nb_t") or 0) < NEIGHBOR_REFRESH_S:
+                return
+            r["nb_t"] = now
+        for path in ("0/53/1", "0/53/7"):
+            try:
+                res = self.h.matter_command("read_attribute", {"node_id": int(nid, 16), "attribute_path": path}, timeout=30)
+                value = res.get(path) if isinstance(res, dict) else res
+                if value is not None:
+                    self.live.set_attribute(nid, path, value)
+            except Exception as err:  # noqa: BLE001
+                LOG.debug("thread read %s %s: %s", nid, path, err)
+                return
 
     def run_probe(self):
         time.sleep(90)
