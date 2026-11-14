@@ -245,7 +245,6 @@
   <div class="tools">
     <input type="search" id="q">
     <div class="chips" id="chips"></div>
-    <button class="chip" id="clearf" hidden></button>
     <button class="colset" id="colset" aria-haspopup="true" aria-expanded="false"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>
     <div class="colmenu" id="colmenu" role="menu"></div>
   </div>
@@ -262,7 +261,7 @@
 "use strict";
 // ------------------------------------------------------------ texts
 const T = {
-  en: {clear:"Clear", filtered:"Filter on", todo_info:"Good to know ({n})", np_before:"Before: {p}, {r} dBm", a_parent_noanswer:"{n}: no answer (asleep?)", a_parent_new:"{n}: new parent {l}", a_failed:"{n}: action failed", check_bat:"Check its batteries.", check_power:"Check its power.", down_do_bat:"Since {t}. Check its batteries.", more:"+{n}", refresh:"Refresh", report:"Report", classic:"Classic view", loading:"loading…", error:"error", live:"live", polling:"live link down: values read on demand", updated:"updated at {t}",
+  en: {todo_info:"Good to know ({n})", np_before:"Before: {p}, {r} dBm", a_parent_noanswer:"{n}: no answer (asleep?)", a_parent_new:"{n}: new parent {l}", a_failed:"{n}: action failed", check_bat:"Check its batteries.", check_power:"Check its power.", down_do_bat:"Since {t}. Check its batteries.", more:"+{n}", refresh:"Refresh", report:"Report", classic:"Classic view", loading:"loading…", error:"error", live:"live", polling:"live link down: values read on demand", updated:"updated at {t}",
     silent:"silent", w_silent:"Silent", n_silent:"{n} silent node", n_silent_pl:"{n} silent nodes", silent_sub:"{name}: probably without power.",
     silent_tip:"No sign of life for {t} (usually every {u}): probably without power.",
     t_rhythm:"Sign of life", rhythm_v:"every {u} at most · silence flagged after {l}", rhythm_wait:"being measured",
@@ -305,7 +304,7 @@ const T = {
     roles:{leader:"Leader router", router:"Router", reed:"End", end_device:"End", sleepy_end_device:"Sleepy end", unassigned:"unassigned", unspecified:"unspecified", detached:"detached", child:"End device", offline:"offline"},
     boot:{unspecified:"unspecified", power_on:"power on", brown_out:"brown-out", software_watchdog:"software watchdog", hardware_watchdog:"hardware watchdog", software_update:"software update", software_reset:"software reset"},
     csrc:{report:"report", event:"event", read:"read", ping:"ping", passive:"packet"}},
-  fr: {clear:"Effacer", filtered:"Filtre actif", todo_info:"À savoir ({n})", np_before:"Avant : {p}, {r} dBm", a_parent_noanswer:"{n} : pas de réponse (endormie ?)", a_parent_new:"{n} : nouveau parent {l}", a_failed:"{n} : action impossible", check_bat:"Vérifier les piles.", check_power:"Vérifier l'alimentation.", down_do_bat:"Depuis {t}. Vérifier les piles.", more:"+{n}", refresh:"Actualiser", report:"Rapport", classic:"Vue classique", loading:"chargement…", error:"erreur", live:"en direct", polling:"lien direct coupé : valeurs lues à la demande", updated:"mis à jour à {t}",
+  fr: {todo_info:"À savoir ({n})", np_before:"Avant : {p}, {r} dBm", a_parent_noanswer:"{n} : pas de réponse (endormie ?)", a_parent_new:"{n} : nouveau parent {l}", a_failed:"{n} : action impossible", check_bat:"Vérifier les piles.", check_power:"Vérifier l'alimentation.", down_do_bat:"Depuis {t}. Vérifier les piles.", more:"+{n}", refresh:"Actualiser", report:"Rapport", classic:"Vue classique", loading:"chargement…", error:"erreur", live:"en direct", polling:"lien direct coupé : valeurs lues à la demande", updated:"mis à jour à {t}",
     silent:"silencieuse", w_silent:"Silencieuse", n_silent:"{n} node silencieuse", n_silent_pl:"{n} nodes silencieuses", silent_sub:"{name} : probablement sans courant.",
     silent_tip:"Aucun signe de vie depuis {t} (d'habitude toutes les {u}) : probablement sans courant.",
     t_rhythm:"Signe de vie", rhythm_v:"toutes les {u} au plus · silence signalé après {l}", rhythm_wait:"mesure en cours",
@@ -664,10 +663,6 @@ function renderList() {
   const rows = D.rows || [], fl = filters();
   if (!fl.some(x => x[0] === P.filter)) P.filter = "all";
   $("#nodesTitle").textContent = L("nodes");
-  const filtered = P.filter !== "all" || P.q.trim();
-  $("#clearf").hidden = !filtered;
-  $("#clearf").textContent = "✕ " + L("clear");
-  $("#clearf").title = L("filtered");
   $("#chips").innerHTML = fl.map(([k, lab, f]) => `<button class="chip" data-f="${k}" aria-pressed="${k === P.filter}">${lab}<span class="n num">${rows.filter(f).length}</span></button>`).join("");
   const narrow = document.body.classList.contains("narrow");
   const cols = narrow ? COLS.filter(c => !c.x && c.k !== "br") : shown();
@@ -974,7 +969,11 @@ document.addEventListener("click", e => {
     save(); return renderList();
   }
   if (t.classList.contains("x")) return closeSheet();
-  if (t.dataset.f) { P.filter = t.dataset.f; save(); return renderList(); }
+  if (t.dataset.f) {   // "All" also clears the text filter: one click shows every node again
+    P.filter = t.dataset.f;
+    if (P.filter === "all") { P.q = ""; $("#q").value = ""; }
+    save(); return renderList();
+  }
   if (t.dataset.id) return openNode(t.dataset.id);
 });
 $("#scrim").addEventListener("click", closeSheet);
@@ -997,7 +996,6 @@ document.addEventListener("keydown", e => {
 $("#q").value = P.q;
 $("#q").addEventListener("input", () => { P.q = $("#q").value; save(); if (D) renderList(); });
 $("#refresh").addEventListener("click", () => load(true));
-$("#clearf").addEventListener("click", () => { P.filter = "all"; P.q = ""; $("#q").value = ""; save(); renderList(); });
 $("#report").addEventListener("click", openReport);
 const layout = () => {
   const was = document.body.classList.contains("narrow");
