@@ -4,6 +4,25 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-11-14
+
+### Added
+
+- *Border router* column (beta view, shown by default): the border router each
+  node reaches Home Assistant through, with the number of hops; the full path is
+  in the technical details of the node panel. The API `route` now has `path`,
+  `hops` and `complete`.
+- Beta view: columns can be moved by dragging their header, or in the column
+  list (which follows the same order).
+
+### Changed
+
+- Beta view: no ↔ sign in the attachment column any more; the meaning (parent
+  of an end device, best neighbor router of a router) is explained on hover and
+  in the node panel.
+- Sorting has two states (click, click again to reverse); the default order
+  (problems first) is in the column menu.
+
 ## [1.4.0] - 2026-11-14
 
 ### Added
