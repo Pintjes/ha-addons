@@ -72,6 +72,9 @@
   .legend24 u { display: inline-block; width: 2px; height: 11px; background: var(--txt); opacity: .55; }
   .part .bar i { display: block; height: 100%; border-radius: 3px; background: var(--acc); }
   .part.low .bar i { background: var(--warn); }
+  .part .bar b { position: absolute; top: 0; height: 100%; }
+  .part .bar b.gain { background: var(--ok); }
+  .part .bar b.loss { background: var(--bad); opacity: .85; }
   .part span:last-child { text-align: right; }
 
   .todo { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
@@ -462,6 +465,14 @@ function link(r) {
 }
 
 // ------------------------------------------------------------ summary
+// bar of a score part: blue up to the lower of now / 24h, then green for the gain over 24h
+// or red for the loss (the exact values are in the tooltip), and the 24h mark
+function bar(v, v24) {
+  const c = x => Math.max(0, Math.min(100, x));
+  if (v24 == null) return `<i style="width:${c(v)}%"></i>`;
+  const lo = c(Math.min(v, v24)), hi = c(Math.max(v, v24)), up = v >= v24;
+  return `<i style="width:${lo}%"></i>${hi - lo >= .1 ? `<b class="${up ? "gain" : "loss"}" style="left:${lo}%;width:${hi - lo}%"></b>` : ""}<u style="left:${c(v24)}%"></u>`;
+}
 function renderHero() {
   const n = D.network || {}, rows = D.rows || [], q = D.quality;
   const down = rows.filter(r => !r.available), act = rows.filter(r => r.available && !r.silent_s && r.advice && lvl(r) === "warn");
@@ -494,7 +505,7 @@ function renderHero() {
       <div class="big" title="${esc(L("q_scale"))}"><b class="num">${dec(q.score)} %</b><span class="lab">${lab}</span>${q.capped ? `<span class="st bad">${IC.warn}${L("q_capped")}</span>` : ""}</div>
       <div class="trend">${trend}</div>
       <div class="parts">${Object.entries(q.parts || {}).map(([k, v]) => `<div class="part ${v < 90 ? "low" : ""}" title="${esc(F("part_tip", {v: dec(v), v24: p24[k] != null ? dec(p24[k]) : "—", n: WEIGHTS[k] ?? "?"}))}">
-        <span>${esc(L("q_parts")[k] || k)}</span><span class="bar"><i style="width:${Math.max(0, Math.min(100, v))}%"></i>${p24[k] != null ? `<u style="left:${Math.max(0, Math.min(100, p24[k]))}%"></u>` : ""}</span><span class="num">${dec(v)} %</span></div>`).join("")}</div>`;
+        <span>${esc(L("q_parts")[k] || k)}</span><span class="bar">${bar(v, p24[k])}</span><span class="num">${dec(v)} %</span></div>`).join("")}</div>`;
   }
   $("#hero").innerHTML = `<div><div class="verdict ${cls}"><span class="badge">${cls === "ok" ? IC.ok : cls === "bad" ? IC.bad : IC.warn}</span>
       <div><h3>${title}</h3><p>${sub}</p></div></div>
