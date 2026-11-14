@@ -104,6 +104,10 @@
   .cols, .row { display: grid; gap: 12px; align-items: center; padding: 0 16px;
     grid-template-columns: minmax(190px, 2fr) 128px minmax(190px, 1.7fr) 150px 92px 118px minmax(150px, 1.8fr); }
   .cols { min-height: 38px; font-size: 12px; font-weight: 600; color: var(--mut); border-bottom: 1px solid var(--line); }
+  .cols button { all: unset; cursor: pointer; display: inline-flex; gap: 4px; align-items: center; min-height: 38px; border-radius: 4px; }
+  .cols button:hover, .cols button.on { color: var(--txt); }
+  .cols button:focus-visible { outline: 2px solid var(--acc); }
+  .cols .r button { justify-content: flex-end; width: 100%; }
   .row { min-height: 54px; padding-block: 6px; border: 0; border-bottom: 1px solid var(--line); cursor: pointer; background: none; width: 100%; text-align: left; }
   .row:last-child { border-bottom: 0; }
   .row:hover { background: var(--acc-soft); }
@@ -211,7 +215,7 @@ const T = {
     best_tip:"Router: it has no parent, ↔ is the neighbor router it hears best", link_tip:"End device: its parent. Router (↔): the neighbor router it hears best",
     to_ha:"Path to Home Assistant", r_direct:"{br} directly", r_via:"{br} via {via}", r_parent:"parent {p}, then ", r_cost:"cost {c}",
     r_cost_tip:"Path cost: 1 per good hop, up to 4 for a weak link. The nearest border router is the one with the lowest cost.", r_unknown:"unknown (no route table published yet)", no_parent:"Unknown parent (probably a border router)",
-    sig:["weak", "fair", "good"], new_parent:"new parent", none_match:"No node matches.",
+    sig:["weak", "fair", "good"], new_parent:"new parent", none_match:"No node matches.", sort_tip:"Click to sort: ascending, descending, then problems first",
     ago_s:"{n}s ago", ago_m:"{n} min ago", ago_h:"{n} h ago", ago_d:"{n} d ago", never:"never",
     d_net:"Network", d_role:"Role", d_parent:"Parent", d_best:"Best link", d_signal:"Signal", d_lqi:"Link quality (0–3)", d_resp:"Response · average",
     d_power:"Power", mains:"mains", battery:"battery", bat_level:["ok", "low", "critical"], d_last:"Last contact",
@@ -240,7 +244,7 @@ const T = {
     best_tip:"Routeur : il n'a pas de parent, ↔ est le voisin routeur qu'il capte le mieux", link_tip:"Appareil final : son parent. Routeur (↔) : le voisin routeur qu'il capte le mieux",
     to_ha:"Chemin vers Home Assistant", r_direct:"{br} en direct", r_via:"{br} via {via}", r_parent:"parent {p}, puis ", r_cost:"coût {c}",
     r_cost_tip:"Coût du chemin : 1 par bon saut, jusqu'à 4 pour un lien faible. Le border router le plus proche est celui de plus bas coût.", r_unknown:"inconnu (table de routage pas encore publiée)", no_parent:"Parent inconnu (probablement un border router)",
-    sig:["faible", "moyen", "bon"], new_parent:"nouveau parent", none_match:"Aucune node ne correspond.",
+    sig:["faible", "moyen", "bon"], new_parent:"nouveau parent", none_match:"Aucune node ne correspond.", sort_tip:"Cliquer pour trier : croissant, décroissant, puis problèmes d'abord",
     ago_s:"il y a {n} s", ago_m:"il y a {n} min", ago_h:"il y a {n} h", ago_d:"il y a {n} j", never:"jamais",
     d_net:"Réseau", d_role:"Rôle", d_parent:"Parent", d_best:"Meilleur lien", d_signal:"Signal", d_lqi:"Qualité du lien (0–3)", d_resp:"Réponse · moyenne",
     d_power:"Alimentation", mains:"secteur", battery:"pile", bat_level:["ok", "faible", "critique"], d_last:"Dernier contact",
@@ -435,6 +439,26 @@ const PREF = "mesh_guardian_beta_v1";
 const P = (() => { try { return JSON.parse(localStorage.getItem(PREF)) || {}; } catch (e) { return {}; } })();
 const save = () => { try { localStorage.setItem(PREF, JSON.stringify(P)); } catch (e) { /* storage unavailable */ } };
 P.filter = P.filter || "all"; P.q = P.q || "";
+// sort: null = problems first; otherwise {k: column, d: 1 ascending / -1 descending}. Empty values always last.
+const SORT = {
+  node: r => r.name.toLowerCase(),
+  status: r => sev(r),
+  link: r => (linkName(r) || "").toLowerCase() || null,
+  resp: r => r.rtt_fail ? Infinity : r.rtt_ms,
+  bat: r => r.battery_pct ?? (r.battery_level != null ? 100 - r.battery_level * 50 : null),
+  last: r => r.last_report ? -r.last_report : null,
+  adv: r => r.advice ? sev(r) : null,
+};
+const COLKEYS = [["node", "h_node"], ["status", "h_status"], ["link", "h_link"], ["resp", "h_resp"], ["bat", "h_bat"], ["last", "h_last"], ["adv", "h_adv"]];
+function sorter() {
+  const s = P.sort && SORT[P.sort.k];
+  if (!s) return (a, b) => sev(a) - sev(b) || a.name.localeCompare(b.name);
+  return (a, b) => {
+    const x = s(a), y = s(b);
+    if (x == null || y == null) return x == null && y == null ? a.name.localeCompare(b.name) : x == null ? 1 : -1;
+    return (x < y ? -1 : x > y ? 1 : 0) * P.sort.d || a.name.localeCompare(b.name);
+  };
+}
 function filters() {
   const rows = D.rows || [];
   const f = [["all", L("c_all"), () => true], ["issues", L("c_issues"), r => sev(r) < 3]];
@@ -447,11 +471,14 @@ function renderList() {
   if (!fl.some(x => x[0] === P.filter)) P.filter = "all";
   $("#nodesTitle").textContent = L("nodes");
   $("#chips").innerHTML = fl.map(([k, lab, f]) => `<button class="chip" data-f="${k}" aria-pressed="${k === P.filter}">${lab}<span class="n num">${rows.filter(f).length}</span></button>`).join("");
-  $("#cols").innerHTML = ["h_node", "h_status", "h_link", "h_resp", "h_bat", "h_last", "h_adv"].map((k, i) =>
-    `<span class="${i === 3 ? "r" : ""}"${i === 2 ? ` title="${esc(L("link_tip"))}"` : ""}>${L(k)}</span>`).join("");
+  $("#cols").innerHTML = COLKEYS.map(([k, lab], i) => {
+    const on = P.sort && P.sort.k === k, arrow = on ? (P.sort.d > 0 ? " ▲" : " ▼") : "";
+    return `<span class="${i === 3 ? "r" : ""}"><button data-sort="${k}" class="${on ? "on" : ""}" aria-sort="${on ? (P.sort.d > 0 ? "ascending" : "descending") : "none"}"
+      title="${esc((i === 2 ? L("link_tip") + "\n" : "") + L("sort_tip"))}">${L(lab)}${arrow}</button></span>`;
+  }).join("");
   const q = P.q.trim().toLowerCase(), f = fl.find(x => x[0] === P.filter)[2];
   const list = rows.filter(f).filter(r => !q || [r.name, r.area, r.model, r.id, linkName(r)].some(x => (x || "").toLowerCase().includes(q)))
-    .sort((a, b) => sev(a) - sev(b) || a.name.localeCompare(b.name));
+    .sort(sorter());
   $("#rows").innerHTML = list.map(r => {
     const adv = r.advice ? `<span class="adv ${lvl(r)}" title="${esc(r.advice_detail || "")}">${lvl(r) === "warn" ? IC.bulb : IC.info}<span>${esc(r.advice)}</span></span>` : `<span class="adv"></span>`;
     const meta = [r.area, r.model, NETS[net(r)]].filter(Boolean).map(esc).join(" · ");
@@ -591,8 +618,13 @@ async function load(force) {
 
 // ------------------------------------------------------------ events
 document.addEventListener("click", e => {
-  const t = e.target.closest("[data-id],[data-f],.x");
+  const t = e.target.closest("[data-id],[data-f],[data-sort],.x");
   if (!t) return;
+  if (t.dataset.sort) {   // ascending, descending, then back to "problems first"
+    const k = t.dataset.sort;
+    P.sort = !P.sort || P.sort.k !== k ? {k, d: 1} : P.sort.d > 0 ? {k, d: -1} : null;
+    save(); return renderList();
+  }
   if (t.classList.contains("x")) return closeSheet();
   if (t.dataset.f) { P.filter = t.dataset.f; save(); return renderList(); }
   if (t.dataset.id) return openNode(t.dataset.id);
