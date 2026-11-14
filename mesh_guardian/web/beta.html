@@ -193,6 +193,10 @@
   .sheet summary { cursor: pointer; font-weight: 600; min-height: 32px; }
   .sheet textarea { width: 100%; height: 55vh; background: var(--bg); color: var(--txt); border: 1px solid var(--line);
     border-radius: 8px; font: 12px monospace; margin-top: 10px; }
+  .apf { display: flex; gap: 6px; margin-bottom: 2px; }
+  .apf input { flex: 1; min-width: 0; min-height: 36px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); padding: 0 8px; }
+  .apf .btn { min-height: 36px; padding: 0 10px; }
+  .kv div:has(.apf) { grid-column: 1 / -1; }
   .note { margin: 18px 2px 0; font-size: 12px; color: var(--mut); }
   .note summary { cursor: pointer; min-height: 32px; }
   .empty { padding: 16px; color: var(--mut); }
@@ -249,7 +253,7 @@ const T = {
     available:"available", unavailable:"unavailable", unav_since:"unavailable since {t}", no_answer:"no answer", avg:"avg. {v}", contact:"Contact ",
     best_tip:"Router: it has no parent; this is the neighbor router it hears best", link_tip:"End device: its parent. Router: the neighbor router it hears best (a router has no parent)",
     parent_tip:"The router this end device sends all its traffic through", h_br:"Border router", hop1:"1 hop", hops:"{n} hops", hops_min:"at least", t_path:"Full path",
-    drag_tip:"Drag to move the column", ap:"Access point", ap_unknown:"Access point not found in Home Assistant (add your access points as devices, e.g. UniFi integration: track network devices)",
+    drag_tip:"Drag to move the column", ap_ph:"Name of this access point", save:"Save", saved:"Saved", ap:"Access point", ap_unknown:"Access point not named: name it in the node panel, or add your access points to Home Assistant as devices",
     to_ha:"Path to Home Assistant", r_direct:"{br} directly", r_via:"{br} via {via}", r_parent:"parent {p}, then ", r_cost:"cost {c}",
     r_cost_tip:"Path cost: 1 per good hop, up to 4 for a weak link. The nearest border router is the one with the lowest cost.", r_unknown:"unknown (no route table published yet)", no_parent:"Unknown parent (probably a border router)",
     sig:["weak", "fair", "good"], new_parent:"new parent", none_match:"No node matches.", columns:"Columns", cols_reset:"Default columns", t_out24:"Outages 24h", t_out7:"Outages 7d", sort_tip:"Click to sort, click again to reverse", sort_reset:"Default order (problems first)",
@@ -280,7 +284,7 @@ const T = {
     available:"disponible", unavailable:"indisponible", unav_since:"indisponible depuis {t}", no_answer:"pas de réponse", avg:"moy. {v}", contact:"Contact ",
     best_tip:"Routeur : il n'a pas de parent ; c'est le voisin routeur qu'il capte le mieux", link_tip:"Appareil final : son parent. Routeur : le voisin routeur qu'il capte le mieux (un routeur n'a pas de parent)",
     parent_tip:"Le routeur par lequel cet appareil final fait passer tout son trafic", h_br:"Border router", hop1:"1 saut", hops:"{n} sauts", hops_min:"au moins", t_path:"Chemin complet",
-    drag_tip:"Glisser pour déplacer la colonne", ap:"Point d'accès", ap_unknown:"Point d'accès introuvable dans Home Assistant (ajouter les points d'accès comme appareils, p. ex. intégration UniFi : suivre les appareils réseau)",
+    drag_tip:"Glisser pour déplacer la colonne", ap_ph:"Nom de ce point d'accès", save:"Enregistrer", saved:"Enregistré", ap:"Point d'accès", ap_unknown:"Point d'accès sans nom : le nommer dans la fiche de la node, ou ajouter les points d'accès à Home Assistant comme appareils",
     to_ha:"Chemin vers Home Assistant", r_direct:"{br} en direct", r_via:"{br} via {via}", r_parent:"parent {p}, puis ", r_cost:"coût {c}",
     r_cost_tip:"Coût du chemin : 1 par bon saut, jusqu'à 4 pour un lien faible. Le border router le plus proche est celui de plus bas coût.", r_unknown:"inconnu (table de routage pas encore publiée)", no_parent:"Parent inconnu (probablement un border router)",
     sig:["faible", "moyen", "bon"], new_parent:"nouveau parent", none_match:"Aucune node ne correspond.", columns:"Colonnes", cols_reset:"Colonnes par défaut", t_out24:"Coupures 24 h", t_out7:"Coupures 7 j", sort_tip:"Cliquer pour trier, recliquer pour inverser", sort_reset:"Ordre par défaut (problèmes d'abord)",
@@ -712,6 +716,7 @@ async function openNode(id) {
   const kv = [[L("d_net"), NETS[net(r)]], [L("d_role"), r.role ? esc(L("roles")[r.role] || r.role) : "—"],
     [best ? L("d_best") : L("d_parent"), esc(linkName(r) || "—") + (net(r) === "thread" ? `<br><small class="mut">${esc(best ? L("best_tip") : L("parent_tip"))}</small>` : "")], [L("d_signal"), signal(r)],
     [L("d_lqi"), linkLqi(r) ?? "—"],
+    ...(net(r) === "wifi" ? [[L("ap"), `<form class="apf" data-bssid="${esc(r.bssid || "")}"><input name="n" value="${esc(r.access_point || "")}" placeholder="${esc(L("ap_ph"))}" maxlength="40"><button class="btn">${L("save")}</button></form><small class="mut">BSSID ${esc(r.bssid || "?")}</small>`]] : []),
     ...(net(r) === "thread" ? [[L("h_br"), r.route ? `${esc(r.route.br)}<br><small class="mut" title="${esc(L("r_cost_tip"))}">${esc(hopsTxt(r.route) + " · " + F("r_cost", {c: r.route.cost}))}</small>` : esc(L("r_unknown"))]] : []), [L("d_resp"), `${r.rtt_fail ? L("no_answer") : ms(r.rtt_ms)} · ${ms(r.rtt_avg_ms)}`],
     [L("d_power"), esc(power)], [L("d_last"), r.last_report ? ago(r.last_report) + (r.contact_src ? ` <small class="mut">(${esc(L("csrc")[r.contact_src] || r.contact_src)})</small>` : "") : L("never")]];
   const c = v => v == null ? "—" : v;
@@ -806,6 +811,18 @@ document.addEventListener("click", e => {
   if (t.dataset.id) return openNode(t.dataset.id);
 });
 $("#scrim").addEventListener("click", closeSheet);
+$("#sheet").addEventListener("submit", async e => {   // name of a Wi-Fi access point
+  const f = e.target.closest(".apf"); if (!f) return;
+  e.preventDefault();
+  const b = f.querySelector("button"); b.disabled = true;
+  try {
+    const r = await fetch("api/ap_name", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({bssid: f.dataset.bssid, name: f.n.value})});
+    b.textContent = r.ok ? L("saved") : L("error");
+    if (r.ok) load(true);
+  } catch (err) { b.textContent = L("error"); }
+  finally { b.disabled = false; }
+});
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(); });
 $("#q").value = P.q;
 $("#q").addEventListener("input", () => { P.q = $("#q").value; save(); if (D) renderList(); });

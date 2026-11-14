@@ -4,6 +4,19 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.0] - 2026-11-14
+
+### Added
+
+- Wi-Fi access points can be named in the node panel (beta view); the name is
+  used for every node on that access point when Home Assistant does not know it.
+
+### Fixed
+
+- Missing link signal for mains end devices: their role and neighbor table are
+  read again at most hourly (some nodes never report them again, so the Matter
+  Server kept an old table). Battery nodes are not read.
+
 ## [1.6.0] - 2026-11-14
 
 ### Added

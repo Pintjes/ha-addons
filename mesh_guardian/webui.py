@@ -93,6 +93,20 @@ class WebUI:
                 else:
                     self._send(404, '{"error": "not found"}')
 
+            def do_POST(self):
+                if not self._allowed():
+                    return
+                path = self.path.partition("?")[0].rstrip("/")
+                if path != "/api/ap_name":
+                    return self._send(404, '{"error": "not found"}')
+                try:
+                    n = int(self.headers.get("Content-Length") or 0)
+                    body = json.loads(self.rfile.read(min(n, 4096)) or b"{}")
+                    ui.table.set_ap_name(str(body.get("bssid") or ""), str(body.get("name") or ""))
+                    self._send(200, '{"ok": true}')
+                except Exception as err:  # noqa: BLE001
+                    self._send(400, json.dumps({"error": str(err)}, ensure_ascii=False))
+
         return H
 
     def run(self):
