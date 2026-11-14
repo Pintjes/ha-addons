@@ -24,6 +24,7 @@ import threading
 import time
 from collections import deque
 
+from advice import weak_link
 from i18n import t
 
 LOG = logging.getLogger("mg.quality")
@@ -236,7 +237,7 @@ class Quality:
 
     # ------------------------------------------------------------ score
     def _links(self):
-        """(used links, weak ones): parent link of a child, best link of a router."""
+        """(used links, weak ones): parent link of a child, first hop of a router."""
         table = getattr(self.w, "table", None)
         rows = ((table.cache or {}).get("rows") or []) if table else []
         used = weak = 0
@@ -249,7 +250,7 @@ class Quality:
             if rssi is None and lqi is None:
                 continue
             used += 1
-            if (rssi is not None and rssi <= -85) or lqi == 1:
+            if weak_link(rssi, lqi):
                 weak += 1
         return used, weak
 

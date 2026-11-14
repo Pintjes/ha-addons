@@ -262,7 +262,7 @@
 "use strict";
 // ------------------------------------------------------------ texts
 const T = {
-  en: {clear:"Clear", filtered:"Filter on", todo_info:"Good to know ({n})", np_before:"Before: {p}, {r} dBm", a_parent_noanswer:"{n}: no answer (asleep?)", a_parent_new:"{n}: new parent {pa}, {b} → {a} dBm", a_failed:"{n}: action failed", check_bat:"Check its batteries.", check_power:"Check its power.", down_do_bat:"Since {t}. Check its batteries.", more:"+{n}", refresh:"Refresh", report:"Report", classic:"Classic view", loading:"loading…", error:"error", live:"live", polling:"live link down: values read on demand", updated:"updated at {t}",
+  en: {clear:"Clear", filtered:"Filter on", todo_info:"Good to know ({n})", np_before:"Before: {p}, {r} dBm", a_parent_noanswer:"{n}: no answer (asleep?)", a_parent_new:"{n}: new parent {l}", a_failed:"{n}: action failed", check_bat:"Check its batteries.", check_power:"Check its power.", down_do_bat:"Since {t}. Check its batteries.", more:"+{n}", refresh:"Refresh", report:"Report", classic:"Classic view", loading:"loading…", error:"error", live:"live", polling:"live link down: values read on demand", updated:"updated at {t}",
     silent:"silent", w_silent:"Silent", n_silent:"{n} silent node", n_silent_pl:"{n} silent nodes", silent_sub:"{name}: probably without power.",
     silent_tip:"No sign of life for {t} (usually every {u}): probably without power.",
     t_rhythm:"Sign of life", rhythm_v:"every {u} at most · silence flagged after {l}", rhythm_wait:"being measured",
@@ -287,14 +287,14 @@ const T = {
     a_interview_tip:"Reinterview", a_parent_router:"A router has no parent: nothing to search",
     a_parent_confirm:"{n}: find a new parent? The new one may be weaker.", a_interview_confirm:"{n}: interview the node again? It can take a minute.",
     a_ping_ok:"{n}: answers the ping", a_ping_ko:"{n}: no answer to ping", a_interview_ok:"{n} interviewed again ({s} s)",
-    a_parent_same:"{n}: same parent, {pa}, {a} dBm", a_parent_unknown:"{n}: new parent not known yet",
+    a_parent_same:"{n}: same parent {l}", a_parent_unknown:"{n}: new parent not known yet",
     a_parent_unsupported:"{n}: parent search not supported", a_parent_failed:"{n}: parent search refused",
     a_parent_busy:"A parent search is already running", ap_ph:"Name of this access point", save:"Save", saved:"Saved", ap:"Access point", ap_unknown:"Unnamed access point: name it in the node panel",
     to_ha:"Path to Home Assistant", r_direct:"{br} directly", r_via:"{br} via {via}", r_parent:"parent {p}, then ", r_cost:"cost {c}",
     r_cost_tip:"Path cost: 1 per good hop, up to 4 for a weak link. The nearest border router is the one with the lowest cost.", r_unknown:"not known yet", no_parent:"Unknown parent (probably a border router)",
-    sig:["weak", "fair", "good"], new_parent:"new parent", none_match:"No node matches.", columns:"Columns", cols_reset:"Default columns", t_out24:"Outages 24h", t_out7:"Outages 7d", sort_tip:"Click to sort, click again to reverse", sort_reset:"Default order (problems first)",
+    sig:["weak", "fair", "good"], sig_tip:"Weakest direction of the link", new_parent:"new parent", none_match:"No node matches.", columns:"Columns", cols_reset:"Default columns", t_out24:"Outages 24h", t_out7:"Outages 7d", sort_tip:"Click to sort, click again to reverse", sort_reset:"Default order (problems first)",
     ago_s:"{n}s ago", ago_m:"{n} min ago", ago_h:"{n} h ago", ago_d:"{n} d ago", never:"never",
-    d_net:"Network", d_role:"Role", d_parent:"Parent", d_best:"Best link", d_signal:"Signal", d_lqi:"Link quality (0–3)", d_resp:"Response · average",
+    d_net:"Network", d_role:"Role", d_parent:"Parent", d_best:"Sends through", d_signal:"Signal", d_lqi:"Link quality (0–3)", d_resp:"Response · average",
     d_power:"Power", mains:"mains", battery:"battery", bat_level:["ok", "low", "critical"], d_last:"Last contact",
     sig7:"Signal · last 7 days", resp7:"Response · last 7 days", outages:"Outages", pchanges:"Parent changes", none:"none", ongoing:"ongoing",
     hist_wait:"History available within 15 min.", now:"now", d7:"7 d ago", average:"average", threshold:"weak threshold", off_scale:"off scale",
@@ -305,7 +305,7 @@ const T = {
     roles:{leader:"Leader router", router:"Router", reed:"End", end_device:"End", sleepy_end_device:"Sleepy end", unassigned:"unassigned", unspecified:"unspecified", detached:"detached", child:"End device", offline:"offline"},
     boot:{unspecified:"unspecified", power_on:"power on", brown_out:"brown-out", software_watchdog:"software watchdog", hardware_watchdog:"hardware watchdog", software_update:"software update", software_reset:"software reset"},
     csrc:{report:"report", event:"event", read:"read", ping:"ping", passive:"packet"}},
-  fr: {clear:"Effacer", filtered:"Filtre actif", todo_info:"À savoir ({n})", np_before:"Avant : {p}, {r} dBm", a_parent_noanswer:"{n} : pas de réponse (endormie ?)", a_parent_new:"{n} : nouveau parent {pa}, {b} → {a} dBm", a_failed:"{n} : action impossible", check_bat:"Vérifier les piles.", check_power:"Vérifier l'alimentation.", down_do_bat:"Depuis {t}. Vérifier les piles.", more:"+{n}", refresh:"Actualiser", report:"Rapport", classic:"Vue classique", loading:"chargement…", error:"erreur", live:"en direct", polling:"lien direct coupé : valeurs lues à la demande", updated:"mis à jour à {t}",
+  fr: {clear:"Effacer", filtered:"Filtre actif", todo_info:"À savoir ({n})", np_before:"Avant : {p}, {r} dBm", a_parent_noanswer:"{n} : pas de réponse (endormie ?)", a_parent_new:"{n} : nouveau parent {l}", a_failed:"{n} : action impossible", check_bat:"Vérifier les piles.", check_power:"Vérifier l'alimentation.", down_do_bat:"Depuis {t}. Vérifier les piles.", more:"+{n}", refresh:"Actualiser", report:"Rapport", classic:"Vue classique", loading:"chargement…", error:"erreur", live:"en direct", polling:"lien direct coupé : valeurs lues à la demande", updated:"mis à jour à {t}",
     silent:"silencieuse", w_silent:"Silencieuse", n_silent:"{n} node silencieuse", n_silent_pl:"{n} nodes silencieuses", silent_sub:"{name} : probablement sans courant.",
     silent_tip:"Aucun signe de vie depuis {t} (d'habitude toutes les {u}) : probablement sans courant.",
     t_rhythm:"Signe de vie", rhythm_v:"toutes les {u} au plus · silence signalé après {l}", rhythm_wait:"mesure en cours",
@@ -330,14 +330,14 @@ const T = {
     a_interview_tip:"Reinterview", a_parent_router:"Un routeur n'a pas de parent : rien à chercher",
     a_parent_confirm:"{n} : rechercher un nouveau parent ? Le nouveau peut être moins bon.", a_interview_confirm:"{n} : ré-interviewer la node ? Ça peut prendre une minute.",
     a_ping_ok:"{n} : répond au ping", a_ping_ko:"{n} : pas de réponse au ping", a_interview_ok:"{n} ré-interviewée ({s} s)",
-    a_parent_same:"{n} : même parent, {pa}, {a} dBm", a_parent_unknown:"{n} : nouveau parent pas encore connu",
+    a_parent_same:"{n} : même parent {l}", a_parent_unknown:"{n} : nouveau parent pas encore connu",
     a_parent_unsupported:"{n} : recherche de parent non prise en charge", a_parent_failed:"{n} : recherche de parent refusée",
     a_parent_busy:"Une recherche de parent est déjà en cours", ap_ph:"Nom de ce point d'accès", save:"Enregistrer", saved:"Enregistré", ap:"Point d'accès", ap_unknown:"Point d'accès sans nom : à nommer dans la fiche",
     to_ha:"Chemin vers Home Assistant", r_direct:"{br} en direct", r_via:"{br} via {via}", r_parent:"parent {p}, puis ", r_cost:"coût {c}",
     r_cost_tip:"Coût du chemin : 1 par bon saut, jusqu'à 4 pour un lien faible. Le border router le plus proche est celui de plus bas coût.", r_unknown:"inconnu pour l'instant", no_parent:"Parent inconnu (probablement un border router)",
-    sig:["faible", "moyen", "bon"], new_parent:"nouveau parent", none_match:"Aucune node ne correspond.", columns:"Colonnes", cols_reset:"Colonnes par défaut", t_out24:"Coupures 24 h", t_out7:"Coupures 7 j", sort_tip:"Cliquer pour trier, recliquer pour inverser", sort_reset:"Ordre par défaut (problèmes d'abord)",
+    sig:["faible", "correct", "bon"], sig_tip:"Sens le plus faible du lien", new_parent:"nouveau parent", none_match:"Aucune node ne correspond.", columns:"Colonnes", cols_reset:"Colonnes par défaut", t_out24:"Coupures 24 h", t_out7:"Coupures 7 j", sort_tip:"Cliquer pour trier, recliquer pour inverser", sort_reset:"Ordre par défaut (problèmes d'abord)",
     ago_s:"il y a {n} s", ago_m:"il y a {n} min", ago_h:"il y a {n} h", ago_d:"il y a {n} j", never:"jamais",
-    d_net:"Réseau", d_role:"Rôle", d_parent:"Parent", d_best:"Meilleur lien", d_signal:"Signal", d_lqi:"Qualité du lien (0–3)", d_resp:"Réponse · moyenne",
+    d_net:"Réseau", d_role:"Rôle", d_parent:"Parent", d_best:"Transmet par", d_signal:"Signal", d_lqi:"Qualité du lien (0–3)", d_resp:"Réponse · moyenne",
     d_power:"Alimentation", mains:"secteur", battery:"pile", bat_level:["ok", "faible", "critique"], d_last:"Dernier contact",
     sig7:"Signal · 7 derniers jours", resp7:"Réponse · 7 derniers jours", outages:"Coupures", pchanges:"Changements de parent", none:"aucun", ongoing:"en cours",
     hist_wait:"Historique disponible dans 15 min au plus.", now:"maintenant", d7:"il y a 7 j", average:"moyenne", threshold:"seuil faible", off_scale:"hors échelle",
@@ -397,7 +397,7 @@ const bars = n => '<svg class="i" viewBox="0 0 24 24" fill="currentColor">' + [0
   `<rect x="${3 + i * 5}" y="${16 - i * 4}" width="3.5" height="${5 + i * 4}" rx="1" opacity="${i < n ? 1 : .22}"/>`).join("") + "</svg>";
 
 // ------------------------------------------------------------ formatting
-let D = null, TH = {rssi_good:-75, rssi_bad:-85};
+let D = null, TH = {rssi_good:-80, rssi_bad:-90};
 const hm = ts => new Date(ts * 1000).toLocaleTimeString(LANG, {hour:"2-digit", minute:"2-digit"});
 const dt = s => new Date(s * 1000).toLocaleString(LANG, {weekday:"short", hour:"2-digit", minute:"2-digit"});
 const dec = (v, n = 1) => Number(v).toLocaleString(LANG, {minimumFractionDigits:n, maximumFractionDigits:n});
@@ -417,9 +417,18 @@ const net = r => r.network || "thread";
 const linkName = r => r.parent || (isRouter(r) ? r.best_link : null);
 const linkRssi = r => r.parent ? r.rssi : (isRouter(r) ? r.best_rssi : null);
 const linkLqi = r => r.parent ? r.lqi : (isRouter(r) ? r.best_lqi : null);
-const sigCls = v => v >= TH.rssi_good ? "ok" : v > TH.rssi_bad ? "warn" : "bad";
-const sigWord = v => L("sig")[v >= TH.rssi_good ? 2 : v > TH.rssi_bad ? 1 : 0];
-const sigBars = v => v >= TH.rssi_good + 10 ? 4 : v >= TH.rssi_good ? 3 : v > TH.rssi_bad ? 2 : 1;
+// level of the link shown, 3 good, 2 fair, 1 weak. Thread: the link quality decides (same rule as
+// the advice and the parent search), the RSSI only when it is not known. Wi-Fi: the RSSI.
+function sigLevel(r) {
+  const v = linkRssi(r), q = linkLqi(r);
+  if (net(r) !== "thread") return v == null ? null : v >= -75 ? 3 : v > -85 ? 2 : 1;
+  if (q) return Math.min(3, q);
+  return v == null ? null : v > TH.rssi_good ? 3 : v > TH.rssi_bad ? 2 : 1;
+}
+// green: nothing to do (good and fair); orange: weak (red is kept for unavailable nodes)
+const sigCls = l => l >= 2 ? "ok" : "warn";
+const sigWord = l => L("sig")[l - 1];
+const sigBars = l => l >= 3 ? 4 : l === 2 ? 3 : 1;
 const lvl = r => r.advice_level === "low" ? "info" : "warn";
 // a silent node is only shown by its status (often short-lived): not in "To handle" nor the verdict
 // added to Matter less than 24 h ago (date_commissioned is UTC without zone)
@@ -431,10 +440,9 @@ const status = r => r.available && r.silent_s ? `<span class="st warn" title="${
   : r.available ? `<span class="st ok">${IC.ok}${L("available")}</span>`
   : `<span class="st bad" title="${esc(F("unav_since", {t: since(r)}))}">${IC.bad}${L("unavailable")}</span>`;
 function signal(r) {
-  const v = linkRssi(r);
-  if (v == null) return `<span class="mut">—</span>`;
-  const q = linkLqi(r);
-  return `<span class="sig ${sigCls(v)}">${bars(sigBars(v))}<span class="num">${v} dBm</span> <small>${sigWord(v)}${q != null ? ` · <span title="${esc(L("d_lqi"))}">LQI ${q}</span>` : ""}</small></span>`;
+  const v = linkRssi(r), q = linkLqi(r), l = sigLevel(r);
+  if (l == null) return net(r) === "thread" ? "" : `<span class="mut">—</span>`;
+  return `<span class="sig ${sigCls(l)}" title="${esc(net(r) === "thread" ? L("sig_tip") : "")}">${bars(sigBars(l))}${v != null ? `<span class="num">${v} dBm</span> ` : ""}<small>${sigWord(l)}${q ? ` · <span title="${esc(L("d_lqi"))}">LQI ${q}</span>` : ""}</small></span>`;
 }
 // battery drawn with its charge: green > 50 %, orange 20–50 %, red < 20 % (the percentage is always written too)
 function batIcon(pct) {
@@ -464,7 +472,7 @@ function fullPath(r) {
 function link(r) {
   const n = linkName(r);
   if (net(r) === "wifi" && n) return `<span class="p" title="${esc((r.access_point ? L("ap") + " : " + r.access_point + "\n" : L("ap_unknown") + "\n") + "BSSID " + (r.bssid || "?"))}">${esc(n)}</span>`;
-  if (!n) return `<span class="p mut" title="${esc(L("no_parent"))}">${net(r) === "thread" ? "?" : "—"}</span>`;
+  if (!n) return net(r) === "thread" ? "" : `<span class="p mut">—</span>`;   // link not known: nothing shown
   const best = !r.parent && isRouter(r);
   let np = "";
   if (r.new_parent) {
@@ -782,8 +790,9 @@ async function runAction(btn) {
     else if (a === "remove") msg = F("a_remove_ok", {n: r.name});
     else {
       const k = ["better", "worse", "similar"].includes(res.result) ? "new" : res.result || "unknown";
-      msg = F("a_parent_" + k, {n: r.name, b: res.rssi_before ?? "", a: res.rssi ?? "", pa: res.parent || ""})
-        .replace(/, ,/g, ",").replace(/ → (?= dBm)| \? dBm|, dBm/g, "").replace(/,\s*$/, "").replace(/ ,/g, ",");
+      // the parent (new or same) and its link now, as the table shows them
+      const lk = [res.parent, res.lqi ? "LQI " + res.lqi : null, res.rssi != null ? res.rssi + " dBm" : null].filter(Boolean).join(" · ");
+      msg = F("a_parent_" + (res.parent ? k : k === "new" || k === "same" ? "unknown" : k), {n: r.name, l: lk});
     }
   } catch (e) { msg = F("a_failed", {n: r.name}); }
   toast(msg);

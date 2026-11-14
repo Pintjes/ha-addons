@@ -18,8 +18,9 @@ If the node does not confirm, the fail-safe is disarmed (or expires on its
 own) and the node keeps the network configuration it had.
 
 Only end devices are concerned (a router has no parent), and only those whose
-link is poor when read just before: a node with a good link can end up on a
-weaker parent, and there is no way back to the previous one. Nothing is sent
+link is weak when read just before (same rule as the table and the advice: link
+quality 1): a node with a good link can end up on a weaker parent, and there is
+no way back to the previous one. Nothing is sent
 until the "Find better parents" button is pressed.
 """
 import logging
@@ -28,11 +29,9 @@ import time
 
 from i18n import t, tn
 from nodetable import nb_rssi
-from advice import WEAK_PARENT
+from advice import weak_link
 
 LOG = logging.getLogger("mg.reattach")
-POOR_LQI = 2          # link quality (1-3) from which a new parent is worth looking for
-POOR_RSSI = -80       # dBm: same, whatever the link quality
 GOOD_GAIN = 6         # dB: gain from which the new link counts as better (same as the advice)
 FAILSAFE_S = 120      # s: the node goes back to its configuration by itself after this time
 SETTLE_S = 25         # s: time left to the node to attach before its new link is read
@@ -62,7 +61,7 @@ def parent_link(table):
 
 
 def is_poor(link):
-    return bool(link) and (link["lqi"] <= POOR_LQI or link["rssi"] <= POOR_RSSI)
+    return bool(link) and weak_link(link["rssi"], link["lqi"])
 
 
 def connected_network(networks):
@@ -94,7 +93,7 @@ class Reattach:
         self.h = healer
         self.live = None          # live copy of the Matter Server cache, plugged in by watcher
         self.advisor = None       # radio advice: told which nodes were asked to move
-        self.table = None         # node table: the signal shown to the user (received by the parent)
+        self.table = None         # node table: the link shown to the user (weakest direction)
         self.busy = threading.Lock()
         self.last = {"date": None, "checked": 0, "poor": 0, "better": 0, "nodes": []}
 
@@ -150,10 +149,10 @@ class Reattach:
         return sorted(out, key=lambda x: x[1])
 
     def _view(self, nid, read_parent=False):
-        """(parent name, signal) of a node as the table shows them (signal received by the
-        parent). read_parent: read the neighbor table of the parent first (just after a move)."""
+        """(parent name, rssi, lqi) of a node as the table shows them (weakest direction of
+        the link). read_parent: read the neighbor table of the parent first (just after a move)."""
         if not self.table:
-            return None, None
+            return None, None, None
         rid = f"0x{nid.lstrip('0') or '0'}"
         try:
             self.table.cache_t = 0
@@ -169,10 +168,10 @@ class Reattach:
                         self.live.set_attribute(pid, "0/53/7", table)
                     self.table.cache_t = 0
                     row = next((r for r in self.table.get(force=True).get("rows") or [] if r.get("id") == rid), row)
-            return row.get("parent"), row.get("rssi")
+            return row.get("parent"), row.get("rssi"), row.get("lqi")
         except Exception as err:  # noqa: BLE001
             LOG.debug("table view of %s: %s", nid, err)
-            return None, None
+            return None, None, None
 
     def _one(self, nid, name, area, force=False):
         """Read the link of one node and, if it is poor, make it look for a parent.
@@ -183,14 +182,14 @@ class Reattach:
         if self.live and isinstance(attrs.get("0/53/7"), list):
             self.live.set_attribute(nid, "0/53/7", attrs["0/53/7"])
             self.live.note_contact(nid, src="read")
-        parent_before, rssi_before = self._view(nid)
-        # same rule as the advice: the signal of the table at or below the weak threshold
-        poor = rssi_before <= WEAK_PARENT if rssi_before is not None else is_poor(before)
+        parent_before, rssi_before, lqi_before = self._view(nid)
+        # same rule as the table and the advice, on the link the table shows
+        poor = weak_link(rssi_before, lqi_before) if (rssi_before is not None or lqi_before) else is_poor(before)
         roles = END_DEVICE_ROLES + ((4,) if force else ())   # a REED attached as a child has a parent too
         if attrs.get("0/53/1") not in roles or not before or not (force or poor):
             return None
         rssi_before = rssi_before if rssi_before is not None else before["rssi"]
-        row = {"node": name, "area": area, "rssi_before": rssi_before, "lqi_before": before["lqi"],
+        row = {"node": name, "area": area, "rssi_before": rssi_before, "lqi_before": lqi_before or before["lqi"],
                "rloc_before": before["rloc"], "parent_before": parent_before}
         network = connected_network(attrs.get("0/49/1"))
         if network is None or CONNECT_NETWORK not in (attrs.get("0/49/65529") or []):
@@ -224,23 +223,26 @@ class Reattach:
                 self.live.set_attribute(nid, "0/51/0", addrs)
         except Exception as err:  # noqa: BLE001
             LOG.debug("addresses of %s: %s", name, err)
-        parent, rssi = self._view(nid, read_parent=True)   # only the values of the table: no other source
+        parent, rssi, lqi = self._view(nid, read_parent=True)   # only the values of the table: no other source
         if parent and parent == parent_before and res != "unknown":
             res = "same"
         if self.advisor:
             self.advisor.tried[name] = (time.time(), res)
-        row.update({"result": res, "parent": parent, "rssi": rssi})
+        row.update({"result": res, "parent": parent, "rssi": rssi, "lqi": lqi})
         if after:
-            row |= {"lqi": after["lqi"], "rloc": after["rloc"]}
-        if res == "unknown":
+            row["rloc"] = after["rloc"]
+        # the result: the parent (new or same) and its link now, as the table shows them
+        link = " · ".join(x for x in (parent, f"LQI {lqi}" if lqi else None, f"{rssi} dBm" if rssi is not None else None) if x)
+        if res == "unknown" or not parent:
             text = t("{node}: new parent not known yet", node=name)
         elif res == "same":
-            text = t("{node}: same parent, {parent}, {after} dBm", node=name, parent=parent or "?", after=rssi if rssi is not None else "?")
+            text = t("{node}: same parent {link}", node=name, link=link)
         else:
-            text = t("{node}: new parent {parent}, {before} → {after} dBm", node=name, parent=parent or "?",
-                     before=rssi_before, after=rssi if rssi is not None else "?")
+            text = t("{node}: new parent {link}", node=name, link=link)
         row["text"] = text
-        self.w.emit("reattach_result", text, node=name, result=res, rssi_before=rssi_before, rssi=rssi, parent=parent)
+        if self.table:
+            self.table.cache_t = 0   # the page shows the new link at its next request
+        self.w.emit("reattach_result", text, node=name, result=res, rssi_before=rssi_before, rssi=rssi, lqi=lqi, parent=parent)
         return row
 
     def run_node(self, nid):

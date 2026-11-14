@@ -35,7 +35,7 @@ storms, when pinging would only add traffic.
 **2. Your whole mesh in one page.**
 A **Mesh Guardian** page in the sidebar tells you at a glance whether the network
 is fine and, if not, which node and what to do. Every node — Thread, Wi-Fi and
-Ethernet — with its status and role, its parent (or best neighbor for a router)
+Ethernet — with its status and role, its parent (or first hop for a router)
 and signal, the border router it reaches Home Assistant through and in how many
 hops, its response time, power and battery, last contact and a one-line advice
 such as *Remove the battery 10s*. Ping a node, make it look for a better parent

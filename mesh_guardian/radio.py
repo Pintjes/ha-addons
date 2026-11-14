@@ -28,7 +28,8 @@ import time
 from datetime import datetime
 
 from i18n import t, tn
-from nodetable import ext_of, find_parents
+from advice import weak_link
+from nodetable import ext_of, find_parents, hop_links, routes_to_br
 
 LOG = logging.getLogger("mg.radio")
 
@@ -36,7 +37,6 @@ ROLE = {0: "unspecified", 1: "unassigned", 2: "sleepy_end_device", 3: "end_devic
         5: "router", 6: "leader"}
 COUNTERS = {"14": "detached", "15": "child", "16": "router", "17": "leader", "18": "attach_attempts",
             "19": "partition_changes", "20": "better_partition", "21": "parent_changes"}
-WEAK_RSSI = -85   # same threshold as the red of the node table
 EPISODE_MIN_NODES = 5   # detaches of at least this many nodes in one survey interval:
 EPISODE_SHARE = 0.2     # (or this share of the nodes) are one network episode
 HISTORY_FILE = "/data/radio_history.json"
@@ -214,15 +214,22 @@ class Radio:
                 if cur is None or rssi < cur["rssi"]:
                     links[key] = {"a": key[0], "b": key[1], "rssi": rssi, "lqi": lqi,
                                   "errors_pct": round((_g(nb, "8") or 0) / 100, 1) if _g(nb, "8") else 0}
-        found, _rlocs, best = find_parents(raw, ext_names)
+        found, rlocs = find_parents(raw, ext_names)
+        try:   # routers: the link they send through (first hop to the border router), as in the table
+            with self.w.lock:
+                br_exts = [b["xa"] for b in self.w.br.values() if b.get("xa") is not None]
+            best = hop_links(raw, routes_to_br(raw, ext_names, br_exts, rlocs, found), found, rlocs)
+        except Exception as err:  # noqa: BLE001
+            LOG.debug("router links: %s", err)
+            best = {}
         for nid, (parent, rssi, lqi, key) in found.items():
             parents[info[nid]["name"]] = {"parent": parent, "rssi": rssi, "lqi": lqi, "key": str(key)}
-        # weak links: only the links in use (child -> parent, router -> its best link)
+        # weak links: only the links in use (child -> parent, router -> its first hop)
         used = [{"a": info[nid]["name"], "b": p[0], "rssi": p[1], "lqi": p[2]} for nid, p in found.items()]
         used += [{"a": info[nid]["name"], "b": l[0], "rssi": l[1], "lqi": l[2]} for nid, l in best.items()
                  if nid not in found]
-        weak = sorted((l for l in used if l["rssi"] is not None and (l["rssi"] <= WEAK_RSSI or l["lqi"] == 1)),
-                      key=lambda l: l["rssi"])
+        weak = sorted((l for l in used if weak_link(l["rssi"], l["lqi"])),
+                      key=lambda l: l["rssi"] if l["rssi"] is not None else 0)
         # instability: difference with the survey of ~24h ago (or the oldest available)
         snapshot = {nid: {"c": n["counters"], "u": n["uptime"], "r": n["reboots"]} for nid, n in info.items()}
         self.history.append({"t": now, "nodes": snapshot})
@@ -287,7 +294,7 @@ class Radio:
         self.w.emit("radio_survey",
                     t("Radio survey: {n} nodes, {weak}",
                       n=len(info), weak=tn("{n} weak link", "{n} weak links", len(weak)))
-                    + (t(" (worst: {a} ↔ {b} {rssi}dBm)", a=worst["a"], b=worst["b"], rssi=worst["rssi"]) if worst else "")
+                    + (t(" (worst: {a} ↔ {b} {rssi}dBm)", a=worst["a"], b=worst["b"], rssi="?" if worst["rssi"] is None else worst["rssi"]) if worst else "")
                     + (t(", most unstable: {name} ({d} detach)" if unstable[0]["detaches"] == 1 else ", most unstable: {name} ({d} detaches)",
                          name=unstable[0]["name"], d=unstable[0]["detaches"]) if unstable else ""),
                     weak=len(weak), links=len(links), unstable=len(unstable))
@@ -358,7 +365,7 @@ class Radio:
         r = self.last or {}
         return {
             "weak_links": len(r.get("weak_links", [])),
-            "weak_links_list": [f"{l['a']} ↔ {l['b']}: {l['rssi']}dBm, LQI {l['lqi']}"
+            "weak_links_list": [f"{l['a']} ↔ {l['b']}: {'?' if l['rssi'] is None else l['rssi']}dBm, LQI {l['lqi'] or '?'}"
                                 for l in r.get("weak_links", [])[:25]],
             "parents": {k: f"{v['parent']} ({'?' if v['rssi'] is None else v['rssi']}dBm)" for k, v in list(r.get("parents", {}).items())[:60]},
             "unstable": len(r.get("unstable", [])),
