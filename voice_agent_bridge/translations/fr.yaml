@@ -4,7 +4,7 @@ configuration:
     description: Langue des réponses parlées, des messages d'erreur et du modèle de notes de la maison.
   claude_token:
     name: Jeton Claude
-    description: Jeton longue durée obtenu avec `claude setup-token` (abonnement Claude Pro ou Max). Laisser vide pour utiliser une clé API.
+    description: "Jeton longue durée obtenu avec `claude setup-token` (abonnement Claude Pro ou Max). Laisser vide pour utiliser une clé API. Comment l'obtenir : https://code.claude.com/docs/en/authentication#generate-a-long-lived-token"
   anthropic_api_key:
     name: Clé API Anthropic
     description: Alternative au jeton Claude, facturée à l'usage sur console.anthropic.com.
