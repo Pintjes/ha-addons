@@ -75,6 +75,15 @@ class WebUI:
                         self._send(200, json.dumps(ui.w.history.node(nid), ensure_ascii=False))
                     except Exception as err:  # noqa: BLE001
                         self._send(400, json.dumps({"error": str(err)}, ensure_ascii=False))
+                elif path == "/api/raw":   # diagnostics: the Thread tables of one node, as received
+                    try:
+                        nid = int(query.split("id=")[1].split("&")[0], 16)
+                        node = next((n for n in ui.table._nodes() if int(n.get("node_id", -1)) == nid), None)
+                        attrs = (node or {}).get("attributes") or {}
+                        keep = ("0/53/1", "0/53/7", "0/53/8", "0/53/13", "0/51/0")
+                        self._send(200, json.dumps({k: attrs.get(k) for k in keep}, ensure_ascii=False))
+                    except Exception as err:  # noqa: BLE001
+                        self._send(400, json.dumps({"error": str(err)}, ensure_ascii=False))
                 elif path == "/api/report":
                     try:
                         import report
