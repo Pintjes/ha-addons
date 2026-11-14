@@ -4,6 +4,20 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.9.0] - 2026-11-14
+
+### Added
+
+- **Find better parents** button: reads the parent link of every Thread end
+  device and asks those whose link is poor (LQI 2 or less, or -80dBm or less)
+  to attach again, so they pick a parent among the routers they hear now. The
+  node does not reboot and keeps its configuration. Routers and nodes with a
+  good link are left alone. Result per node in the `reattach_result` event and
+  in `sensor.mesh_guardian_parent_search`. Nothing is sent until the button is
+  pressed.
+- A parent change that follows this button is no longer counted as a
+  spontaneous change of the model.
+
 ## [1.8.0] - 2026-11-14
 
 ### Added
