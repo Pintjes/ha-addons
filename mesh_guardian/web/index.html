@@ -53,6 +53,10 @@
   .verdict.ok .badge { background: var(--ok-soft); color: var(--ok); }
   .verdict.warn .badge { background: var(--warn-soft); color: var(--warn); }
   .verdict.bad .badge { background: var(--bad-soft); color: var(--bad); }
+  .verdict.info .badge { background: var(--acc-soft); color: var(--acc-txt); }
+  .adv.warn svg { color: var(--acc-txt) !important; }
+  .sheet .advice.warn { background: var(--acc-soft) !important; }
+  .sheet .advice.warn svg { color: var(--acc-txt) !important; }
   .verdict h3 { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.25; }
   .verdict p { margin: 4px 0 0; color: var(--mut); }
   .facts { display: grid; grid-template-columns: repeat(4, auto); gap: 8px 22px; margin-top: 16px; justify-content: start; }
@@ -479,9 +483,9 @@ function bar(v, v24) {
 }
 function renderHero() {
   const n = D.network || {}, rows = D.rows || [], q = D.quality;
-  const down = rows.filter(r => !r.available), act = rows.filter(r => r.available && !r.silent_s && r.advice && lvl(r) === "warn");
+  const down = rows.filter(r => !r.available), act = rows.filter(r => r.available && r.advice);
   const quiet = [];
-  const cls = down.length ? "bad" : act.length || quiet.length ? "warn" : "ok";
+  const cls = down.length ? "bad" : act.length ? "info" : "ok";
   const parts = [];
   if (down.length) parts.push(P2("n_down", down.length));
   if (quiet.length) parts.push(P2("n_silent", quiet.length));
@@ -511,7 +515,7 @@ function renderHero() {
       <div class="parts">${Object.entries(q.parts || {}).map(([k, v]) => `<div class="part ${v < 90 ? "low" : ""}" title="${esc(F("part_tip", {v: dec(v), v24: p24[k] != null ? dec(p24[k]) : "—", n: WEIGHTS[k] ?? "?"}))}">
         <span>${esc(L("q_parts")[k] || k)}</span><span class="bar">${bar(v, p24[k])}</span><span class="num">${dec(v)} %</span></div>`).join("")}</div>`;
   }
-  $("#hero").innerHTML = `<div><div class="verdict ${cls}"><span class="badge">${cls === "ok" ? IC.ok : cls === "bad" ? IC.bad : IC.warn}</span>
+  $("#hero").innerHTML = `<div><div class="verdict ${cls}"><span class="badge">${cls === "ok" ? IC.ok : cls === "bad" ? IC.bad : IC.bulb}</span>
       <div><h3>${title}</h3><p>${sub}</p></div></div>
       <div class="facts">${facts.map(([k, v]) => `<div><span>${k}</span><b class="num">${v}</b></div>`).join("")}</div></div>
     <div class="score">${score}</div>`;
@@ -523,15 +527,16 @@ function renderTodo() {
   const net = [];
   if (n.storm) net.push(["warn", L("storm")]);
   if (n.routing_problem) net.push(["bad", n.routing_problem]);
-  const urgent = issues.filter(r => sev(r) < 2).length + net.length;
-  $("#todoTitle").textContent = urgent ? F("todo", {n: urgent}) : issues.length ? F("todo_info", {n: issues.length}) : L("todo_none");
+  const total = issues.length + net.length;
+  $("#todoTitle").textContent = total ? F("todo", {n: total}) : L("todo_none");
   $("#todo").innerHTML = net.map(([k, txt]) => `<div class="card issue ${k}"><span class="ic">${k === "bad" ? IC.bad : IC.warn}</span>
       <span><span class="what">${L("w_net")}</span><span>${esc(txt)}</span></span></div>`).join("") +
     issues.map(r => {
-      const k = !r.available ? "bad" : r.silent_s ? "warn" : lvl(r);
-      const what = !r.available ? L("w_down") : r.silent_s ? L("w_silent") : k === "warn" ? L("w_warn") : L("w_info");
+      // every advice is an action: one kind, in blue (orange looked like a serious problem)
+      const k = !r.available ? "bad" : "info";
+      const what = !r.available ? L("w_down") : L("w_warn");
       const txt = !r.available ? F(r.battery ? "down_do_bat" : "down_do", {t: since(r)}) : r.silent_s ? esc(silentTip(r)) : esc(r.advice);
-      return `<button class="card issue ${k}" data-id="${esc(r.id)}" title="${esc(r.advice_detail || "")}"><span class="ic">${k === "bad" ? IC.bad : k === "warn" ? IC.bulb : IC.info}</span>
+      return `<button class="card issue ${k}" data-id="${esc(r.id)}" title="${esc(r.advice_detail || "")}"><span class="ic">${k === "bad" ? IC.bad : IC.bulb}</span>
         <span><span class="what">${what}</span><b>${esc(r.name)} <span class="mut" style="font-weight:400">${r.area ? "· " + esc(r.area) : ""}</span></b><span>${txt}</span></span></button>`;
     }).join("");
 }
