@@ -35,6 +35,8 @@ PREFIXES = [
     'poster="', "poster='",
     'srcset="', "srcset='", "url(", 'url("', "url('",
     'fetch("', "fetch('", ";url=",
+    # Scripts that load other scripts (JavaScript modules)
+    'from"', "from'", 'from "', "from '", 'import"', "import'", 'import "', "import '", 'import("', "import('",
 ]
 
 HEAD = """\

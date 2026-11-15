@@ -111,7 +111,8 @@ Behind the ingress, the app is not at `/` but under a path such as
 - rewrites redirections (`Location`) and the path of cookies;
 - rewrites, in HTML, CSS, JavaScript and JSON answers, a path starting with
   `/` found right after `href="`, `src="`, `action="`, `poster="`,
-  `srcset="`, `url(`, `fetch("` and `;url=` (single quotes too);
+  `srcset="`, `url(`, `fetch("`, `;url=`, and the `import` of JavaScript
+  modules (single quotes too);
 - rewrites the full addresses of the app itself (`http://192.168.1.10:8000/…`)
   found in these answers;
 - sends the `Host`, `Origin` and `Referer` headers the app expects, so that

@@ -4,6 +4,13 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.3] - 2026-11-15
+
+### Fixed
+
+- Scripts loaded by other scripts (JavaScript modules: `import … from "/…"`,
+  `import("/…")`) are rewritten too.
+
 ## [1.4.2] - 2026-11-15
 
 ### Fixed
