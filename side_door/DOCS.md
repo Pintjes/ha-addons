@@ -136,6 +136,11 @@ app stays blank or leaves the panel. With `inject_script` on, the add-on:
   app by an object that shows the app an address without the ingress path, and
   keeps its redirections inside the panel.
 
+When the app sends the browser to another site to log in, that site opens in
+the whole window (login pages refuse to be shown inside another page). Once
+logged in, the browser comes back to the app alone, with a button to return
+to Home Assistant; the app then stays logged in inside the panel.
+
 This is experimental and cannot work with every app: a script that reads
 `location` without `window.` in front is not caught, and neither is an
 address built inside a web worker. Leave the option off when the app works

@@ -12,6 +12,8 @@
   if (!base || window.__sd_loc) return;
   var real = window.location;
   var origin = real.origin;
+  var realTop = window.top;
+  var BACK = "side_door_back";
 
   // The panel around the app is on the same site. An app that looks at its
   // parent must not take it for its own shell: it sees itself as the top page.
@@ -46,11 +48,47 @@
     return url.href;
   }
 
+  function elsewhere(value) {
+    try {
+      return new URL(String(value), shownHref()).host !== real.host;
+    } catch (error) {
+      return false;
+    }
+  }
+  // An app that sends the browser to another site (a login service) tells it
+  // where to come back. That address is the one the app sees: it gets the
+  // ingress path back, plain or encoded.
+  function withReturnAddress(text) {
+    [[origin + "/", origin + base], [encodeURIComponent(origin + "/"), encodeURIComponent(origin + base)]]
+      .forEach(function (pair) {
+        text = text.split(pair[1]).join(pair[0]).split(pair[0]).join(pair[1]);
+      });
+    return text;
+  }
+  // Going to a page. Another site is opened in the whole window, not in the
+  // panel: login pages refuse to be shown inside another page. The way back
+  // to Home Assistant is remembered (see the button at the end).
+  function go(how, value) {
+    if (!elsewhere(value)) {
+      real[how](fix(value));
+      return;
+    }
+    var address = withReturnAddress(String(value));
+    if (realTop !== window) {
+      try {
+        sessionStorage.setItem(BACK, realTop.location.href);
+        realTop.location[how](address);
+        return;
+      } catch (error) { /* the panel is on another site: stay in the frame */ }
+    }
+    real[how](address);
+  }
+
   // The address bar. The add-on replaces "window.location" and
   // "document.location" in the scripts of the app by this object.
   var fake = {
     get href() { return shownHref(); },
-    set href(value) { real.href = fix(value); },
+    set href(value) { go("assign", value); },
     get pathname() { return shown(real.pathname); },
     set pathname(value) { real.pathname = base + String(value).replace(/^\//, ""); },
     get search() { return real.search; },
@@ -63,15 +101,15 @@
     get port() { return real.port; },
     get origin() { return origin; },
     get ancestorOrigins() { return real.ancestorOrigins; },
-    assign: function (value) { real.assign(fix(value)); },
-    replace: function (value) { real.replace(fix(value)); },
+    assign: function (value) { go("assign", value); },
+    replace: function (value) { go("replace", value); },
     reload: function () { real.reload(); },
     toString: function () { return shownHref(); }
   };
   [window, document].forEach(function (target) {
     Object.defineProperty(target, "__sd_loc", {
       get: function () { return fake; },
-      set: function (value) { real.href = fix(value); },
+      set: function (value) { go("assign", value); },
       configurable: true
     });
   });
@@ -141,4 +179,25 @@
     }
     return originalSetAttribute.call(this, name, value);
   };
+
+  // Back from another site, the app fills the whole window, outside Home
+  // Assistant: a button leads back to the panel.
+  if (realTop === window) {
+    var back = null;
+    try { back = sessionStorage.getItem(BACK); } catch (error) { /* private window */ }
+    if (back) {
+      document.addEventListener("DOMContentLoaded", function () {
+        var button = document.createElement("button");
+        button.textContent = "← Home Assistant";
+        button.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:2147483647;padding:10px 16px;"
+          + "border:0;border-radius:20px;background:#1f6feb;color:#fff;font:600 14px system-ui,sans-serif;"
+          + "cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.4)";
+        button.addEventListener("click", function () {
+          try { sessionStorage.removeItem(BACK); } catch (error) { /* private window */ }
+          real.href = back;
+        });
+        document.body.appendChild(button);
+      });
+    }
+  }
 })();

@@ -4,6 +4,15 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.4] - 2026-11-15
+
+### Added
+
+- `inject_script`: an app that sends the browser to another site to log in
+  (an account service) now opens that site in the whole window, since such
+  pages refuse to be shown inside the panel, and gives it the right address
+  to come back to. Back on the app, a button leads to Home Assistant.
+
 ## [1.4.3] - 2026-11-15
 
 ### Fixed
