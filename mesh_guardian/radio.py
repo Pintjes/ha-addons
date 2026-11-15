@@ -347,6 +347,11 @@ class Radio:
 
     def run(self):
         time.sleep(90)
+        # first survey once the Thread tables were read again (see Quality.startup_tables)
+        q = getattr(self.w, "quality", None)
+        while q is not None and not q.tables_ready:
+            if self.w.stop.wait(10):
+                return
         while True:
             try:
                 self.survey()

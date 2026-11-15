@@ -46,7 +46,10 @@ do about them.
    Matter Server restart), pinging pauses for 5 minutes.
 3. **Radio survey.** Every 30 minutes it reads the Thread diagnostics that the
    Matter Server already has in cache (no radio traffic): neighbor tables,
-   parents, roles and counters.
+   parents, roles and counters. After a start of the add-on, the neighbor and
+   route tables of the mains-powered nodes are first read again, one node every
+   few seconds (the cache can be hours old); the first survey waits for it
+   (5 to 10 minutes, at most 20). Battery nodes are never read.
 4. **Statistics.** Outages are counted per node over 7 days. On first start,
    the last 7 days are rebuilt from the Home Assistant history.
 
@@ -103,8 +106,8 @@ minute, border routers browsed again every 5 minutes.
 |---|---|---|---|
 | `sensor.mesh_guardian_border_routers_online` | border routers online; role of each in `border_routers` | every announcement or probe | current |
 | `sensor.mesh_guardian_br_<id>` | one per border router: `leader`, `router`, `child`, `detached` or `offline` (offline only after 15 minutes without any answer); `key`, `detached_24h`, `last_detached`, `same_subnet_as_home_assistant`, `last_contact`, partition, OMR prefix, addresses | same | `detached_24h`: sliding 24h |
-| `sensor.mesh_guardian_thread_leader` | name of the Thread leader (border router or any router of the mesh) | when it changes | current |
-| `sensor.mesh_guardian_thread_partitions` | number of partitions (1 = normal) | same | current |
+| `sensor.mesh_guardian_thread_leader` | name of the Thread leader (border router or any router of the mesh) | when it changes, once the new leader held 30s | current |
+| `sensor.mesh_guardian_thread_partitions` | number of partitions (1 = normal) | when it changes, once the new state held 30s | current |
 | `binary_sensor.mesh_guardian_thread_network_partitioned` | problem when there is more than one partition or leader | same | current |
 | `sensor.mesh_guardian_omr_prefix` | OMR prefix(es); several at once is an anomaly | same | current |
 | `binary_sensor.mesh_guardian_thread_storm` | problem during a Thread storm; start, duration, nodes, border routers detached, prefixes | every 5s over a sliding 15 minutes | ends after 15 quiet minutes |
@@ -161,7 +164,8 @@ Every event is written to the add-on log, published on the MQTT topic
 |---|---|
 | `startup`, `addon_stop` | monitoring ready (with the version and the state of the automatic recovery), add-on stopping (with the signal received) |
 | `br_appeared`, `br_back`, `br_offline`, `br_change`, `br_renamed` | border router life (role, partition, prefix…); a role change is reported once it held 60s |
-| `leader_change`, `partition_change`, `omr_change`, `node_prefix_change` | network-wide changes — the usual cause of lost nodes |
+| `br_detach` | a border router left the network and came back within 30s (alone in its own partition): reported as a short detach of that border router, counted in its `detached_24h` and as a partition split for storms |
+| `leader_change`, `partition_change`, `omr_change`, `node_prefix_change` | network-wide changes — the usual cause of lost nodes; leader and partitions once the new state held 30s |
 | `matter_offline`, `matter_back`, `matter_appeared` | Matter node missing from / back in mDNS (not reported for a battery node still available in Home Assistant) |
 | `mdns_burst` | services withdrawn then re-announced within seconds (no real absence); only in the event file and on MQTT, counted in `mdns_bursts` |
 | `speaker_appeared`, `speaker_back`, `speaker_offline` | smart speaker / hub online state (restart detection) |
@@ -391,7 +395,7 @@ unreachable. A score of
 A storm is a period where the mesh keeps falling apart: the network splits
 into partitions again and again, several OMR prefixes coexist and many nodes
 drop. A storm starts when, over 15 minutes, there are more than 3 partition
-splits, more than 3 OMR prefixes at the same time, or more than 15 nodes
+splits (short border router detaches included), more than 3 OMR prefixes at the same time, or more than 15 nodes
 becoming unavailable (mass drops caused by a restart of Home Assistant are not
 counted). It ends after 15 quiet minutes.
 

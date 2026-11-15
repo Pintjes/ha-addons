@@ -35,6 +35,7 @@ PROBE_BATTERY_S = 60 * 60
 PROBE_RETRY_S = 2 * 60
 NEIGHBOR_REFRESH_S = 60 * 60   # mains nodes: role and neighbor table read again at most hourly   # first new try after a failed read
 PROBE_GAP_S = 5            # between two reads
+STARTUP_MAX_S = 20 * 60    # the startup reread of the Thread tables gives up after this
 RTT_KEEP = 20              # answers kept for the average
 
 SAMPLE_S = 60
@@ -63,6 +64,7 @@ class Quality:
         self.sniffing = False
         self.sniffed = 0
         self._counted = None     # outages already counted (None: first sample, nothing counted)
+        self.tables_ready = False  # Thread tables of the mains nodes read again since the start
         self._load()
 
     # ------------------------------------------------------------ state
@@ -183,8 +185,41 @@ class Quality:
                 LOG.debug("thread read %s %s: %s", nid, path, err)
                 return
 
+    def startup_tables(self):
+        """At start, read again the Thread tables of every mains node: the values read before
+        the restart are gone and the Matter Server cache can be hours old (wrong parents, weak
+        links missed). The first radio survey waits for it. Never for battery nodes."""
+        end = time.time() + STARTUP_MAX_S
+        try:
+            while not self.live.connected and time.time() < end:
+                if self.w.stop.wait(5):
+                    return
+            with self.live.lock:
+                thread = {k for k, n in self.live.nodes.items() if n["attributes"].get("0/53/1") is not None}
+            with self.h.lock:
+                todo = [k for k, n in self.h.nodes.items() if n["available"] and not n.get("battery") and k in thread]
+            done = 0
+            for nid in todo:
+                while getattr(self.w, "storm", None) and self.w.storm.active and time.time() < end:
+                    if self.w.stop.wait(10):
+                        return
+                if time.time() >= end or not self.live.connected:
+                    break
+                with self.lock:
+                    self.rtt.setdefault(nid, {"last": None, "ok": [], "t": 0, "fails": 0})["thr_t"] = 0
+                self._refresh_thread(nid)
+                done += 1
+                if self.w.stop.wait(PROBE_GAP_S):
+                    return
+            LOG.info(t("Thread tables read again: {n}/{total} nodes", n=done, total=len(todo)))
+        except Exception as err:  # noqa: BLE001
+            LOG.debug("startup tables: %s", err)
+        finally:
+            self.tables_ready = True
+
     def run_probe(self):
         time.sleep(90)
+        self.startup_tables()
         saved = time.time()
         while not self.w.stop.is_set():
             due = None

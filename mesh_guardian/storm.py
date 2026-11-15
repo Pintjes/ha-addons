@@ -53,6 +53,8 @@ class Storm:
         now = time.time()
         if kind == "partition_change" and len(data.get("after") or []) > max(1, len(data.get("before") or [])):
             self.splits.append(now)
+        elif kind == "br_detach":   # a border router alone in its own partition for a few seconds
+            self.splits.append(now)
         elif kind == "node_unavailable":
             self.downs.append([now, data.get("name") or data.get("node")])
         elif kind == "global_outage" and self.active:

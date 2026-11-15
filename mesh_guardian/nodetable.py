@@ -730,7 +730,8 @@ class NodeTable:
             out = dict(self.cache)
         out.update(self.header())
         out.update({"time": time.time(), "lang": lang(), "thresholds": THRESHOLDS,
-                    "live": self.live.connected, "live_since": self.live.since})
+                    "live": self.live.connected, "live_since": self.live.since,
+                    "reading": not getattr(getattr(self, "quality", None), "tables_ready", True)})
         return out
 
     def _ping_silent(self, rows):

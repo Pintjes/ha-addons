@@ -4,6 +4,18 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.6.5] - 2026-11-15
+
+### Fixed
+
+- After a start, the first radio survey no longer uses neighbor and route tables hours old from the Matter Server cache (wrong parent changes, weak links missed): the tables of the mains-powered nodes are read again first, and the survey waits for it.
+- A border router alone in its own partition for a few seconds is reported as a short detach of that border router (counted in its detaches and for storms), not as a network partition and a leader change.
+
+### Changed
+
+- Thread partitions and leader change once the new state held 30 seconds.
+- One text for every partition change: "Thread partitions: 1 → 2".
+
 ## [2.6.4] - 2026-11-15
 
 ### Fixed

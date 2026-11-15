@@ -74,7 +74,7 @@ from radio import Radio  # noqa: E402
 from storm import Storm  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.6.4"
+VERSION = "2.6.5"
 
 _MQ = _load_mqtt()
 MQTT_HOST = _MQ.get("host") or os.environ.get("MQTT_HOST", "core-mosquitto")
@@ -100,6 +100,7 @@ BR_FIELDS = ("instance", "network", "ext_pan", "vendor", "model", "role", "inter
              "bbr_active", "partition", "omr", "xa", "addrs", "port")
 BR_HEARD_S = 180   # a border router heard by a Matter node within this time is online
 ROLE_SETTLE_S = 60       # a border router role change is reported after this time
+SETTLE_S = 30            # partitions and leader change once the new state held this long
 BR_SILENT_S = 15 * 60   # a border router is offline after this time without any answer
 STARTUP_QUIET = 150  # seconds without "appeared" events after start
 
@@ -127,7 +128,7 @@ STYLE = {  # event kind -> (icon, color)
     "ping": ("🟠", "yellow"), "sweep": ("🟠", "yellow"),
     "burst": ("⚡", "magenta"),
     "leader": ("👑", "cyan"), "partition": ("🧩", "cyan"), "omr": ("🧭", "cyan"), "prefix": ("🧭", "cyan"),
-    "br_change": ("🔁", "cyan"), "renamed": ("🏷️ ", "cyan"),
+    "br_change": ("🔁", "cyan"), "br_detach": ("🔁", "yellow"), "renamed": ("🏷️ ", "cyan"),
     "radio_survey": ("📡", "blue"), "statistics": ("📊", "blue"), "startup": ("🚀", "blue"),
     "auto_recovery": ("🔧", "blue"), "name": ("🏷️ ", "blue"),
     "parent_change": ("🔀", "cyan"), "advice": ("💡", "yellow"),
@@ -245,6 +246,9 @@ class Watch:
         self.events_count = 0
         self.prev_leaders = None
         self.prev_partitions = None
+        self._settled = None       # partitions and leader as published
+        self._unsettled = None     # a different state, not held SETTLE_S yet
+        self._short_detaches = []  # (key, label, seconds): border routers back before SETTLE_S
         self.prev_omr = None
         self.prev_node_prefixes = None
         self.dirty = True
@@ -941,6 +945,10 @@ class Watch:
                 mesh = self.radio.mesh_leader() if self.radio else []
                 leader_txt = ", ".join(mesh) if mesh else t("unknown")
                 leader_keys = [f"node:{m}" for m in mesh]
+            st = self._settle({"parts": partitions, "leader_keys": leader_keys, "leader": leader_txt,
+                               "leaders_count": len(leaders)}, mine)
+            partitions, leader_keys, leader_txt = st["parts"], st["leader_keys"], st["leader"]
+            leaders_count = st["leaders_count"]
             omr = sorted({b["omr"] for b in online if b["omr"]})
             nodes_on = sorted(k for k, n in self.matter.items() if n["online"])
             nodes_off = sorted(k for k, n in self.matter.items() if not n["online"])
@@ -960,7 +968,7 @@ class Watch:
                 "leader_keys": leader_keys,
                 "bursts_count": self.bursts_count,
                 "pending": len(self.pending),
-                "leaders_count": len(leaders),
+                "leaders_count": leaders_count,
                 "partitions": len(partitions),
                 "partition_ids": partitions,
                 "omr": ", ".join(omr) if omr else t("none"),
@@ -973,14 +981,52 @@ class Watch:
                 "cast_online": len(casts_on),
                 "cast_list_online": casts_on,
                 "cast_list_offline": casts_off,
-                "partitioned": "ON" if len(partitions) > 1 or len(leaders) > 1 else "OFF",
+                "partitioned": "ON" if len(partitions) > 1 or leaders_count > 1 else "OFF",
                 "last_event": self.last_event,
                 "events_count": self.events_count,
                 "updated": now_iso(),
             }
 
+    def _settle(self, raw, mine):
+        """Partitions and leader as published (lock held): a change counts once it held
+        SETTLE_S. A border router that left the partitions of the network and came back
+        sooner is a short detach of that border router, not a partition of the network."""
+        now = time.time()
+        if self._settled is None or self.quiet:
+            self._settled, self._unsettled = raw, None
+            return raw
+        st, u = self._settled, self._unsettled
+        if raw == st:
+            if u:
+                self._unsettled = None
+                self._short_detaches += [(k, label, now - u["since"]) for k, label in u["brs"].items()]
+            return st
+        if u is None:
+            u = self._unsettled = {"since": now, "raw": raw, "raw_t": now, "brs": {}}
+        elif u["raw"] != raw:
+            u["raw"], u["raw_t"] = raw, now
+        for k, b in mine.items():
+            if b["online"] and b["partition"] and b["partition"] not in st["parts"]:
+                u["brs"][k] = self.br_label(b)
+        if now - u["raw_t"] >= SETTLE_S:
+            self._settled, self._unsettled = raw, None
+            return raw
+        return st
+
+    def flush_short_detaches(self):
+        with self.lock:
+            eps, self._short_detaches = self._short_detaches, []
+            for key, _label, _d in eps:
+                self.br_names.setdefault(key, {"name": None, "detached": []}).setdefault("detached", []).append(time.time())
+            if eps:
+                self._save_br_names()
+        for _key, label, d in eps:
+            self.emit("br_detach", t("Border router {name}: detach ({d}s)", name=label, d=max(1, round(d))),
+                      br=label, seconds=round(d, 1))
+
     def check_global(self):
         s = self.summary()
+        self.flush_short_detaches()
         leaders = (tuple(s["leader_keys"]), s["leader"])
         parts = tuple(s["partition_ids"])
         omr = tuple(s["omr_list"])
@@ -992,8 +1038,7 @@ class Watch:
             self.emit("leader_change", t("Thread leader: {before} → {after}", before=self.prev_leaders[1], after=leaders[1]),
                       before=self.prev_leaders[1], after=leaders[1])
         if self.prev_partitions is not None and parts != self.prev_partitions:
-            txt = t("network partitioned") if len(parts) > 1 else t("Thread partition")
-            self.emit("partition_change", t("{what}: {before} → {after} partitions", what=txt,
+            self.emit("partition_change", t("Thread partitions: {before} → {after}",
                                               before=len(self.prev_partitions), after=len(parts)),
                       before=list(self.prev_partitions), after=list(parts))
         if self.prev_omr is not None and omr != self.prev_omr:
@@ -1324,6 +1369,7 @@ class Watch:
             if self.storm and not self.quiet:
                 try:
                     self.storm.check(self.summary())
+                    self.flush_short_detaches()
                 except Exception as err:  # noqa: BLE001
                     LOG.warning(t("Storm check failed: {err}", err=err))
             if not startup_reported and not self.quiet:
