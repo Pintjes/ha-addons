@@ -239,10 +239,9 @@ cut and are ignored. Without any reason reported, an isolated restart is not
 held against a parent; from 3 in 24h the node itself gets *Restarts: check its
 power*. Two crashes or more: *Restarts: update its firmware*.
 
-**Other advice:** a router that detaches without a weak link (with the number
-of nodes that depend on it); a node that changes parent 4 times or more in 24h
-between good links (information); a Wi-Fi node at -85 dBm or below; *Change
-the batteries*.
+**Other advice:** a Wi-Fi node at -85 dBm or below; *Change the batteries*.
+An advice always names an action: an observation alone (parent changes,
+detaches without a weak link) stays in the technical details of the node.
 
 **Unavailable node** — the cause first: *Comes back with <parent>* when its
 parent is unavailable too; *Power cut in <room>?* when several mains nodes of

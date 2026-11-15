@@ -12,6 +12,7 @@ can choose a parent remotely; an end device can only be asked to attach again
 advise() gives the advice of the node table, computed at every build from what is
 known right now. Rules: one proof per advice (shown in its detail); the cheapest
 action first (the button before moving a node, moving before buying a router);
+an advice always names an action (an observation alone stays in the node panel);
 the cause before the symptom; the room and the floor are hints, the radio decides.
 
 The Advisor, called after every radio survey:
@@ -37,7 +38,6 @@ UNSTABLE_REBOOTS = 2   # crashes over 24h from which a node counts as unstable (
 UNKNOWN_REBOOTS = 3    # restarts of unknown cause over 24h from which the power of the node is to check
 CRASH_BOOT = ("brown_out", "software_watchdog", "hardware_watchdog", "software_reset")
 POWER_CUT_S = 300      # s: mains nodes restarting or dropping this close together: a power cut
-HESITATE = 4           # parent changes over 24h from which a node "hesitates" between parents
 WIFI_WEAK = -85        # dBm
 WEAK_CLEAR_S = 6 * 3600   # s: a link has to stay good this long to forget it was weak (it flaps at the limit)
 PAST_GOOD_RSSI = -80   # dBm: a past parent is a proof of a better one above this (when no link quality was kept)
@@ -239,16 +239,6 @@ def advise(rows, brs, ctx):
                     key = ("{parent} restarts ({n}× in 24h): finding a new parent could improve the situation" if kind == "reboots"
                            else "{parent} detaches ({n}× in 24h): finding a new parent could improve the situation")
                     out.append((t(key, parent=r["parent"], n=cnt), t("this node loses its parent each time"), "low"))
-                elif (r.get("parent_changes_24h") or 0) >= HESITATE and not _is_router(r):
-                    seen = {}
-                    for x in ctx["history"](r["id"]) or []:
-                        if x[0] >= now - 86400 and x[2] and not x[2].startswith("↔"):
-                            seen[x[2]] = seen.get(x[2], 0) + 1
-                    two = sorted(seen, key=lambda k: -seen[k])[:2]
-                    short = t("Changes parent {n}× in 24h", n=r["parent_changes_24h"])
-                    if len(two) == 2:
-                        short += f" ({two[0]} ↔ {two[1]})"
-                    out.append((short, t("both links are good: it hesitates between two parents of equal quality"), "low"))
             # the node itself, when others depend on it or when it restarts
             kids = len(children.get(name, []))
             dep = tn(" · {n} node depends on it", " · {n} nodes depend on it", kids) if kids else ""
@@ -266,9 +256,6 @@ def advise(rows, brs, ctx):
                             t("last restart: {reason}", reason=r.get("boot_reason")) + dep, "high"))
             elif kinds.get(name) == "unknown" and n_boot >= UNKNOWN_REBOOTS and not r.get("battery"):
                 out.append((t("Restarts ({n}× in 24h): check its power", n=n_boot), t("no reason reported by the node") + dep, "high"))
-            elif _is_router(r) and not hop_weak and (ctx["unstable"].get(name) or 0) >= UNSTABLE_DETACHES and kids:
-                out.append((t("Detaches ({n}× in 24h)", n=ctx["unstable"][name]) + dep,
-                            t("its link is not weak: watch it, or move it away from interference"), "low"))
         if out:
             # battery first when both: it is one more thing to do; then the most useful advice
             shorts = [o[0] for o in out[:2]] if bat and len(out) > 1 and out[0][0] == bat else [out[0][0]]

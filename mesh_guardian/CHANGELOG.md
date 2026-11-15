@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.8.2] - 2026-11-15
+
+### Fixed
+
+- An advice always names an action: "Changes parent n× in 24h" and "Detaches n× in 24h" were observations, not advice, and are removed (the figures stay in the node panel).
+
 ## [2.8.1] - 2026-11-15
 
 ### Fixed
