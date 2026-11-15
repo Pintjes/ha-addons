@@ -1,0 +1,17 @@
+---
+configuration:
+  target_url:
+    name: "Adresse de l'application"
+    description: "Adresse par laquelle Home Assistant joint l'application, par exemple http://192.168.1.10:8000."
+  rewrite_paths:
+    name: "Réécrire les chemins"
+    description: "Nécessaire quand l'application utilise des chemins commençant par / (la plupart). À désactiver pour une application qui gère déjà l'en-tête X-Ingress-Path."
+  rewrite_prefixes:
+    name: "Autres textes à réécrire"
+    description: "Avancé. Texte placé juste avant un chemin commençant par / que l'add-on ne réécrit pas de lui-même, par exemple data-url=\"."
+  max_body_mb:
+    name: "Envoi maximal (Mo)"
+    description: "Taille maximale d'un fichier envoyé à l'application."
+  timeout:
+    name: "Délai d'attente (s)"
+    description: "Temps d'attente d'une réponse de l'application. Ferme aussi un WebSocket silencieux."

@@ -18,12 +18,13 @@ jobs:
       - name: Install tools
         run: pip install ruff yamllint
       - name: Python syntax and common errors
-        run: ruff check --select E9,F63,F7,F82,F401,F811 mesh_guardian voice_agent_bridge
+        run: ruff check --select E9,F63,F7,F82,F401,F811 mesh_guardian voice_agent_bridge side_door
       - name: YAML
         run: >-
           yamllint -d "{extends: relaxed, rules: {line-length: disable}}"
           repository.yaml mesh_guardian/config.yaml mesh_guardian/translations
           voice_agent_bridge/config.yaml voice_agent_bridge/translations
+          side_door/config.yaml side_door/translations
       - name: Hadolint (Mesh Guardian)
         uses: hadolint/hadolint-action@v3.1.0
         with:
@@ -34,6 +35,11 @@ jobs:
         with:
           dockerfile: voice_agent_bridge/Dockerfile
           ignore: DL3008,DL3013
+      - name: Hadolint (Side Door)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: side_door/Dockerfile
+          ignore: DL3018
 
   build:
     name: Build ${{ matrix.addon }} ${{ matrix.arch }}
@@ -41,7 +47,7 @@ jobs:
     needs: lint
     strategy:
       matrix:
-        addon: [mesh_guardian, voice_agent_bridge]
+        addon: [mesh_guardian, voice_agent_bridge, side_door]
         arch: [amd64, aarch64]
     steps:
       - uses: actions/checkout@v4
@@ -65,3 +71,11 @@ jobs:
         run: |
           docker build -t vab-test voice_agent_bridge
           docker run --rm --entrypoint bash vab-test -c "claude --version && which ha-mcp-web && python3 -c 'import sys; sys.path.insert(0, \"/app\"); import gateway, prompts; print(\"modules OK\")'"
+      - name: Start test (Side Door)
+        if: matrix.arch == 'amd64' && matrix.addon == 'side_door'
+        run: |
+          docker build -t sd-test side_door
+          docker run --rm sd-test python3 /run.py --check
+          mkdir -p /tmp/sd-data
+          echo '{"target_url": "http://192.168.1.10:8000", "rewrite_paths": true, "rewrite_prefixes": ["data-url=\""], "max_body_mb": 100, "timeout": 120}' > /tmp/sd-data/options.json
+          docker run --rm -v /tmp/sd-data:/data sd-test python3 /run.py --check

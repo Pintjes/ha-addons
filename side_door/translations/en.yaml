@@ -1,0 +1,17 @@
+---
+configuration:
+  target_url:
+    name: Address of the app
+    description: "Address Home Assistant uses to reach the app, for example http://192.168.1.10:8000."
+  rewrite_paths:
+    name: Rewrite paths
+    description: "Needed when the app uses paths starting with / (most apps). Turn off for an app that already handles the X-Ingress-Path header."
+  rewrite_prefixes:
+    name: More texts to rewrite
+    description: "Advanced. Text found right before a path starting with / that the add-on does not rewrite by itself, for example data-url=\"."
+  max_body_mb:
+    name: Largest upload (MB)
+    description: Largest file that can be sent to the app.
+  timeout:
+    name: Timeout (s)
+    description: How long to wait for an answer of the app. Also closes a silent WebSocket.

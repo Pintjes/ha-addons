@@ -1,0 +1,30 @@
+name: Side Door
+version: "1.0.0"
+slug: side_door
+url: https://github.com/Pintjes/ha-addons
+description: >-
+  Opens a web app of your local network in the Home Assistant sidebar:
+  HTTPS and Home Assistant login for free, nothing exposed to the Internet.
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: application
+boot: auto
+ingress: true
+ingress_port: 8792
+panel_icon: mdi:door-open
+panel_title: Side Door
+options:
+  target_url: ""
+  rewrite_paths: true
+  rewrite_prefixes: []
+  max_body_mb: 100
+  timeout: 120
+schema:
+  target_url: str?
+  rewrite_paths: bool
+  rewrite_prefixes:
+    - str
+  max_body_mb: int(1,10000)
+  timeout: int(10,3600)
