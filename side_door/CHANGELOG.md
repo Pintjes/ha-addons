@@ -4,6 +4,14 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-11-15
+
+### Added
+
+- Experimental option `inject_script`, for apps that build their addresses
+  in JavaScript: a script loaded before the app moves its requests, its
+  navigation and its redirections under the ingress path.
+
 ## [1.2.0] - 2026-11-15
 
 ### Added

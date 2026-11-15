@@ -53,6 +53,7 @@ computer that runs the app, and the rules between your networks (VLANs).
 | `apps` | empty | For several apps: a list of `name` and `url` (see below). When filled, `target_url` is ignored. |
 | `rewrite_paths` | `true` | Rewrites the paths of the app (see below). Turn off for an app that already handles the `X-Ingress-Path` header. |
 | `rewrite_prefixes` | empty | Advanced: more texts after which a path is rewritten. |
+| `inject_script` | `false` | Experimental: for apps that build their addresses in JavaScript (see below). |
 | `max_body_mb` | `100` | Largest upload, in MB. |
 | `timeout` | `120` | Seconds to wait for an answer of the app. A WebSocket with no traffic for that long is closed. |
 
@@ -116,6 +117,24 @@ Behind the ingress, the app is not at `/` but under a path such as
 - removes `X-Frame-Options`, since the app is shown inside the panel.
 
 The original `X-Ingress-Path` header is passed on to the app.
+
+### Apps that build their addresses in JavaScript
+
+Some apps send an almost empty page and a program that builds every address
+in the browser. Nothing can be rewritten in what the add-on relays, and the
+app stays blank or leaves the panel. With `inject_script` on, the add-on:
+
+- loads a small script before the app. It moves under the ingress path the
+  requests of the app (`fetch`, `XMLHttpRequest`, WebSocket), its internal
+  navigation and the addresses it puts on the elements it creates;
+- replaces `window.location` and `document.location` in the scripts of the
+  app by an object that shows the app an address without the ingress path, and
+  keeps its redirections inside the panel.
+
+This is experimental and cannot work with every app: a script that reads
+`location` without `window.` in front is not caught, and neither is an
+address built inside a web worker. Leave the option off when the app works
+without it. It applies to every app of the list.
 
 Limits:
 

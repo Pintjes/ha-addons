@@ -79,5 +79,5 @@ jobs:
           mkdir -p /tmp/sd-data
           echo '{"target_url": "http://192.168.1.10:8000", "rewrite_paths": true, "rewrite_prefixes": ["data-url=\""], "max_body_mb": 100, "timeout": 120}' > /tmp/sd-data/options.json
           docker run --rm -v /tmp/sd-data:/data sd-test python3 /run.py --check
-          echo '{"apps": [{"name": "First app", "url": "http://192.168.1.10:8000"}, {"name": "Second", "url": "https://192.168.1.20/app/"}], "rewrite_paths": true, "rewrite_prefixes": [], "max_body_mb": 100, "timeout": 120}' > /tmp/sd-data/options.json
+          echo '{"apps": [{"name": "First app", "url": "http://192.168.1.10:8000"}, {"name": "Second", "url": "https://192.168.1.20/app/"}], "rewrite_paths": true, "rewrite_prefixes": [], "inject_script": true, "max_body_mb": 100, "timeout": 120}' > /tmp/sd-data/options.json
           docker run --rm -v /tmp/sd-data:/data sd-test python3 /run.py --check

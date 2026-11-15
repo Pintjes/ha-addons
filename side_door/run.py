@@ -84,6 +84,12 @@ SERVER = """\
             internal;
             try_files /unreachable.html =502;
         }
+
+        # The script of the option inject_script
+        location = /side_door_shim.js {
+            add_header Cache-Control no-cache;
+            try_files /shim.js =404;
+        }
 """
 
 SHELL_LOCATION = """\
@@ -233,24 +239,37 @@ def parse_target(url):
     return origin + base, origin, parts.netloc, base
 
 
-def rewrite_rules(origin, base, extra, ingress):
+def rewrite_rules(origin, base, extra, ingress, rewrite_on, inject):
     """nginx directives moving the paths of the target under 'ingress', the
-    path of the app as the browser sees it."""
-    lines = [
-        f"proxy_redirect {origin}{base} {ingress};",
-        f"proxy_redirect {base} {ingress};",
-        f"proxy_cookie_path {base} {ingress};",
-        "sub_filter_once off;",
-        f"sub_filter_types {REWRITTEN_TYPES};",
-    ]
-    prefixes = list(PREFIXES)
-    for prefix in extra:
-        if not prefix or "$" in prefix or "\n" in prefix:
-            log(f"rewrite_prefixes: {prefix!r} ignored (empty, or contains '$' or a line break)")
-        elif prefix not in prefixes:
-            prefixes.append(prefix)
-    for prefix in prefixes:
-        lines.append(f"sub_filter {quote(prefix + base)} {quote(prefix, ingress)};")
+    path of the app as the browser sees it. 'inject' also loads the script
+    that moves the addresses the app builds in JavaScript."""
+    if not rewrite_on and not inject:
+        return ""
+    lines = []
+    if rewrite_on:
+        lines += [
+            f"proxy_redirect {origin}{base} {ingress};",
+            f"proxy_redirect {base} {ingress};",
+            f"proxy_cookie_path {base} {ingress};",
+        ]
+    lines += ["sub_filter_once off;", f"sub_filter_types {REWRITTEN_TYPES};"]
+    if inject:
+        # No quote in the tag: it stays harmless inside a text of a script
+        tag = f"<head><script src=$http_x_ingress_path/side_door_shim.js data-base={ingress}></script>"
+        lines += [
+            f"sub_filter '<head>' '{tag}';",
+            "sub_filter 'window.location' 'window.__sd_loc';",
+            "sub_filter 'document.location' 'document.__sd_loc';",
+        ]
+    if rewrite_on:
+        prefixes = list(PREFIXES)
+        for prefix in extra:
+            if not prefix or "$" in prefix or "\n" in prefix:
+                log(f"rewrite_prefixes: {prefix!r} ignored (empty, or contains '$' or a line break)")
+            elif prefix not in prefixes:
+                prefixes.append(prefix)
+        for prefix in prefixes:
+            lines.append(f"sub_filter {quote(prefix + base)} {quote(prefix, ingress)};")
     return "".join(f"            {line}\n" for line in lines)
 
 
@@ -309,15 +328,14 @@ def build(options):
         return head + NOT_SET, None, "no valid app: set one in the add-on configuration"
     several = len(apps) > 1
     rewrite_on = options.get("rewrite_paths", True)
+    inject = bool(options.get("inject_script", False))
     extra = options.get("rewrite_prefixes") or []
     timeout = int(options.get("timeout", 120))
     maps, locations = "", ""
     for n, app in enumerate(apps, 1):
         path = f"/a/{app['id']}/" if several else "/"
         maps += MAPS % {"n": n, "origin": app["origin"]}
-        rewrite = ""
-        if rewrite_on:
-            rewrite = rewrite_rules(app["origin"], app["base"], extra, "$http_x_ingress_path" + path)
+        rewrite = rewrite_rules(app["origin"], app["base"], extra, "$http_x_ingress_path" + path, rewrite_on, inject)
         locations += APP_LOCATION % {
             "path": path, "target": app["target"], "host": app["host"],
             "n": n, "timeout": timeout, "rewrite": rewrite,
@@ -328,6 +346,8 @@ def build(options):
         conf += SHELL_LOCATION % {"shell_dir": SHELL_DIR}
     conf += locations + "    }\n}\n"
     paths = "paths rewritten" if rewrite_on else "paths not rewritten"
+    if inject:
+        paths += ", script injected"
     listed = ", ".join(f"{app['name']} -> {app['target']}" for app in apps)
     return conf, shell_page(apps) if several else None, f"{len(apps)} app(s), {paths}: {listed}"
 
