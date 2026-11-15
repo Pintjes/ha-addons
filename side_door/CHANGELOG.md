@@ -4,6 +4,13 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.4] - 2026-11-15
+
+### Added
+
+- The log tells when an app sets a cookie: its name and its marks, never its
+  value. It is what explains a login that loops.
+
 ## [1.3.3] - 2026-11-15
 
 ### Fixed

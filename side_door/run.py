@@ -45,7 +45,14 @@ events {
 http {
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
-    access_log off;
+    # The log only tells when an app sets a cookie: its name and its marks,
+    # never its value. It is what explains a login that loops.
+    map $upstream_http_set_cookie $sd_cookie {
+        default '';
+        "~*^(?<sd_cookie_name>[^=;]+)=[^;]*(?<sd_cookie_marks>(?:; *(?:path|domain|max-age|samesite|priority)=[^;,]*|; *expires=[a-z]{3}, [0-9a-z :-]*|; *(?:secure|httponly|partitioned))*)" "$sd_cookie_name$sd_cookie_marks";
+    }
+    log_format side_door '[side_door] $request_method $uri -> $status, cookie set: $sd_cookie (Home Assistant opened in $http_x_forwarded_proto)';
+    access_log /dev/stdout side_door if=$sd_cookie;
     server_tokens off;
     client_body_temp_path /tmp/nginx_body;
     proxy_temp_path /tmp/nginx_proxy;
