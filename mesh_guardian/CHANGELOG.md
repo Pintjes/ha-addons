@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.7.1] - 2026-11-15
+
+### Fixed
+
+- A link quality of 0 between a child and its parent was taken as unknown: the stale value of the route table of a sleepy end device (3) was shown instead, and a link at the limit of reception was neither weak, advised nor counted in the score. It is now shown as "very weak" (orange, no bar) and counted as a weak link; the parent search also works on such a node.
+
 ## [2.7.0] - 2026-11-15
 
 ### Added

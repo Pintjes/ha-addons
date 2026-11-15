@@ -370,7 +370,7 @@ class Radio:
         r = self.last or {}
         return {
             "weak_links": len(r.get("weak_links", [])),
-            "weak_links_list": [f"{l['a']} ↔ {l['b']}: {'?' if l['rssi'] is None else l['rssi']}dBm, LQI {l['lqi'] or '?'}"
+            "weak_links_list": [f"{l['a']} ↔ {l['b']}: {'?' if l['rssi'] is None else l['rssi']}dBm, LQI {'?' if l['lqi'] is None else l['lqi']}"
                                 for l in r.get("weak_links", [])[:25]],
             "parents": {k: f"{v['parent']} ({'?' if v['rssi'] is None else v['rssi']}dBm)" for k, v in list(r.get("parents", {}).items())[:60]},
             "unstable": len(r.get("unstable", [])),

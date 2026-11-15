@@ -37,8 +37,9 @@ FORCED_S = 7200        # s: a parent change this long after a requested parent s
 
 def weak_link(rssi, lqi):
     """One rule everywhere (colors, advice, parent search, score): a link is weak when its
-    Thread link quality is 1; the RSSI only decides when the link quality is not known."""
-    if lqi:
+    Thread link quality is 1 or 0 (0 on an established link: no margin above the noise);
+    the RSSI only decides when the link quality is not known (None)."""
+    if lqi is not None:
         return lqi <= 1
     return rssi is not None and rssi <= WEAK_RSSI
 
@@ -46,6 +47,12 @@ def weak_link(rssi, lqi):
 def lowest(*values):
     """Weakest direction of a link: the lowest known value (None and 0 = not known)."""
     known = [v for v in values if v]
+    return min(known) if known else None
+
+
+def min_known(*values):
+    """Lowest known value, 0 included (a link quality of 0 measured on an established link)."""
+    known = [v for v in values if v is not None]
     return min(known) if known else None
 
 

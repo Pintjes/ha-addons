@@ -20,7 +20,7 @@ import time
 from i18n import lang, t
 
 LOG = logging.getLogger("mg.table")
-from advice import lowest, weak_link  # noqa: E402
+from advice import lowest, min_known, weak_link  # noqa: E402
 
 ROLE = {0: "unspecified", 1: "unassigned", 2: "sleepy_end_device", 3: "end_device", 4: "reed",
         5: "router", 6: "leader"}
@@ -209,10 +209,13 @@ def find_parents(thread, labels):
             ext = own[0].get("0") if own else rloc_ext.get(prloc)
             name = match(ext, labels) if ext else None
             name = name or f"router {prloc >> 10} (0x{prloc:04x})"
-            # link quality in and out with the parent, from the route table of a full end device
+            # link quality: the entry of the parent in the neighbor table (0 included: measured on
+            # an established link), and in and out from the route table of a full end device; the
+            # route table of a (sleepy) end device is not kept up to date: only without that entry
             rt = next((x for x in v["attrs"].get("0/53/8") or [] if isinstance(x, dict) and x.get("2") == prloc >> 10), {})
-            parents[nid] = (name, nb_rssi(own[0]) if own else None,
-                            lowest(own[0].get("5") if own else None, rt.get("5"), rt.get("6")), ext or prloc)
+            q_own = own[0].get("5") if own else None
+            q_rt = lowest(rt.get("5"), rt.get("6")) if q_own is None or v["attrs"].get("0/53/1") not in (2, 3) else None
+            parents[nid] = (name, nb_rssi(own[0]) if own else None, min_known(q_own, q_rt), ext or prloc)
     for nid, v in thread.items():   # seen from the parent side
         for nb in v["attrs"].get("0/53/7") or []:
             if isinstance(nb, dict) and nb.get("13"):
@@ -223,7 +226,7 @@ def find_parents(thread, labels):
                 if cur is None or cur[0] == v["name"] or cur[0].startswith("router "):
                     # weakest of the two directions (cur: what the child hears from this parent)
                     parents[child] = (v["name"], lowest(nb_rssi(nb), cur[1] if cur else None),
-                                      lowest(nb.get("5"), cur[2] if cur else None), ext_of(v["attrs"]) or nid)
+                                      min_known(nb.get("5"), cur[2] if cur else None), ext_of(v["attrs"]) or nid)
     for nid, v in thread.items():   # an end device only keeps its parent in its table
         if nid in parents or v["attrs"].get("0/53/1") not in (2, 3):
             continue

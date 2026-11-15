@@ -52,14 +52,17 @@ def _field(res, name, key):
 
 def parent_link(table):
     """Link of an end device with its parent in a neighbor table (0/53/7):
-    {"rloc", "lqi", "rssi"}, or None. Entries only overheard (LQI 0) are ignored."""
-    for nb in table or []:
-        if not isinstance(nb, dict) or nb.get("13") is True:
-            continue
-        lqi, rssi = nb.get("5"), nb_rssi(nb)
-        if not lqi or rssi is None:
-            continue
-        return {"rloc": nb.get("2"), "lqi": lqi, "rssi": rssi}
+    {"rloc", "lqi", "rssi"}, or None. Entries only overheard (LQI 0) are ignored, except
+    the only entry of the table: an end device that keeps one neighbor keeps its parent,
+    and its link quality 0 is a measure (no margin above the noise)."""
+    entries = [nb for nb in table or [] if isinstance(nb, dict) and nb.get("13") is not True
+               and nb_rssi(nb) is not None]
+    for nb in entries:
+        if nb.get("5"):
+            return {"rloc": nb.get("2"), "lqi": nb["5"], "rssi": nb_rssi(nb)}
+    if len(entries) == 1 and entries[0].get("5") is not None:
+        nb = entries[0]
+        return {"rloc": nb.get("2"), "lqi": nb["5"], "rssi": nb_rssi(nb)}
     return None
 
 
@@ -80,7 +83,7 @@ def verdict(before, after):
     """better / worse / similar, from the link shown in the table before and after:
     (rssi, lqi). The link quality decides first, then the RSSI."""
     (rssi_b, lqi_b), (rssi_a, lqi_a) = before, after
-    if lqi_a and lqi_b and lqi_a != lqi_b:
+    if lqi_a is not None and lqi_b is not None and lqi_a != lqi_b:
         return "better" if lqi_a > lqi_b else "worse"
     if rssi_a is not None and rssi_b is not None:
         gain = rssi_a - rssi_b
@@ -191,12 +194,12 @@ class Reattach:
             self.live.note_contact(nid, src="read")
         parent_before, rssi_before, lqi_before = self._view(nid)
         # same rule as the table and the advice, on the link the table shows
-        poor = weak_link(rssi_before, lqi_before) if (rssi_before is not None or lqi_before) else is_poor(before)
+        poor = weak_link(rssi_before, lqi_before) if (rssi_before is not None or lqi_before is not None) else is_poor(before)
         if attrs.get("0/53/1") not in END_DEVICE_ROLES or not before or not (force or poor):
             return None
         if not force and not parent_before:
             return None   # no parent in the table (a router, whatever its reported role): nothing to search
-        if rssi_before is None and not lqi_before:   # not in the table yet: the link read on the node
+        if rssi_before is None and lqi_before is None:   # not in the table yet: the link read on the node
             rssi_before, lqi_before = before["rssi"], before["lqi"]
         row = {"node": name, "area": area, "rssi_before": rssi_before, "lqi_before": lqi_before,
                "rloc_before": before["rloc"], "parent_before": parent_before}
@@ -261,7 +264,7 @@ class Reattach:
             return False
         parent_before, rssi_before, lqi_before = before
         res = "same" if parent == parent_before else verdict((rssi_before, lqi_before), (rssi, lqi))
-        link = " · ".join(x for x in (parent, f"LQI {lqi}" if lqi else None, f"{rssi} dBm" if rssi is not None else None) if x)
+        link = " · ".join(x for x in (parent, f"LQI {lqi}" if lqi is not None else None, f"{rssi} dBm" if rssi is not None else None) if x)
         text = t("{node}: same parent {link}", node=name, link=link) if res == "same" else \
             t("{node}: new parent {link}", node=name, link=link)
         row.update({"result": res, "parent": parent, "rssi": rssi, "lqi": lqi, "text": text})

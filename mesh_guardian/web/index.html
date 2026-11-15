@@ -294,7 +294,7 @@ const T = {
     a_parent_busy:"A parent search is already running", ap_ph:"Name of this access point", save:"Save", saved:"Saved", ap:"Access point", ap_unknown:"Unnamed access point: name it in the node panel",
     to_ha:"Path to Home Assistant", r_direct:"{br} directly", r_via:"{br} via {via}", r_parent:"parent {p}, then ", r_cost:"cost {c}",
     r_cost_tip:"Path cost: 1 per good hop, up to 4 for a weak link. The nearest border router is the one with the lowest cost.", r_unknown:"not known yet", no_parent:"Unknown parent (probably a border router)",
-    sig:["weak", "fair", "good"], sig_tip:"Weakest direction of the link", new_parent:"new parent", none_match:"No node matches.", columns:"Columns", cols_reset:"Default columns", t_out24:"Outages 24h", t_out7:"Outages 7d", sort_tip:"Click to sort, click again to reverse", sort_reset:"Default order (problems first)",
+    sig:["very weak", "weak", "fair", "good"], sig_tip:"Weakest direction of the link", new_parent:"new parent", none_match:"No node matches.", columns:"Columns", cols_reset:"Default columns", t_out24:"Outages 24h", t_out7:"Outages 7d", sort_tip:"Click to sort, click again to reverse", sort_reset:"Default order (problems first)",
     ago_s:"{n}s ago", ago_m:"{n} min ago", ago_h:"{n} h ago", ago_d:"{n} d ago", never:"never",
     d_net:"Network", d_role:"Role", d_parent:"Parent", d_best:"Sends through", d_signal:"Signal", d_lqi:"Link quality (0–3)", d_resp:"Response · average",
     d_power:"Power", mains:"mains", battery:"battery", bat_level:["ok", "low", "critical"], d_last:"Last contact",
@@ -337,7 +337,7 @@ const T = {
     a_parent_busy:"Une recherche de parent est déjà en cours", ap_ph:"Nom de ce point d'accès", save:"Enregistrer", saved:"Enregistré", ap:"Point d'accès", ap_unknown:"Point d'accès sans nom : à nommer dans la fiche",
     to_ha:"Chemin vers Home Assistant", r_direct:"{br} en direct", r_via:"{br} via {via}", r_parent:"parent {p}, puis ", r_cost:"coût {c}",
     r_cost_tip:"Coût du chemin : 1 par bon saut, jusqu'à 4 pour un lien faible. Le border router le plus proche est celui de plus bas coût.", r_unknown:"inconnu pour l'instant", no_parent:"Parent inconnu (probablement un border router)",
-    sig:["faible", "correct", "bon"], sig_tip:"Sens le plus faible du lien", new_parent:"nouveau parent", none_match:"Aucune node ne correspond.", columns:"Colonnes", cols_reset:"Colonnes par défaut", t_out24:"Coupures 24 h", t_out7:"Coupures 7 j", sort_tip:"Cliquer pour trier, recliquer pour inverser", sort_reset:"Ordre par défaut (problèmes d'abord)",
+    sig:["très faible", "faible", "correct", "bon"], sig_tip:"Sens le plus faible du lien", new_parent:"nouveau parent", none_match:"Aucune node ne correspond.", columns:"Colonnes", cols_reset:"Colonnes par défaut", t_out24:"Coupures 24 h", t_out7:"Coupures 7 j", sort_tip:"Cliquer pour trier, recliquer pour inverser", sort_reset:"Ordre par défaut (problèmes d'abord)",
     ago_s:"il y a {n} s", ago_m:"il y a {n} min", ago_h:"il y a {n} h", ago_d:"il y a {n} j", never:"jamais",
     d_net:"Réseau", d_role:"Rôle", d_parent:"Parent", d_best:"Transmet par", d_signal:"Signal", d_lqi:"Qualité du lien (0–3)", d_resp:"Réponse · moyenne",
     d_power:"Alimentation", mains:"secteur", battery:"pile", bat_level:["ok", "faible", "critique"], d_last:"Dernier contact",
@@ -419,18 +419,18 @@ const net = r => r.network || "thread";
 const linkName = r => r.parent || (isRouter(r) ? r.best_link : null);
 const linkRssi = r => r.parent ? r.rssi : (isRouter(r) ? r.best_rssi : null);
 const linkLqi = r => r.parent ? r.lqi : (isRouter(r) ? r.best_lqi : null);
-// level of the link shown, 3 good, 2 fair, 1 weak. Thread: the link quality decides (same rule as
+// level of the link shown, 3 good, 2 fair, 1 weak, 0 very weak (link quality 0 on an established link). Thread: the link quality decides (same rule as
 // the advice and the parent search), the RSSI only when it is not known. Wi-Fi: the RSSI.
 function sigLevel(r) {
   const v = linkRssi(r), q = linkLqi(r);
   if (net(r) !== "thread") return v == null ? null : v >= -75 ? 3 : v > -85 ? 2 : 1;
-  if (q) return Math.min(3, q);
+  if (q != null) return Math.min(3, q);
   return v == null ? null : v > TH.rssi_good ? 3 : v > TH.rssi_bad ? 2 : 1;
 }
 // green: nothing to do (good and fair); orange: weak (red is kept for unavailable nodes)
 const sigCls = l => l >= 2 ? "ok" : "warn";
-const sigWord = l => L("sig")[l - 1];
-const sigBars = l => l >= 3 ? 4 : l === 2 ? 3 : 1;
+const sigWord = l => L("sig")[l];
+const sigBars = l => l >= 3 ? 4 : l === 2 ? 3 : l === 1 ? 1 : 0;
 const lvl = r => r.advice_level === "low" ? "info" : "warn";
 // a silent node is only shown by its status (often short-lived): not in "To handle" nor the verdict
 // added to Matter less than 24 h ago (date_commissioned is UTC without zone)
@@ -444,7 +444,7 @@ const status = r => r.available && r.silent_s ? `<span class="st warn" title="${
 function signal(r) {
   const v = linkRssi(r), q = linkLqi(r), l = sigLevel(r);
   if (l == null) return net(r) === "thread" ? "" : `<span class="mut">—</span>`;
-  return `<span class="sig ${sigCls(l)}" title="${esc(net(r) === "thread" ? L("sig_tip") : "")}">${bars(sigBars(l))}${v != null ? `<span class="num">${v} dBm</span> ` : ""}<small>${sigWord(l)}${q ? ` · <span title="${esc(L("d_lqi"))}">LQI ${q}</span>` : ""}</small></span>`;
+  return `<span class="sig ${sigCls(l)}" title="${esc(net(r) === "thread" ? L("sig_tip") : "")}">${bars(sigBars(l))}${v != null ? `<span class="num">${v} dBm</span> ` : ""}<small>${sigWord(l)}${q != null ? ` · <span title="${esc(L("d_lqi"))}">LQI ${q}</span>` : ""}</small></span>`;
 }
 // battery drawn with its charge: green > 50 %, orange 20–50 %, red < 20 % (the percentage is always written too)
 function batIcon(pct) {
@@ -790,7 +790,7 @@ async function runAction(btn) {
     else {
       const k = ["better", "worse", "similar"].includes(res.result) ? "new" : res.result || "unknown";
       // the parent (new or same) and its link now, as the table shows them
-      const lk = [res.parent, res.lqi ? "LQI " + res.lqi : null, res.rssi != null ? res.rssi + " dBm" : null].filter(Boolean).join(" · ");
+      const lk = [res.parent, res.lqi != null ? "LQI " + res.lqi : null, res.rssi != null ? res.rssi + " dBm" : null].filter(Boolean).join(" · ");
       msg = F("a_parent_" + (res.parent ? k : k === "new" || k === "same" ? "unknown" : k), {n: r.name, l: lk});
       if (res.result === "unknown") followSearch(id);   // the add-on keeps reading the node: its result comes later
     }
