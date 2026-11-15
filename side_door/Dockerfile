@@ -4,6 +4,7 @@ RUN apk add --no-cache python3
 
 COPY run.py /run.py
 COPY web /web
+COPY njs /njs
 
 LABEL \
     io.hass.name="Side Door" \

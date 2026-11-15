@@ -33,6 +33,7 @@ PREFIXES = [
 REWRITTEN_TYPES = "text/css application/javascript text/javascript application/json"
 
 HEAD = """\
+load_module modules/ngx_http_js_module.so;
 daemon off;
 worker_processes 1;
 pid /tmp/nginx.pid;
@@ -56,6 +57,7 @@ http {
     server_tokens off;
     client_body_temp_path /tmp/nginx_body;
     proxy_temp_path /tmp/nginx_proxy;
+    js_import sd_cookies from /njs/cookies.js;
 
     map $http_upgrade $connection_upgrade {
         default upgrade;
@@ -146,7 +148,7 @@ APP_LOCATION = """\
             error_page 502 503 504 /side_door_unreachable.html;
             rewrite ^%(path)s(.*)$ %(base)s$1 break;
             proxy_pass %(origin)s;
-            proxy_cookie_flags ~ nosecure samesite=lax;
+            js_header_filter sd_cookies.plain;
 %(common)s        }
 """
 
