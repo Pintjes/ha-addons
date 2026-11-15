@@ -74,7 +74,7 @@ from radio import Radio  # noqa: E402
 from storm import Storm  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.6.3"
+VERSION = "2.6.4"
 
 _MQ = _load_mqtt()
 MQTT_HOST = _MQ.get("host") or os.environ.get("MQTT_HOST", "core-mosquitto")
@@ -582,6 +582,8 @@ class Watch:
                     down = now - (b.get("since") or now)
                     b["online"] = True
                     b["since"] = now
+                    if self.br_names.get(key, {}).pop("offline_since", None):
+                        self._save_br_names()
                     if relevant:
                         self.emit("br_back", t("Border router {name} back ({d})", name=label, d=fmt_duration(down)),
                                   br=label, offline_s=int(down), role=role)
@@ -669,6 +671,9 @@ class Watch:
                 name = last.get("mdns")
                 b = {k: v for k, v in last.items() if k != "mdns"}
                 b.update({"online": True, "since": now, "fails": 0, "last_seen": now})
+                if saved.get("offline_since"):
+                    # offline before the restart: stays offline, without a new event
+                    b.update({"online": False, "since": saved["offline_since"]})
                 if saved.get("name"):
                     b["label"] = saved["name"]
                 c = saved.get("contact") or {}
@@ -805,6 +810,8 @@ class Watch:
             reason = t("not seen for {m}min", m=int(silent // 60))
             b["online"] = False
             b["since"] = time.time()
+            self.br_names.setdefault(key, {"name": None, "detached": []})["offline_since"] = b["since"]
+            self._save_br_names()
             label = self.br_label(b)
             if self.br_relevant(b):
                 self.emit("br_offline", t("Border router {name} offline", name=label,

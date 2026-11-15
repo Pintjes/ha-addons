@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.6.4] - 2026-11-15
+
+### Fixed
+
+- A border router offline before a restart stays offline after it: it is no longer counted online for 15 minutes, then reported offline a second time.
+
 ## [2.6.3] - 2026-11-14
 
 ### Changed
