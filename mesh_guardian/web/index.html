@@ -404,7 +404,8 @@ const bars = n => '<svg class="i" viewBox="0 0 24 24" fill="currentColor">' + [0
 let D = null, TH = {rssi_good:-80, rssi_bad:-90};
 const hm = ts => new Date(ts * 1000).toLocaleTimeString(LANG, {hour:"2-digit", minute:"2-digit"});
 const dt = s => new Date(s * 1000).toLocaleString(LANG, {weekday:"short", hour:"2-digit", minute:"2-digit"});
-const dec = (v, n = 1) => Number(v).toLocaleString(LANG, {minimumFractionDigits:n, maximumFractionDigits:n});
+// n decimals, none for a round value (100 %, 2 h, not 100,0 % or 2,0 h)
+const dec = (v, n = 1) => { const r = Number(Number(v).toFixed(n)); return r.toLocaleString(LANG, {minimumFractionDigits: Number.isInteger(r) ? 0 : n, maximumFractionDigits: n}); };
 function ago(ts) {
   if (!ts) return L("never");
   const s = Math.max(0, Date.now() / 1000 - ts);

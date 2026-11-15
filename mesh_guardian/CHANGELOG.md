@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.8.6] - 2026-11-15
+
+### Changed
+
+- Round values without decimals in the page: 100 %, 2 h, 1 s (not 100,0 %).
+
 ## [2.8.5] - 2026-11-15
 
 ### Added
