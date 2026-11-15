@@ -30,7 +30,10 @@ PREFIXES = [
     'srcset="', "srcset='", "url(", 'url("', "url('",
     'fetch("', "fetch('", ";url=",
 ]
-REWRITTEN_TYPES = "text/css application/javascript text/javascript application/json"
+REWRITTEN_TYPES = (
+    "text/css application/javascript text/javascript application/x-javascript "
+    "application/json application/graphql-response+json application/manifest+json"
+)
 
 HEAD = """\
 load_module modules/ngx_http_js_module.so;

@@ -4,6 +4,13 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.7] - 2026-11-15
+
+### Fixed
+
+- Answers of a GraphQL API (`application/graphql-response+json`) are
+  rewritten like the other JSON answers.
+
 ## [1.3.6] - 2026-11-15
 
 ### Fixed
