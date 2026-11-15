@@ -116,7 +116,9 @@ Behind the ingress, the app is not at `/` but under a path such as
   found in these answers;
 - sends the `Host`, `Origin` and `Referer` headers the app expects, so that
   its cross-site request checks (CSRF) keep working;
-- removes `X-Frame-Options`, since the app is shown inside the panel.
+- removes `X-Frame-Options`, since the app is shown inside the panel;
+- drops the fingerprint check of scripts (Subresource Integrity): a rewritten
+  script no longer has the fingerprint the app expects.
 
 The original `X-Ingress-Path` header is passed on to the app.
 

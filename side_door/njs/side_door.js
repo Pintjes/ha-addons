@@ -71,6 +71,15 @@ function rewrite(r, a, type, text) {
         text = replaceAll(text, a.own, full);
         text = replaceAll(text, a.own.replace(/\//g, '\\/'), full);
     }
+    if (type === 'html' || type === 'js') {
+        // An app may check the fingerprint of its scripts before running them
+        // (Subresource Integrity). A rewritten script no longer has the
+        // fingerprint the app knows, and would be refused: the check is dropped.
+        if (type === 'html') {
+            text = text.replace(/\sintegrity=("[^"]*"|'[^']*')/g, '');
+        }
+        text = text.replace(/\.integrity\s*=(?!=)/g, '.sdIntegrity=');
+    }
     if (a.inject && (type === 'html' || type === 'js')) {
         // The app sees an address bar without the ingress path, and itself
         // as the top page (see web/shim.js)
