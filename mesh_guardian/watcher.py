@@ -72,9 +72,10 @@ from reattach import Reattach  # noqa: E402
 from history import History  # noqa: E402
 from radio import Radio  # noqa: E402
 from storm import Storm  # noqa: E402
+from suplog import SupervisorLog  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.9.5"
+VERSION = "2.9.6"
 
 _MQ = _load_mqtt()
 MQTT_HOST = _MQ.get("host") or os.environ.get("MQTT_HOST", "core-mosquitto")
@@ -135,6 +136,7 @@ STYLE = {  # event kind -> (icon, color)
     "ping_all": ("📣", "yellow"), "reattach": ("🧲", "cyan"),
     "storm_start": ("⛈️ ", "magenta"), "storm_end": ("🌤️ ", "green"),
     "routing_problem": ("🚧", "red"), "routing_ok": ("🟢", "green"), "addon_stop": ("⏹️ ", "blue"),
+    "server_restart": ("🔄", "yellow"),
 }
 
 
@@ -1484,8 +1486,7 @@ class Watch:
                 LOG.info(t("Home Assistant Matter fabric detected: {fabric}", fabric=FABRIC))
             else:
                 LOG.warning(t("Matter fabric not found: every node followed"))
-        import supprobe
-        threading.Thread(target=supprobe.run, daemon=True, name="supprobe").start()
+        self.suplog = SupervisorLog(self)
         client.reconnect_delay_set(1, 60)
         client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=60)
         client.loop_start()
@@ -1497,7 +1498,7 @@ class Watch:
         threads = [threading.Thread(target=f, daemon=True, name=f.__name__)
                    for f in (self.worker, self.worker, self.prober, self.publisher, self.confirmer,
                              self.healer.run, self.healer.run_sweeper, self.radio.run, self.radio.run_leader,
-                             self.labels.run, self.live.run, self.table.run, self.webui.run,
+                             self.labels.run, self.live.run, self.suplog.run, self.table.run, self.webui.run,
                              self.quality.run_probe, self.quality.run_sniffer, self.quality.run_score,
                              self.history.run)]
         for th in threads:

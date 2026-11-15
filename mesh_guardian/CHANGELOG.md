@@ -4,6 +4,21 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.9.6] - 2026-11-15
+
+### Changed
+
+- A restart of the Matter Server or of Home Assistant is now read in the Supervisor log instead of being deduced from a dropped link: the card gives the exact time and the cause ("was restarted", "was updated to 9.3.1", "crashed (code 1)"). It also works when Mesh Guardian restarted at the same time, which the live link missed. Without access to the log, the detection by the live link remains.
+- The add-on keeps the Supervisor role "manager" for this. It only reads the Supervisor log and the name of the Matter Server; see "Supervisor access" in the documentation.
+
+### Added
+
+- Event `server_restart` (who, cause, exit code, version).
+
+### Removed
+
+- The Supervisor API test of 2.9.3 – 2.9.5.
+
 ## [2.9.5] - 2026-11-15
 
 ### Changed

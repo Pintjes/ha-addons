@@ -18,6 +18,7 @@ do about them.
 - [Wi-Fi and Ethernet nodes](#wi-fi-and-ethernet-nodes)
 - [Network quality](#network-quality)
 - [Thread storms](#thread-storms)
+- [Supervisor access](#supervisor-access)
 - [FAQ and troubleshooting](#faq-and-troubleshooting)
 - [Known limitations](#known-limitations)
 
@@ -54,6 +55,10 @@ do about them.
    a restart instead.
 4. **Statistics.** Outages are counted per node over 7 days. On first start,
    the last 7 days are rebuilt from the Home Assistant history.
+5. **Restarts.** A restart of the Matter Server or of Home Assistant is read in
+   the Supervisor log: when it happened and why (restarted, updated, crashed).
+   The nodes it took down share one card for 5 minutes instead of one card
+   each. See [Supervisor access](#supervisor-access).
 
 By default, only the Thread network used by your Matter nodes is followed;
 border routers of other networks (e.g. a neighbor's) are ignored.
@@ -173,6 +178,7 @@ Every event is written to the add-on log, published on the MQTT topic
 | `speaker_appeared`, `speaker_back`, `speaker_offline` | smart speaker / hub online state (restart detection) |
 | `node_unavailable`, `node_recovered_by_ping`, `node_back_on_its_own`, `ping`, `ping_gave_up`, `ping_error` | automatic recovery |
 | `global_outage`, `global_return` | many nodes at once (Home Assistant / Matter Server restart) |
+| `server_restart` | restart of the Matter Server or of Home Assistant read in the Supervisor log, with `who` (`matter` / `ha`), `cause` (`requested`, `update`, `crash`, `start`), exit `code` and `version` |
 | `storm_start`, `storm_end` | Thread storm (see below) |
 | `stats_reset` | statistics reset by the button |
 | `routing_problem`, `routing_ok` | nodes announced in mDNS but unreachable from Home Assistant |
@@ -454,6 +460,26 @@ cycle, and the hourly sweep is skipped: pinging only adds traffic while the
 mesh re-forms. `binary_sensor.mesh_guardian_thread_storm` shows the storm, with
 its start, duration, the nodes that dropped, the border routers that went
 detached and the prefixes seen.
+
+## Supervisor access
+
+The add-on asks for the Supervisor role `manager` (security rating 4 instead
+of 5), because the Supervisor log cannot be read with a lower role.
+
+What it reads:
+
+- the Supervisor log, through one stream kept open (no polling). Only the
+  lines about a stop, an exit, an update or a start of the Matter Server or of
+  Home Assistant are used; nothing else is kept;
+- the name of the Matter Server add-on.
+
+What it never does: start, stop, restart, update or configure another add-on,
+or read another add-on's options.
+
+If the log cannot be read, restarts are still detected by the add-on's live
+link to the Matter Server, without the cause. `/api/supervisor` (through
+ingress) shows what was read: state of the stream, number of lines, restarts
+found.
 
 ## FAQ and troubleshooting
 

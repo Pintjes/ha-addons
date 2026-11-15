@@ -84,9 +84,9 @@ class WebUI:
                         self._send(200, json.dumps({k: attrs.get(k) for k in keep}, ensure_ascii=False))
                     except Exception as err:  # noqa: BLE001
                         self._send(400, json.dumps({"error": str(err)}, ensure_ascii=False))
-                elif path == "/api/supervisor_probe":   # test of the Supervisor API (status codes only)
-                    import supprobe
-                    self._send(200, json.dumps(supprobe.result, ensure_ascii=False))
+                elif path == "/api/supervisor":   # diagnostics: restarts read in the Supervisor log
+                    sup = getattr(ui.w, "suplog", None)
+                    self._send(200, json.dumps(sup.summary() if sup else {}, ensure_ascii=False))
                 elif path == "/api/report":
                     try:
                         import report

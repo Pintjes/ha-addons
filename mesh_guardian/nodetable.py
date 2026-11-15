@@ -21,6 +21,7 @@ from i18n import lang, t
 
 LOG = logging.getLogger("mg.table")
 from advice import advise, lowest, min_known, weak_link  # noqa: E402
+from suplog import text_of  # noqa: E402
 
 ROLE = {0: "unspecified", 1: "unassigned", 2: "sleepy_end_device", 3: "end_device", 4: "reed",
         5: "router", 6: "leader"}
@@ -408,6 +409,7 @@ class NodeTable:
         self.parents = {}     # node hex -> {"parent", "rssi", "since", "prev", "prev_rssi"}
         self.cache = None
         self.cache_t = 0
+        self._restart_ids = (None, set())   # restart read in the Supervisor log -> nodes it took down
 
     # ---------------------------------------------------------- data
     def _nodes(self):
@@ -725,14 +727,38 @@ class NodeTable:
         own card again."""
         cands = [x for x in (getattr(self.h, "mass", None), getattr(self.live, "restart", None)) if x]
         m = max(cands, key=lambda x: x["t"]) if cands else None
-        if not m or now - m["t"] > 86400:
+        if m and now - m["t"] > 86400:
+            m = None
+        # the restart as the Supervisor wrote it (when, why): a fact, where the rest is deduced
+        sup = getattr(self.w, "suplog", None)
+        fact = sup.last(now) if sup else None
+        if fact and m and not fact["t"] - 120 <= m["t"] <= fact["up"] + 300:
+            if m["t"] > fact["up"]:
+                fact = None      # nodes dropped together later, without a restart
+            else:
+                m = None         # an older outage
+        if not m and not fact:
             return []
-        ids = {f"0x{k.lstrip('0') or '0'}" for k in m["nodes"]}
+        ids = {f"0x{k.lstrip('0') or '0'}" for k in m["nodes"]} if m else set()
+        if fact:
+            # also the nodes it took down when the add-on was not there to see them drop
+            if self._restart_ids[0] != fact["t"]:
+                self._restart_ids = (fact["t"], set())
+            if now - fact["up"] < RESTART_GRACE_S:
+                ids |= {r["id"] for r in rows if not r.get("available") and r.get("since")
+                        and fact["t"] - 120 <= r["since"] <= fact["up"] + 300}
+            ids = self._restart_ids[1] | ids
+            self._restart_ids = (fact["t"], ids)
+            m = {"t": fact["t"]}
+            who = text_of(fact, time.strftime("%H:%M", time.localtime(fact["t"])))
+        else:
+            at = time.strftime("%H:%M", time.localtime(m["t"]))
+            who = {"matter": t("The Matter Server restarted at {t}", t=at),
+                   "ha": t("Home Assistant restarted at {t}", t=at)}.get(
+                m.get("cause"), t("Home Assistant or the Matter Server restarted at {t}", t=at))
+        if not ids:
+            return []
         waiting = [r for r in rows if r["id"] in ids and not r.get("available")]
-        at = time.strftime("%H:%M", time.localtime(m["t"]))
-        who = {"matter": t("The Matter Server restarted at {t}", t=at),
-               "ha": t("Home Assistant restarted at {t}", t=at)}.get(
-            m.get("cause"), t("Home Assistant or the Matter Server restarted at {t}", t=at))
         if waiting and now - m["t"] < RESTART_GRACE_S:
             for r in waiting:
                 r["after_restart"] = True
