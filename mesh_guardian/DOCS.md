@@ -318,6 +318,14 @@ sort, again to reverse; the column menu brings the default order back. Sort,
 filter, columns and their order are remembered by your browser. The page
 refreshes itself every minute; **Refresh** does it at once.
 
+Opening the page and **Refresh** also make the add-on read every available node
+again, battery ones included: response time, uptime and contact, plus role and
+Thread tables (a battery node only gives its role and parent link, and only if it
+answers). Three nodes at a time, mains nodes first, at most once every
+5 minutes, never during a storm. The green dot blinks while the nodes are read
+(also after a start of the add-on, see Radio survey); the lines update as the
+answers come in.
+
 **Node panel** — click a node: status and advice, attachment explained, border
 router and cost of the path, response, power, the three actions, the signal and
 response curves of the last 7 days (centered on their average, the weak

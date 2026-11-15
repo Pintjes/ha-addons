@@ -140,6 +140,10 @@ class WebUI:
                 path = self.path.partition("?")[0].rstrip("/")
                 if path == "/api/action":
                     return self._action()
+                if path == "/api/reread":   # page opened or Refresh: read every node again
+                    q = getattr(ui.w, "quality", None)
+                    started = bool(q and q.reread_all())
+                    return self._send(200, json.dumps({"started": started}))
                 if path != "/api/ap_name":
                     return self._send(404, '{"error": "not found"}')
                 try:

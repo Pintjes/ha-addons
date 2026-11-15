@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.7.0] - 2026-11-15
+
+### Added
+
+- Opening the page and Refresh read every available node again, battery ones included (response time, uptime, contact, role and Thread tables): three nodes at a time, mains nodes first, at most once every 5 minutes, never during a storm. The green dot blinks while the nodes are read, also during the reread after a start.
+
 ## [2.6.5] - 2026-11-15
 
 ### Fixed

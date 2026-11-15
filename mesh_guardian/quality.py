@@ -36,6 +36,8 @@ PROBE_RETRY_S = 2 * 60
 NEIGHBOR_REFRESH_S = 60 * 60   # mains nodes: role and neighbor table read again at most hourly   # first new try after a failed read
 PROBE_GAP_S = 5            # between two reads
 STARTUP_MAX_S = 20 * 60    # the startup reread of the Thread tables gives up after this
+REREAD_GAP_S = 5 * 60      # page reread: at most once every 5 minutes
+REREAD_WORKERS = 3         # page reread: nodes read at the same time
 RTT_KEEP = 20              # answers kept for the average
 
 SAMPLE_S = 60
@@ -65,6 +67,7 @@ class Quality:
         self.sniffed = 0
         self._counted = None     # outages already counted (None: first sample, nothing counted)
         self.tables_ready = False  # Thread tables of the mains nodes read again since the start
+        self.reread = {"running": False, "t": 0, "done": 0, "total": 0}   # page reread
         self._load()
 
     # ------------------------------------------------------------ state
@@ -162,6 +165,88 @@ class Quality:
             if isinstance(value, (int, float)):
                 self.live.set_attribute(nid, "0/51/2", value)
 
+    def reread_all(self):
+        """Page opened or Refresh pressed: read every available node again, battery ones
+        included (response time, uptime, contact; role and tables of the Thread nodes), a few
+        at a time. At most once every REREAD_GAP_S, never during a storm or a mass drop.
+        Returns True when a reread starts."""
+        now = time.time()
+        storm = bool(getattr(self.w, "storm", None) and self.w.storm.active)
+        if storm or now < self.h.mass_until or not self.live.connected:
+            return False
+        with self.live.lock:
+            thread = {k for k, n in self.live.nodes.items() if n["attributes"].get("0/53/1") is not None}
+            known = set(self.live.nodes)
+        with self.h.lock:
+            todo = [(k, bool(n.get("battery")), f"{int(k, 16):016X}" in thread) for k, n in self.h.nodes.items()
+                    if n["available"] and f"{int(k, 16):016X}" in known]
+        todo.sort(key=lambda x: x[1])   # mains nodes first: they answer at once
+        with self.lock:
+            if self.reread["running"] or now - self.reread["t"] < REREAD_GAP_S or not todo:
+                return False
+            self.reread = {"running": True, "t": now, "done": 0, "total": len(todo)}
+        threading.Thread(target=self._reread, args=(todo,), daemon=True, name="reread").start()
+        return True
+
+    def _reread(self, todo):
+        queue = list(todo)
+
+        def worker():
+            while not self.w.stop.is_set():
+                if getattr(self.w, "storm", None) and self.w.storm.active:
+                    return
+                with self.lock:
+                    if not queue:
+                        return
+                    nid, battery, thread = queue.pop(0)
+                try:
+                    if thread and not battery:
+                        with self.lock:
+                            self.rtt.setdefault(nid, {"last": None, "ok": [], "t": 0, "fails": 0})["thr_t"] = 0
+                    self.probe(nid, battery)   # mains Thread nodes: tables read too
+                    if battery and thread:
+                        with self.lock:
+                            awake = (self.rtt.get(nid) or {}).get("last") is not None
+                        if awake:   # it just answered: role and parent link
+                            self._read_paths(nid, ("0/53/1", "0/53/7"), 120)
+                except Exception as err:  # noqa: BLE001
+                    LOG.debug("reread %s: %s", nid, err)
+                finally:
+                    with self.lock:
+                        self.reread["done"] += 1
+                    table = getattr(self.w, "table", None)
+                    if table is not None:
+                        table.cache_t = 0
+
+        try:
+            workers = [threading.Thread(target=worker, daemon=True, name="reread-w") for _ in range(REREAD_WORKERS)]
+            for th in workers:
+                th.start()
+            for th in workers:
+                th.join()
+        finally:
+            with self.lock:
+                self.reread["running"] = False
+
+    def reading(self):
+        """Reread in progress for the page: None, or {"done", "total"} (startup: done/total unknown)."""
+        with self.lock:
+            if self.reread["running"]:
+                return {"done": self.reread["done"], "total": self.reread["total"]}
+        return None if self.tables_ready else {"done": None, "total": None}
+
+    def _read_paths(self, nid, paths, timeout=30):
+        for path in paths:
+            try:
+                res = self.h.matter_command("read_attribute", {"node_id": int(nid, 16), "attribute_path": path},
+                                            timeout=timeout)
+                value = res.get(path) if isinstance(res, dict) else res
+                if value is not None:
+                    self.live.set_attribute(nid, path, value)
+            except Exception as err:  # noqa: BLE001
+                LOG.debug("thread read %s %s: %s", nid, path, err)
+                return
+
     def _refresh_thread(self, nid):
         """Read again the role, the neighbor and route tables of a mains node, at most hourly: some
         nodes never report them again (e.g. after becoming an end device), so the Matter
@@ -197,7 +282,8 @@ class Quality:
             with self.live.lock:
                 thread = {k for k, n in self.live.nodes.items() if n["attributes"].get("0/53/1") is not None}
             with self.h.lock:
-                todo = [k for k, n in self.h.nodes.items() if n["available"] and not n.get("battery") and k in thread]
+                todo = [k for k, n in self.h.nodes.items() if n["available"] and not n.get("battery")
+                        and f"{int(k, 16):016X}" in thread]
             done = 0
             for nid in todo:
                 while getattr(self.w, "storm", None) and self.w.storm.active and time.time() < end:
