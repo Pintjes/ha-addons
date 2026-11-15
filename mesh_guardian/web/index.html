@@ -89,6 +89,8 @@
   button.issue { cursor: pointer; }
   .issue.bad { border-left-color: var(--bad); } .issue.warn { border-left-color: var(--warn); } .issue.info { border-left-color: var(--acc); }
   .issue .ic { margin-top: 1px; }
+  .issue .seen { align-self: flex-start; background: none; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font: inherit; font-size: 12px; color: var(--mut); cursor: pointer; }
+  .issue .seen:hover { color: var(--txt); border-color: var(--mut); }
   .issue.bad .ic, .issue.bad .what { color: var(--bad); }
   .issue.warn .ic, .issue.warn .what { color: var(--warn); }
   .issue.info .ic, .issue.info .what { color: var(--acc-txt); }
@@ -264,7 +266,7 @@
 "use strict";
 // ------------------------------------------------------------ texts
 const T = {
-  en: {todo_info:"Good to know ({n})", np_before:"Before: {p}, {r} dBm", a_parent_noanswer:"{n}: no answer (asleep?)", a_parent_new:"{n}: new parent {l}", a_failed:"{n}: action failed", check_bat:"Check its batteries", check_power:"Check its power", down_since:"Since {t}.", w_info:"Good to know", down_do_bat:"Since {t}. Check its batteries.", more:"+{n}", refresh:"Refresh", reading:"Reading the nodes again… {d}/{n}", reading0:"Reading the nodes again…", report:"Report", classic:"Classic view", loading:"loading…", error:"error", live:"live", polling:"live link down: values read on demand", updated:"updated at {t}", connecting:"connecting to the Matter Server…", updating:"reading the nodes…", updating_n:"reading the nodes… {d}/{n}",
+  en: {todo_info:"Good to know ({n})", np_before:"Before: {p}, {r} dBm", a_parent_noanswer:"{n}: no answer (asleep?)", a_parent_new:"{n}: new parent {l}", a_failed:"{n}: action failed", check_bat:"Check its batteries", check_power:"Check its power", down_since:"Since {t}.", down_do_bat:"Since {t}. Check its batteries.", more:"+{n}", refresh:"Refresh", reading:"Reading the nodes again… {d}/{n}", reading0:"Reading the nodes again…", report:"Report", classic:"Classic view", loading:"loading…", error:"error", live:"live", polling:"live link down: values read on demand", updated:"updated at {t}", connecting:"connecting to the Matter Server…", updating:"reading the nodes…", updating_n:"reading the nodes… {d}/{n}",
     silent:"silent", w_silent:"Silent", n_silent:"{n} silent node", n_silent_pl:"{n} silent nodes", silent_sub:"{name}: probably without power.",
     silent_tip:"No sign of life for {t} (usually every {u}): probably without power.",
     t_rhythm:"Sign of life", rhythm_v:"every {u} at most · silence flagged after {l}", rhythm_wait:"being measured",
@@ -273,7 +275,7 @@ const T = {
     f_avail:"Available nodes", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Automatic recovery", on:"on", off:"off",
     quality:"Network quality · last {n} min", q_lab:["poor", "to watch", "good", "excellent"], q_trend:"{d} vs 24h", q_24h:"24h: {v} %", part_tip:"Now {v} % · 24h {v24} % · weight {n} %", q_scale:"≥ 95 excellent · 90–95 good · 80–90 to watch",
     q_capped:"capped: partitioned network", q_wait:"The score starts after a few minutes.", q_parts:{availability:"Availability", radio:"Radio", outages:"Outages", backbone:"Backbone", partition:"Partition"}, weight:"Weight {n} %",
-    todo:"To handle ({n})", new:"new", todo_none:"Nothing to handle", w_down:"Unavailable", w_warn:"Action advised", w_info:"Good to know", w_net:"Network",
+    todo:"To handle ({n})", new:"new", todo_none:"Nothing to handle", w_down:"Unavailable", w_warn:"Action advised", w_info:"Good to know", seen:"Seen", seen_tip:"Hide this note (it comes back if it changes)", w_net:"Network",
     down_do:"Since {t}. Check its power.",
     storm:"Thread storm: pings spaced out, sweep paused.",
     brs:"Border routers", br_seen:"seen {t}", br_never:"never seen", br_primary:"primary", offline:"offline", detached24:"detached {n}× in 24h", other_subnet:"other subnet than Home Assistant",
@@ -307,7 +309,7 @@ const T = {
     roles:{leader:"Leader router", router:"Router", reed:"End", end_device:"End", sleepy_end_device:"Sleepy end", unassigned:"unassigned", unspecified:"unspecified", detached:"detached", child:"End device", offline:"offline"},
     boot:{unspecified:"unspecified", power_on:"power on", brown_out:"brown-out", software_watchdog:"software watchdog", hardware_watchdog:"hardware watchdog", software_update:"software update", software_reset:"software reset"},
     csrc:{report:"report", event:"event", read:"read", ping:"ping", passive:"packet"}},
-  fr: {todo_info:"À savoir ({n})", np_before:"Avant : {p}, {r} dBm", a_parent_noanswer:"{n} : pas de réponse (endormie ?)", a_parent_new:"{n} : nouveau parent {l}", a_failed:"{n} : action impossible", check_bat:"Vérifier les piles", check_power:"Vérifier l'alimentation", down_since:"Depuis {t}.", w_info:"À savoir", down_do_bat:"Depuis {t}. Vérifier les piles.", more:"+{n}", refresh:"Actualiser", reading:"Relecture des nodes… {d}/{n}", reading0:"Relecture des nodes…", report:"Rapport", classic:"Vue classique", loading:"chargement…", error:"erreur", live:"en direct", polling:"lien direct coupé : valeurs lues à la demande", updated:"mis à jour à {t}", connecting:"connexion au Matter Server…", updating:"lecture des nodes…", updating_n:"lecture des nodes… {d}/{n}",
+  fr: {todo_info:"À savoir ({n})", np_before:"Avant : {p}, {r} dBm", a_parent_noanswer:"{n} : pas de réponse (endormie ?)", a_parent_new:"{n} : nouveau parent {l}", a_failed:"{n} : action impossible", check_bat:"Vérifier les piles", check_power:"Vérifier l'alimentation", down_since:"Depuis {t}.", down_do_bat:"Depuis {t}. Vérifier les piles.", more:"+{n}", refresh:"Actualiser", reading:"Relecture des nodes… {d}/{n}", reading0:"Relecture des nodes…", report:"Rapport", classic:"Vue classique", loading:"chargement…", error:"erreur", live:"en direct", polling:"lien direct coupé : valeurs lues à la demande", updated:"mis à jour à {t}", connecting:"connexion au Matter Server…", updating:"lecture des nodes…", updating_n:"lecture des nodes… {d}/{n}",
     silent:"silencieuse", w_silent:"Silencieuse", n_silent:"{n} node silencieuse", n_silent_pl:"{n} nodes silencieuses", silent_sub:"{name} : probablement sans courant.",
     silent_tip:"Aucun signe de vie depuis {t} (d'habitude toutes les {u}) : probablement sans courant.",
     t_rhythm:"Signe de vie", rhythm_v:"toutes les {u} au plus · silence signalé après {l}", rhythm_wait:"mesure en cours",
@@ -316,7 +318,7 @@ const T = {
     f_avail:"Nodes disponibles", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Récupération auto.", on:"activée", off:"désactivée",
     quality:"Qualité du réseau · dernières {n} min", q_lab:["mauvais", "à surveiller", "bon", "excellent"], q_trend:"{d} par rapport à 24 h", q_24h:"24 h : {v} %", part_tip:"Actuel {v} % · 24 h {v24} % · poids {n} %", q_scale:"≥ 95 excellent · 90–95 bon · 80–90 à surveiller",
     q_capped:"plafonnée : réseau partitionné", q_wait:"La note démarre après quelques minutes.", q_parts:{availability:"Disponibilité", radio:"Radio", outages:"Coupures", backbone:"Ossature", partition:"Partition"}, weight:"Poids {n} %",
-    todo:"À traiter ({n})", new:"nouveau", todo_none:"Rien à traiter", w_down:"Indisponible", w_warn:"Action conseillée", w_info:"À savoir", w_net:"Réseau",
+    todo:"À traiter ({n})", new:"nouveau", todo_none:"Rien à traiter", w_down:"Indisponible", w_warn:"Action conseillée", w_info:"À savoir", seen:"Vu", seen_tip:"Masquer cette note (elle revient si elle change)", w_net:"Réseau",
     down_do:"Depuis {t}. Vérifier l'alimentation.",
     storm:"Tempête Thread : pings espacés, balayage suspendu.",
     brs:"Border routers", br_seen:"vu {t}", br_never:"jamais vu", br_primary:"primaire", offline:"hors ligne", detached24:"décroché {n}× en 24 h", other_subnet:"autre sous-réseau que Home Assistant",
@@ -557,8 +559,11 @@ function renderTodo() {
   const total = groups.length + net.filter(x => x[0] !== "info").length;
   $("#todoTitle").textContent = total ? F("todo", {n: total}) : L("todo_none");
   net.sort((a, b) => (a[0] === "info") - (b[0] === "info"));
-  const infoCards = net.filter(x => x[0] === "info").map(([k, txt]) => `<div class="card issue info"><span class="ic">${IC.info}</span>
-      <span><span class="what" style="display:block">${L("w_info")}</span><span>${esc(txt)}</span></span></div>`).join("");
+  // "good to know" notes can be hidden ("seen"); a note that changes comes back
+  const seen = new Set(P.seen || []);
+  const infoCards = net.filter(x => x[0] === "info" && !seen.has(x[1])).map(([k, txt]) => `<div class="card issue info"><span class="ic">${IC.info}</span>
+      <span style="flex:1"><span class="what" style="display:block">${L("w_info")}</span><span>${esc(txt)}</span></span>
+      <button class="seen" data-seen="${esc(txt)}" title="${esc(L("seen_tip"))}">${esc(L("seen"))}</button></div>`).join("");
   $("#todo").innerHTML = net.filter(x => x[0] !== "info").map(([k, txt]) => `<div class="card issue ${k}"><span class="ic">${k === "bad" ? IC.bad : IC.warn}</span>
       <span><span class="what" style="display:block">${L("w_net")}</span><span>${esc(txt)}</span></span></div>`).join("") +
     groups.map(({rows}) => {
@@ -979,6 +984,12 @@ async function load(force) {
 document.addEventListener("click", e => {
   const act = e.target.closest("button[data-act]");
   if (act) { e.stopPropagation(); if (!act.disabled) runAction(act); return; }
+  const sn = e.target.closest("button[data-seen]");
+  if (sn) {   // hide a "good to know" note; the list only keeps the notes still shown
+    const shown = new Set(((D.network || {}).notes || []).map(x => x[1]));
+    P.seen = [...new Set([...(P.seen || []).filter(x => shown.has(x)), sn.dataset.seen])];
+    save(); return renderTodo();
+  }
   const t = e.target.closest("[data-id],[data-f],[data-sort],.x");
   if (!t) return;
   if (t.dataset.sort) {   // ascending, descending, then back to "problems first"
