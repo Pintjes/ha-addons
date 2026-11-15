@@ -4,6 +4,15 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.1] - 2026-11-15
+
+### Fixed
+
+- `inject_script`: an app that looks at the page around it no longer takes
+  the panel for its own shell.
+- `inject_script`: the browser no longer keeps the pages and scripts of the
+  app, so turning the option on takes effect without emptying its cache.
+
 ## [1.3.0] - 2026-11-15
 
 ### Added

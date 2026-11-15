@@ -13,6 +13,15 @@
   var real = window.location;
   var origin = real.origin;
 
+  // The panel around the app is on the same site. An app that looks at its
+  // parent must not take it for its own shell: it sees itself as the top page.
+  try {
+    Object.defineProperty(window, "parent", { value: window, configurable: true, writable: true });
+  } catch (error) { /* kept as it is */ }
+  try {
+    Object.defineProperty(window, "frameElement", { value: null, configurable: true });
+  } catch (error) { /* kept as it is */ }
+
   function under(path) {
     return path === base.slice(0, -1) || path.indexOf(base) === 0;
   }

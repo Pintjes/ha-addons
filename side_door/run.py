@@ -54,6 +54,12 @@ http {
         default upgrade;
         ''      close;
     }
+    # Option inject_script: pages and scripts are not kept by the browser
+    map $upstream_http_content_type $sd_cache {
+        default       $upstream_http_cache_control;
+        ~*javascript  no-cache;
+        ~*text/html   no-cache;
+    }
 %(maps)s
     server {
         listen %(port)d;
@@ -260,6 +266,14 @@ def rewrite_rules(origin, base, extra, ingress, rewrite_on, inject):
             f"sub_filter '<head>' '{tag}';",
             "sub_filter 'window.location' 'window.__sd_loc';",
             "sub_filter 'document.location' 'document.__sd_loc';",
+            # The app sees itself as the top page, not inside the panel
+            "sub_filter 'window.top' 'window.self';",
+            "sub_filter 'window.parent' 'window.self';",
+            # Pages and scripts are checked again at each visit: turning the
+            # option on or off takes effect without emptying the browser cache
+            "proxy_hide_header Cache-Control;",
+            "proxy_hide_header Expires;",
+            "add_header Cache-Control $sd_cache;",
         ]
     if rewrite_on:
         prefixes = list(PREFIXES)
