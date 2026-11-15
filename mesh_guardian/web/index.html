@@ -244,8 +244,6 @@
   <section class="card hero" id="hero"><div class="empty" id="loading"></div></section>
   <h2 id="todoTitle"></h2>
   <div class="todo" id="todo"></div>
-  <h2 id="infoTitle" hidden></h2>
-  <div class="todo" id="infoTodo"></div>
   <h2 id="brTitle"></h2>
   <div class="brs" id="brs"></div>
   <h2 id="nodesTitle"></h2>
@@ -277,7 +275,7 @@ const T = {
     f_avail:"Available nodes", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Automatic recovery", on:"on", off:"off",
     quality:"Network quality · last {n} min", q_lab:["poor", "to watch", "good", "excellent"], q_trend:"{d} vs 24h", q_24h:"24h: {v} %", part_tip:"Now {v} % · 24h {v24} % · weight {n} %", q_scale:"≥ 95 excellent · 90–95 good · 80–90 to watch",
     q_capped:"capped: partitioned network", q_wait:"The score starts after a few minutes.", q_parts:{availability:"Availability", radio:"Radio", outages:"Outages", backbone:"Backbone", partition:"Partition"}, weight:"Weight {n} %",
-    todo:"To handle ({n})", know:"Good to know ({n})", new:"new", todo_none:"Nothing to handle", w_down:"Unavailable", w_warn:"Action advised", w_info:"Good to know", seen:"Seen", seen_tip:"Hide this note (it comes back if it changes)", w_net:"Network",
+    todo:"Good to know ({n})", new:"new", todo_none:"Nothing to report", w_down:"Unavailable", w_warn:"Action advised", w_info:"Good to know", seen:"Seen", seen_tip:"Hide this note (it comes back if it changes)", w_net:"Network",
     down_do:"Since {t}. Check its power.",
     storm:"Thread storm: pings spaced out, sweep paused.",
     brs:"Border routers", br_seen:"seen {t}", br_never:"never seen", br_primary:"primary", offline:"offline", detached24:"detached {n}× in 24h", other_subnet:"other subnet than Home Assistant",
@@ -320,7 +318,7 @@ const T = {
     f_avail:"Nodes disponibles", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Récupération auto.", on:"activée", off:"désactivée",
     quality:"Qualité du réseau · dernières {n} min", q_lab:["mauvais", "à surveiller", "bon", "excellent"], q_trend:"{d} par rapport à 24 h", q_24h:"24 h : {v} %", part_tip:"Actuel {v} % · 24 h {v24} % · poids {n} %", q_scale:"≥ 95 excellent · 90–95 bon · 80–90 à surveiller",
     q_capped:"plafonnée : réseau partitionné", q_wait:"La note démarre après quelques minutes.", q_parts:{availability:"Disponibilité", radio:"Radio", outages:"Coupures", backbone:"Ossature", partition:"Partition"}, weight:"Poids {n} %",
-    todo:"À traiter ({n})", know:"À savoir ({n})", new:"nouveau", todo_none:"Rien à traiter", w_down:"Indisponible", w_warn:"Action conseillée", w_info:"À savoir", seen:"Vu", seen_tip:"Masquer cette note (elle revient si elle change)", w_net:"Réseau",
+    todo:"À savoir ({n})", new:"nouveau", todo_none:"Rien à signaler", w_down:"Indisponible", w_warn:"Action conseillée", w_info:"À savoir", seen:"Vu", seen_tip:"Masquer cette note (elle revient si elle change)", w_net:"Réseau",
     down_do:"Depuis {t}. Vérifier l'alimentation.",
     storm:"Tempête Thread : pings espacés, balayage suspendu.",
     brs:"Border routers", br_seen:"vu {t}", br_never:"jamais vu", br_primary:"primaire", offline:"hors ligne", detached24:"décroché {n}× en 24 h", other_subnet:"autre sous-réseau que Home Assistant",
@@ -559,7 +557,9 @@ function renderTodo() {
   // notes about the network itself (border routers, unknown nodes); "info" is not something to handle
   for (const [k, txt] of n.notes || []) net.push([k, txt]);
   const groups = todoGroups(issues);
-  const total = groups.length + net.filter(x => x[0] !== "info").length;
+  // one section, "good to know" notes included (those hidden with "Seen" not counted)
+  const seenSet = new Set(P.seen || []);
+  const total = groups.length + net.filter(x => x[0] !== "info" || !seenSet.has(x[1])).length;
   $("#todoTitle").textContent = total ? F("todo", {n: total}) : L("todo_none");
   net.sort((a, b) => (a[0] === "info") - (b[0] === "info"));
   // "good to know" notes can be hidden ("seen"); a note that changes comes back
@@ -580,12 +580,7 @@ function renderTodo() {
         : r.silent_s ? esc(silentTip(r)) : esc(r.advice);
       return `<button class="card issue ${k}" data-id="${esc(r.id)}" title="${esc(r.advice_detail || "")}"><span class="ic">${k === "bad" ? IC.bad : IC.bulb}</span>
         <span><span class="what">${what}</span><b>${esc(r.name)} <span class="mut" style="font-weight:400">${r.area ? "· " + esc(r.area) : ""}</span></b><span>${txt}</span></span></button>`;
-    }).join("");
-  // "good to know" under its own title, shown only when there is something to know
-  const nInfo = (infoCards.match(/class="card issue info"/g) || []).length;
-  $("#infoTitle").hidden = !nInfo;
-  $("#infoTitle").textContent = F("know", {n: nInfo});
-  $("#infoTodo").innerHTML = infoCards;
+    }).join("") + infoCards;
 }
 
 function renderBrs() {
