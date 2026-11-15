@@ -40,7 +40,7 @@ FOLLOW_FOR_S = 300    # s: ...for this long
 RESULT_KEEP_S = 900   # s: a result stays in the table this long (the page shows it when it arrives)
 END_DEVICE_ROLES = (2, 3, 4)   # sleepy end device, end device, REED (a full end device attached as a child)
 CONNECT_NETWORK = 6   # Network Commissioning command id
-PATHS = ["0/53/1", "0/53/7", "0/49/1", "0/49/65529"]
+PATHS = ["0/53/1", "0/53/7", "0/51/0", "0/49/1", "0/49/65529"]   # table and addresses read together: same moment
 
 
 def _field(res, name, key):
@@ -191,6 +191,8 @@ class Reattach:
         before = parent_link(attrs.get("0/53/7"))
         if self.live and isinstance(attrs.get("0/53/7"), list):
             self.live.set_attribute(nid, "0/53/7", attrs["0/53/7"])
+            if isinstance(attrs.get("0/51/0"), list):   # its RLOC16, so its parent: from the same moment
+                self.live.set_attribute(nid, "0/51/0", attrs["0/51/0"])
             self.live.note_contact(nid, src="read")
         parent_before, rssi_before, lqi_before = self._view(nid)
         # same rule as the table and the advice, on the link the table shows

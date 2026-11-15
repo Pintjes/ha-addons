@@ -49,7 +49,9 @@ do about them.
    parents, roles and counters. After a start of the add-on, the neighbor and
    route tables of the mains-powered nodes are first read again, one node every
    few seconds (the cache can be hours old); the first survey waits for it
-   (5 to 10 minutes, at most 20). Battery nodes are never read.
+   (5 to 10 minutes, at most 20). Battery nodes are not read then: the values
+   read from them in the last 2 hours (role, tables, addresses) are kept across
+   a restart instead.
 4. **Statistics.** Outages are counted per node over 7 days. On first start,
    the last 7 days are rebuilt from the Home Assistant history.
 

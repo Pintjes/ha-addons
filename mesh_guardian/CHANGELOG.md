@@ -4,6 +4,14 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.7.2] - 2026-11-15
+
+### Fixed
+
+- After a restart, battery nodes showed the Matter Server cache again (old parent and signal) until the page was opened: the values read from the nodes in the last 2 hours (role, tables, addresses) are now kept across a restart.
+- Parent of an end device shown from an old address with the signal of its new parent (e.g. during a parent search): its neighbor table and its addresses are now always read together, and the route table of a (sleepy) end device, not kept up to date by the node, is no longer used for its link quality.
+- "Parent search refused" now gives the reason in French too.
+
 ## [2.7.1] - 2026-11-15
 
 ### Fixed

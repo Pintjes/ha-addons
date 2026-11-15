@@ -27,6 +27,8 @@ from nodetable import ext_of
 LOG = logging.getLogger("mg.live")
 CONTACTS_FILE = "/data/last_contact.json"
 SOURCES_FILE = "/data/contact_sources.json"
+FRESH_FILE = "/data/fresh_values.json"
+FRESH_PATHS = ("0/53/1", "0/53/7", "0/53/8", "0/51/0")   # role, tables, addresses: kept across a restart
 
 
 def node_hex(node_id):
@@ -55,6 +57,17 @@ class MatterLive:
                 self.contacts = {k: float(v) for k, v in json.load(f).items()}
         except Exception:  # noqa: BLE001
             self.contacts = {}
+        self.fresh = {}       # (node hex, path) -> (time, value) read directly from the node
+        self._fresh_saved = 0
+        try:
+            with open(FRESH_FILE) as f:
+                now = time.time()
+                for key, (t0, value) in json.load(f).items():
+                    nid, path = key.split("|", 1)
+                    if now - t0 < FRESH_KEEP_S:
+                        self.fresh[(nid, path)] = (t0, value)
+        except Exception:  # noqa: BLE001
+            self.fresh = {}
         self.sources = {}     # node hex -> {"src", "active": ts, "gap": s, "since": ts}
         try:
             with open(SOURCES_FILE) as f:
@@ -191,7 +204,24 @@ class MatterLive:
         with self.lock:
             if nid in self.nodes:
                 self.nodes[nid]["attributes"][path] = value
-            self.__dict__.setdefault("fresh", {})[(nid, path)] = (time.time(), value)
+            self.fresh[(nid, path)] = (time.time(), value)
+        if time.time() - self._fresh_saved >= 30:
+            self.save_fresh()
+
+    def save_fresh(self):
+        """Values read from the nodes (role, tables, addresses), kept across a restart: without
+        them the Matter Server cache, which can be hours old, comes back (battery nodes are
+        not read again at start)."""
+        now = time.time()
+        with self.lock:
+            self._fresh_saved = now
+            data = {f"{k}|{p}": v for (k, p), v in self.fresh.items()
+                    if p in FRESH_PATHS and now - v[0] < FRESH_KEEP_S}
+        try:
+            with open(FRESH_FILE, "w") as f:
+                json.dump(data, f)
+        except OSError as err:
+            LOG.warning(t("Cannot write {file}: {err}", file=FRESH_FILE, err=err))
 
     def addresses(self):
         """node hex -> IPv6 addresses (16 bytes) the node reports (General Diagnostics)."""

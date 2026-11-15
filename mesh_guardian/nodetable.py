@@ -211,10 +211,10 @@ def find_parents(thread, labels):
             name = name or f"router {prloc >> 10} (0x{prloc:04x})"
             # link quality: the entry of the parent in the neighbor table (0 included: measured on
             # an established link), and in and out from the route table of a full end device; the
-            # route table of a (sleepy) end device is not kept up to date: only without that entry
+            # route table of a (sleepy) end device is not kept up to date by the node: never used
             rt = next((x for x in v["attrs"].get("0/53/8") or [] if isinstance(x, dict) and x.get("2") == prloc >> 10), {})
             q_own = own[0].get("5") if own else None
-            q_rt = lowest(rt.get("5"), rt.get("6")) if q_own is None or v["attrs"].get("0/53/1") not in (2, 3) else None
+            q_rt = lowest(rt.get("5"), rt.get("6")) if v["attrs"].get("0/53/1") not in (2, 3) else None
             parents[nid] = (name, nb_rssi(own[0]) if own else None, min_known(q_own, q_rt), ext or prloc)
     for nid, v in thread.items():   # seen from the parent side
         for nb in v["attrs"].get("0/53/7") or []:

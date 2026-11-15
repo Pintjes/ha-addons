@@ -208,7 +208,7 @@ class Quality:
                         with self.lock:
                             awake = (self.rtt.get(nid) or {}).get("last") is not None
                         if awake:   # it just answered: role and parent link
-                            self._read_paths(nid, ("0/53/1", "0/53/7"), 120)
+                            self._read_paths(nid, ("0/53/1", "0/53/7", "0/51/0"), 120)   # table and RLOC16 together
                 except Exception as err:  # noqa: BLE001
                     LOG.debug("reread %s: %s", nid, err)
                 finally:

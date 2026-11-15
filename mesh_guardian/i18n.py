@@ -235,7 +235,7 @@ FR = {
     'Parent search: checking the link of {n} end devices': "Recherche de parents : {n} appareils finaux",
     '{node}: looking for a better parent (now {rssi}dBm, LQI {lqi})':
         '{node} : recherche d\'un meilleur parent (actuellement {rssi} dBm, LQI {lqi})',
-    '{node}: parent search refused: {err}': "{node} : recherche de parent refusée",
+    '{node}: parent search refused: {err}': "{node} : recherche de parent refusée : {err}",
     '{node}: better parent, {before}dBm → {after}dBm (LQI {lqi_before} → {lqi})':
         '{node} : meilleur parent, {before} dBm → {after} dBm (LQI {lqi_before} → {lqi})',
     '{node}: weaker parent, {before}dBm → {after}dBm (LQI {lqi_before} → {lqi})':

@@ -74,7 +74,7 @@ from radio import Radio  # noqa: E402
 from storm import Storm  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.7.1"
+VERSION = "2.7.2"
 
 _MQ = _load_mqtt()
 MQTT_HOST = _MQ.get("host") or os.environ.get("MQTT_HOST", "core-mosquitto")
@@ -1515,6 +1515,10 @@ class Watch:
         signal.signal(signal.SIGINT, shutdown)
         while not self.stop.is_set():
             time.sleep(1)
+        try:
+            self.live.save_fresh()
+        except Exception:  # noqa: BLE001
+            pass
         for b in self.browsers.values():
             b.cancel()
         client.publish(f"{BASE}/status", "offline", retain=True)
