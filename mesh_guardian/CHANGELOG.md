@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.9.3] - 2026-11-15
+
+### Added
+
+- Access to the Supervisor API (role "default"), as a test: at start, the add-on tries the Supervisor calls it could use (Matter Server state and log, Home Assistant state, network…) and logs which ones its role allows. Only the status codes are kept, never the content.
+
 ## [2.9.2] - 2026-11-15
 
 ### Fixed
