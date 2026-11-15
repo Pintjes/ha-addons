@@ -4,6 +4,15 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.2] - 2026-11-15
+
+### Changed
+
+- The panel, logo and icon use the same blue as the other add-ons of the
+  repository (#1f6feb). Your messages no longer take the color of the Home
+  Assistant theme.
+- Marked as beta (README and description).
+
 ## [1.1.1] - 2026-11-15
 
 ### Fixed

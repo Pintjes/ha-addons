@@ -7,7 +7,7 @@
 <style>
   :root {
     --bg: #111318; --card: #1c1f26; --text: #e6e6e6; --muted: #9aa0a6;
-    --accent: #3b5bdb; --user: #3b6fd8; --user-text: #fff; --divider: #2c3038;
+    --accent: #1f6feb; --user: #1f6feb; --user-text: #fff; --divider: #2c3038;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
@@ -48,7 +48,7 @@
   .icon:hover { background: rgba(127,127,127,.15); }
   .icon:disabled { opacity: .35; cursor: default; }
   .icon.rec { background: var(--accent); color: #fff; animation: pulse 1.2s infinite; }
-  @keyframes pulse { 50% { box-shadow: 0 0 0 8px rgba(217,119,87,.25); } }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 8px rgba(31,111,235,.25); } }
   .icon svg { width: 22px; height: 22px; fill: currentColor; }
   .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 10; }
   .overlay[hidden] { display: none; }
@@ -138,13 +138,11 @@ function copyTheme() {
     const cs = getComputedStyle(window.parent.document.querySelector("home-assistant"));
     const map = { "--bg": "--primary-background-color", "--card": "--card-background-color",
                   "--text": "--primary-text-color", "--muted": "--secondary-text-color",
-                  "--user": "--primary-color", "--divider": "--divider-color" };
+                  "--divider": "--divider-color" };
     for (const [ours, theirs] of Object.entries(map)) {
       const v = cs.getPropertyValue(theirs).trim();
       if (v) document.documentElement.style.setProperty(ours, v);
     }
-    const t = cs.getPropertyValue("--text-primary-color").trim();
-    if (t) document.documentElement.style.setProperty("--user-text", t);
   } catch (e) { /* standalone */ }
 }
 

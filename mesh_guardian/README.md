@@ -6,9 +6,16 @@
   <a href="https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FPintjes%2Fha-addons"><img src="https://img.shields.io/badge/Home%20Assistant-add--on-41BDF5?logo=home-assistant&logoColor=white" alt="Home Assistant add-on"></a>
   <img src="https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FPintjes%2Fha-addons%2Fmain%2Fmesh_guardian%2Fconfig.yaml&query=%24.version&label=version&color=blue" alt="Version">
   <img src="https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-informational" alt="Architectures">
+  <img src="https://img.shields.io/badge/status-beta-orange" alt="Status: beta">
   <a href="https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml"><img src="https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/Pintjes/ha-addons/blob/main/mesh_guardian/LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg" alt="License: GPL-3.0"></a>
 </p>
+
+> **Beta.** Mesh Guardian has been tested on one installation only. Testers with
+> other border routers (Apple, Amazon, Home Assistant Connect, Nest…) and other
+> device brands are welcome: please
+> [open an issue](https://github.com/Pintjes/ha-addons/issues/new/choose) with the
+> file from the **Report** button.
 
 **Mesh Guardian keeps your Thread / Matter devices online**, shows you every
 node of your mesh in one table, and tells you what to fix — in plain language.

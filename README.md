@@ -9,8 +9,8 @@ Add-on repository for [Home Assistant](https://www.home-assistant.io/).
 
 | | Add-on | Version | Description |
 |:-:|---|:-:|---|
-| <img src="mesh_guardian/icon.png" width="48" alt=""> | **[Mesh Guardian](mesh_guardian/)** | ![version][mg-version] | Keeps your Thread / Matter devices online: automatic recovery of lost nodes, a live table of every node, border router monitoring and radio advice. |
-| <img src="voice_agent_bridge/icon.png" width="48" alt=""> | **[Voice Agent Bridge](voice_agent_bridge/)** | ![version][vab-version] | Talk to Claude through Assist and your voice satellites, with your Claude plan (no API key), the full Home Assistant toolset and a conversation panel. |
+| <img src="mesh_guardian/icon.png" width="48" alt=""> | **[Mesh Guardian](mesh_guardian/)** *(beta)* | ![version][mg-version] | Keeps your Thread / Matter devices online: automatic recovery of lost nodes, a live table of every node, border router monitoring and radio advice. |
+| <img src="voice_agent_bridge/icon.png" width="48" alt=""> | **[Voice Agent Bridge](voice_agent_bridge/)** *(beta)* | ![version][vab-version] | Talk to Claude through Assist and your voice satellites, with your Claude plan (no API key), the full Home Assistant toolset and a conversation panel. |
 | <img src="side_door/icon.png" width="48" alt=""> | **[Side Door](side_door/)** | ![version][sd-version] | Opens a web app of your local network in the Home Assistant sidebar: HTTPS and Home Assistant login for free, nothing exposed to the Internet. |
 
 ## Installation
