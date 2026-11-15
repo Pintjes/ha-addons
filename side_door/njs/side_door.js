@@ -10,6 +10,10 @@
 //   inject    load the script that moves the addresses built in JavaScript
 //   prefixes  texts found right before a path of the app
 var APPS = {};
+// run.py also sets MARK: it changes with the version of the add-on and with
+// its configuration. It is put in the ETag of the answers, so that a browser
+// never reuses a page or a script rewritten another way.
+var MARK = '';
 
 // Answers that are texts and may hold addresses
 var TEXTS = {
@@ -112,12 +116,19 @@ function headers(r) {
         if (r.status === 301 || r.status === 308) {
             r.headersOut['Cache-Control'] = 'no-store';
         }
+        // What the browser keeps is tied to this version and configuration:
+        // nginx only lets through the ETags that carry the same mark
+        var etag = r.headersOut['ETag'];
+        if (etag) {
+            r.headersOut['ETag'] = 'W/"' + MARK + '-' + etag.replace(/^W\//, '').replace(/^"|"$/g, '') + '"';
+        }
         var type = textKind(r);
         if (!a || !type || !(a.rewrite || a.inject)) {
             return;
         }
-        // The text will change: so will its length
+        // The text will change: so will its length, and its date says nothing
         delete r.headersOut['Content-Length'];
+        delete r.headersOut['Last-Modified'];
         if (a.inject && (type === 'html' || type === 'js')) {
             // Checked again at each visit: turning the option on or off takes
             // effect without emptying the cache of the browser

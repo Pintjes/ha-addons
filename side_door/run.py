@@ -12,6 +12,7 @@ tabs, each app under its own path (/app/<id>/).
 nginx relays the requests; njs/side_door.js changes the answers (addresses of
 the app moved under the ingress path, cookies in plain HTTP).
 """
+import hashlib
 import html
 import json
 import os
@@ -66,6 +67,13 @@ http {
     map $http_upgrade $connection_upgrade {
         default upgrade;
         ''      close;
+    }
+    # The browser asks "has it changed?" with the ETag it kept. Only an ETag
+    # of this version and configuration is passed on to the app (see MARK in
+    # njs/side_door.js); otherwise the app answers in full.
+    map $http_if_none_match $sd_if_none_match {
+        default '';
+        "~^(?:W/)?\\"%(mark)s-(?<sd_etag>[^\\"]*)\\"$" "\\"$sd_etag\\"";
     }
     # 1 when the browser reaches Home Assistant in plain HTTP
     map $http_x_forwarded_proto $sd_plain {
@@ -140,6 +148,8 @@ APP_LOCATION = """\
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             # Answers must come uncompressed to be rewritten
             proxy_set_header Accept-Encoding "";
+            proxy_set_header If-None-Match $sd_if_none_match;
+            proxy_set_header If-Modified-Since "";
             proxy_ssl_server_name on;
             proxy_connect_timeout 10s;
             proxy_read_timeout %(timeout)ds;
@@ -343,12 +353,12 @@ def shell_page(apps):
     return SHELL % {"tabs": tabs}
 
 
-def build(options):
+def build(options, mark="sd0"):
     """Returns (nginx configuration, apps for njs/side_door.js, tabs page or
     None, message for the log)."""
     apps = read_apps(options)
     if not apps:
-        head = HEAD % {"port": PORT, "web": WEB, "njs": NJS, "maps": ""}
+        head = HEAD % {"port": PORT, "web": WEB, "njs": NJS, "mark": mark, "maps": ""}
         return head + NOT_SET, {}, None, "no valid app: set one in the add-on configuration"
     several = len(apps) > 1
     rewrite_on = bool(options.get("rewrite_paths", True))
@@ -368,7 +378,7 @@ def build(options):
             "path": path, "base": app["base"], "own": app["origin"] + app["base"],
             "rewrite": rewrite_on, "inject": inject, "prefixes": prefixes,
         }
-    conf = HEAD % {"port": PORT, "web": WEB, "njs": NJS, "maps": maps}
+    conf = HEAD % {"port": PORT, "web": WEB, "njs": NJS, "mark": mark, "maps": maps}
     conf += SERVER % {"max_body_mb": int(options.get("max_body_mb", 100))}
     if several:
         conf += SHELL_LOCATION % {"shell_dir": SHELL_DIR}
@@ -380,12 +390,21 @@ def build(options):
     return conf, script_apps, shell_page(apps) if several else None, f"{len(apps)} app(s), {paths}: {listed}"
 
 
-def script(source, script_apps):
-    """njs/side_door.js with the apps of the configuration."""
-    marker = "var APPS = {};"
-    if marker not in source:
-        raise ValueError(f"{NJS_SOURCE}: line '{marker}' not found")
-    return source.replace(marker, "var APPS = " + json.dumps(script_apps, ensure_ascii=True) + ";", 1)
+def script(source, script_apps, mark="sd0"):
+    """njs/side_door.js with the apps of the configuration and the mark."""
+    for marker in ("var APPS = {};", "var MARK = '';"):
+        if marker not in source:
+            raise ValueError(f"{NJS_SOURCE}: line '{marker}' not found")
+    source = source.replace("var APPS = {};", "var APPS = " + json.dumps(script_apps, ensure_ascii=True) + ";", 1)
+    return source.replace("var MARK = '';", f"var MARK = '{mark}';", 1)
+
+
+def make_mark(options, source):
+    """Changes with the configuration and with the code of the add-on."""
+    with open(__file__, "rb") as handle:
+        own = handle.read()
+    seed = json.dumps(options, sort_keys=True).encode() + source.encode() + own
+    return "sd" + hashlib.sha1(seed).hexdigest()[:10]
 
 
 def main():
@@ -395,13 +414,14 @@ def main():
     except (OSError, ValueError) as error:
         log(f"options not readable ({error}): default values")
         options = {}
-    conf, script_apps, shell, message = build(options)
-    with open(CONF, "w", encoding="utf-8") as handle:
-        handle.write(conf)
     with open(NJS_SOURCE, encoding="utf-8") as handle:
         source = handle.read()
+    mark = make_mark(options, source)
+    conf, script_apps, shell, message = build(options, mark)
+    with open(CONF, "w", encoding="utf-8") as handle:
+        handle.write(conf)
     with open(NJS, "w", encoding="utf-8") as handle:
-        handle.write(script(source, script_apps))
+        handle.write(script(source, script_apps, mark))
     if shell:
         os.makedirs(SHELL_DIR, exist_ok=True)
         with open(os.path.join(SHELL_DIR, "index.html"), "w", encoding="utf-8") as handle:
