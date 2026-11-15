@@ -4,6 +4,13 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.8] - 2026-11-15
+
+### Fixed
+
+- The full addresses of an app stay full addresses once rewritten: an app
+  that expected one no longer stops on a bare path.
+
 ## [1.3.7] - 2026-11-15
 
 ### Fixed

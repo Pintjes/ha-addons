@@ -78,6 +78,11 @@ http {
         default  0;
         http     1;
     }
+    # The address of Home Assistant as the browser uses it (empty if unknown)
+    map "$http_x_forwarded_proto:$http_x_forwarded_host" $sd_public {
+        default '';
+        "~^(?<sd_public_proto>https?):(?<sd_public_host>[^/ ]+)$" "$sd_public_proto://$sd_public_host";
+    }
     # Option inject_script: pages and scripts are not kept by the browser
     map $upstream_http_content_type $sd_cache {
         default       $upstream_http_cache_control;
@@ -331,9 +336,11 @@ def rewrite_rules(origin, base, extra, ingress, rewrite_on, inject):
             lines.append(f"sub_filter {quote(prefix + base)} {quote(prefix, ingress)};")
         # Full addresses of the app itself, as some apps write them in their
         # answers (pictures of a list, for example); also as JSON may write them
+        # They stay full addresses (an app may refuse a bare path there): the
+        # address of Home Assistant as the browser uses it, then the path
         own = origin + base
-        lines.append(f"sub_filter {quote(own)} {quote('', ingress)};")
-        lines.append(f"sub_filter {quote(own.replace('/', chr(92) + '/'))} {quote('', ingress)};")
+        lines.append(f"sub_filter {quote(own)} {quote('', '$sd_public' + ingress)};")
+        lines.append(f"sub_filter {quote(own.replace('/', chr(92) + '/'))} {quote('', '$sd_public' + ingress)};")
     return "".join(f"            {line}\n" for line in lines)
 
 
