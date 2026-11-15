@@ -5,7 +5,7 @@ configuration:
     description: "For a single app: the address Home Assistant uses to reach it, for example http://192.168.1.10:8000."
   apps:
     name: Several apps
-    description: "One entry per app, with the name shown on its tab and its address. With two apps or more, the panel shows a row of tabs. When this list is filled, the address above is ignored."
+    description: "One entry per app, with the name shown on its tab and its address. Optional 'start': the page the tab opens on, when it is not the root of the app (web/index.html for Plex). With two apps or more, the panel shows a row of tabs. When this list is filled, the address above is ignored."
   rewrite_paths:
     name: Rewrite paths
     description: "Needed when the app uses paths starting with / (most apps). Turn off for an app that already handles the X-Ingress-Path header."

@@ -163,6 +163,14 @@ APP_LOCATION = """\
 %(rewrite)s        }
 """
 
+# A single app with a start page: the panel opens on that page
+START_LOCATION = """\
+
+        location = / {
+            return 302 $http_x_ingress_path/%(start)s;
+        }
+"""
+
 # What the app is told about the browser behind Home Assistant
 FORWARDED = """\
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -275,7 +283,7 @@ SHELL = """\
       frames[id] = document.createElement("iframe");
       frames[id].title = tab.textContent;
       follow(frames[id]);
-      frames[id].src = "app/" + id + "/" + (page || "");
+      frames[id].src = "app/" + id + "/" + (page || tab.dataset.start || "");
       main.appendChild(frames[id]);
     }
     for (const key in frames) frames[key].hidden = key !== id;
@@ -355,14 +363,15 @@ def read_apps(options):
     entries = []
     for entry in options.get("apps") or []:
         if isinstance(entry, dict):
-            entries.append(((entry.get("name") or "").strip(), (entry.get("url") or "").strip()))
+            entries.append(((entry.get("name") or "").strip(), (entry.get("url") or "").strip(),
+                            (entry.get("start") or "").strip()))
     single = (options.get("target_url") or "").strip()
     if entries and single:
         log("apps is set: target_url is ignored")
     elif single:
-        entries = [("", single)]
+        entries = [("", single, "")]
     apps, used = [], set()
-    for name, url in entries:
+    for name, url, start in entries:
         label = name or url or "(empty)"
         if not url:
             log(f"app {label!r} ignored: no address")
@@ -373,15 +382,20 @@ def read_apps(options):
             log(f"app {label!r} ignored: {error} (got {url!r})")
             continue
         name = name[:40] or host
+        start = start.lstrip("/")
+        if not re.fullmatch(r"[A-Za-z0-9._~/#?=&%!-]*", start) or ".." in start:
+            log(f"app {label!r}: start page {start!r} ignored (only letters, digits and ._~/#?=&%!- are accepted)")
+            start = ""
         apps.append({"name": name, "id": app_id(name, used), "target": target,
-                     "origin": origin, "host": host, "base": base})
+                     "origin": origin, "host": host, "base": base, "start": start})
     return apps
 
 
 def shell_page(apps):
     """The page with the row of tabs."""
     tabs = "".join(
-        f'<button type="button" data-app="{app["id"]}">{html.escape(app["name"])}</button>' for app in apps
+        f'<button type="button" data-app="{app["id"]}" data-start="{html.escape(app["start"])}">'
+        f'{html.escape(app["name"])}</button>' for app in apps
     )
     return SHELL % {"tabs": tabs}
 
@@ -408,6 +422,8 @@ def build(options, mark="sd0"):
             "path": path, "target": app["target"], "host": app["host"],
             "n": n, "timeout": timeout, "rewrite": rewrite, "forwarded": forwarded,
         }
+        if app["start"] and not several:
+            locations += START_LOCATION % {"start": app["start"]}
         script_apps[str(n)] = {
             "path": path, "base": app["base"], "own": app["origin"] + app["base"],
             "rewrite": rewrite_on, "inject": inject, "prefixes": prefixes,

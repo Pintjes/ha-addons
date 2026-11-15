@@ -73,6 +73,9 @@ apps:
     url: http://192.168.1.20
 ```
 
+An entry can also have a `start` page, for an app whose interface is not at
+its root: `start: web/index.html` for Plex.
+
 With two apps or more, the panel shows a row of tabs with the names you
 chose. An app is loaded the first time its tab is opened and keeps its page
 when you switch tabs. The panel opens on the tab you used last.
