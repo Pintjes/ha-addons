@@ -1,5 +1,5 @@
 name: Mesh Guardian
-version: "2.9.4"
+version: "2.9.5"
 slug: mesh_guardian
 url: https://github.com/Pintjes/ha-addons
 description: >-
@@ -20,7 +20,7 @@ panel_icon: mdi:table-network
 panel_title: Mesh Guardian
 homeassistant_api: true
 hassio_api: true
-hassio_role: default
+hassio_role: manager
 services:
   - mqtt:need
 map:
