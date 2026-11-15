@@ -144,17 +144,25 @@ class Sessions:
     def key(turns: list[tuple[str, str]]) -> str:
         return hashlib.sha256(json.dumps(turns, ensure_ascii=False).encode()).hexdigest()
 
-    def get(self, turns):
+    def get(self, turns, prompt_id: str):
+        """Session to resume, or None. A session started with another system prompt
+        (house notes or options changed since) is not resumed: Claude Code keeps the
+        system prompt of the first request when resuming."""
         now = time.time()
         with self._lock:
-            for k in [k for k, (_, ts) in self._items.items() if now - ts > SESSION_TTL]:
+            for k in [k for k, (_, ts, _p) in self._items.items() if now - ts > SESSION_TTL]:
                 del self._items[k]
             item = self._items.get(self.key(turns))
-            return item[0] if item else None
+        if not item:
+            return None
+        if item[2] != prompt_id:
+            log.info("House notes or settings changed: new Claude session")
+            return None
+        return item[0]
 
-    def put(self, turns, session_id):
+    def put(self, turns, session_id, prompt_id: str):
         with self._lock:
-            self._items[self.key(turns)] = (session_id, time.time())
+            self._items[self.key(turns)] = (session_id, time.time(), prompt_id)
 
 
 SESSIONS = Sessions()
@@ -595,7 +603,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {"error": {"message": "The last message must come from the user"}})
             return
         history = turns[:-1]
-        resume = SESSIONS.get(history) if history else None
+        prompt_id = hashlib.sha256(system_prompt().encode()).hexdigest()
+        resume = SESSIONS.get(history, prompt_id) if history else None
         prompt = build_prompt(turns[-1][1], ha_context, [] if resume else history)
         log.info("Request: %s%s", turns[-1][1][:120], " (continued)" if resume else "")
 
@@ -638,7 +647,7 @@ class Handler(BaseHTTPRequestHandler):
             log.debug("%s", exc)
 
         if session_id:
-            SESSIONS.put(turns + [("assistant", text)], session_id)
+            SESSIONS.put(turns + [("assistant", text)], session_id, prompt_id)
         log.info("Answer: %s", text.strip()[:500])
         HISTORY.add(session_id or cid, "assist", place_from_context(ha_context), turns[-1][1], text)
         threading.Thread(target=write_logbook, args=(turns[-1][1], text), daemon=True).start()
