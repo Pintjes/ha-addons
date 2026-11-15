@@ -139,6 +139,16 @@ def fed_parent(attrs):
     return parent
 
 
+def parent_unlinked(attrs, rid):
+    """True when the route table of a node says it has no link with the router `rid` taken as
+    its parent: no link quality either way, link not established, and reached through another
+    router. Read in the middle of a parent change: that parent is not shown."""
+    for rt in attrs.get("0/53/8") or []:
+        if isinstance(rt, dict) and rt.get("2") == rid:
+            return not rt.get("5") and not rt.get("6") and not rt.get("9") and rt.get("3") not in (None, 63, rid)
+    return False
+
+
 def router_of(attrs, rloc):
     """True for a router. The reported role and the RLOC16 can each be out of date:
     when they agree (or only one is known) it is that one; when they disagree, the
@@ -203,6 +213,8 @@ def find_parents(thread, labels):
         nbs = [nb for nb in v["attrs"].get("0/53/7") or [] if isinstance(nb, dict)]
         rloc = rlocs.get(nid)
         fed = fed_parent(v["attrs"]) if not router[nid] else None   # full end device: its route table names its parent
+        if fed is not None and parent_unlinked(v["attrs"], fed):
+            continue   # its tables contradict each other (parent change under way): no parent shown
         if not router[nid] and (fed is not None or (rloc is not None and rloc & 0x3FF)):
             prloc = fed << 10 if fed is not None else rloc & 0xFC00
             own = [nb for nb in nbs if nb.get("2") == prloc]

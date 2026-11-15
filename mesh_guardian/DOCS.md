@@ -267,8 +267,11 @@ What to know:
   the page shows the result as soon as it is known.
 - After a search, the advice follows: an unstable-parent advice is hidden for
   24 h; a weak link that kept the same parent becomes *Add a router near …*.
-- If a node does not confirm, the fail-safe is cancelled and the node keeps
-  the network configuration it had.
+- If a node answers with an error, the fail-safe is cancelled and the node
+  keeps the network configuration it had. If it does not answer (it may be
+  attaching again), the fail-safe is left armed: the node goes back to its
+  configuration by itself after 2 minutes if it failed, and the result is
+  followed for 5 minutes.
 - The search is skipped during a Thread storm or right after a global outage.
 - A sleeping node that does not answer the first read is skipped.
 - Seen working on IKEA TIMMERFLOTTE and KLIPPBOK. A node that does not accept

@@ -91,6 +91,10 @@ def verdict(before, after):
     return "similar"
 
 
+
+class NoAnswer(Exception):
+    """The node did not answer the connect command (not a refusal)."""
+
 class Reattach:
     def __init__(self, watch, healer):
         self.w = watch
@@ -117,17 +121,28 @@ class Reattach:
                                                         "command_name": name, "payload": payload}, timeout=timeout)
 
     def _reattach(self, node_id, network):
-        """Ask the node to connect again to its own network. Raises if it refuses."""
+        """Ask the node to connect again to its own network. Raises if it refuses; raises
+        NoAnswer if it does not answer the connect command (it is attaching again: no answer
+        until it is attached, longer than the Matter Server waits for some nodes)."""
         res = self._command(node_id, 48, "ArmFailSafe", {"expiryLengthSeconds": FAILSAFE_S, "breadcrumb": 1})
         if _field(res, "errorCode", "0") != 0:
             raise RuntimeError(f"ArmFailSafe: {res}")
         try:
-            res = self._command(node_id, 49, "ConnectNetwork", {"networkID": network, "breadcrumb": 2})
+            try:
+                res = self._command(node_id, 49, "ConnectNetwork", {"networkID": network, "breadcrumb": 2})
+            except Exception as err:  # noqa: BLE001
+                if isinstance(err, TimeoutError) or any(w in str(err).lower() for w in ("abort", "timeout", "timed out")):
+                    # silence is not a refusal: the node may be attaching. The fail-safe is
+                    # left armed (it brings the node back by itself if it fails)
+                    raise NoAnswer(str(err)) from err
+                raise
             if _field(res, "networkingStatus", "0") != 0:
                 raise RuntimeError(f"ConnectNetwork: {res}")
             res = self._command(node_id, 48, "CommissioningComplete", {})
             if _field(res, "errorCode", "0") != 0:
                 raise RuntimeError(f"CommissioningComplete: {res}")
+        except NoAnswer:
+            raise
         except Exception:
             try:   # disarm now rather than leave the node 2 minutes under fail-safe
                 self._command(node_id, 48, "ArmFailSafe", {"expiryLengthSeconds": 0, "breadcrumb": 0}, timeout=30)
@@ -214,12 +229,20 @@ class Reattach:
             self.advisor.forced[name] = time.time()
         try:
             self._reattach(node_id, network)
+        except NoAnswer as err:
+            LOG.debug("parent search of %s: no answer to the connect command (%s)", name, err)
+            if not self.w.stop.wait(SETTLE_S):
+                try:   # attached again: close the fail-safe as after an answer (it reverts by itself otherwise)
+                    self._command(node_id, 48, "CommissioningComplete", {}, timeout=30)
+                except Exception as err2:  # noqa: BLE001
+                    LOG.debug("commissioning complete of %s after no answer: %s", name, err2)
         except Exception as err:  # noqa: BLE001
             LOG.warning(t("{node}: parent search refused: {err}", node=name, area=area, err=err))
             LOG.debug("parent search of %s refused: %s", name, err)
             return row | {"result": "failed"}
-        if self.w.stop.wait(SETTLE_S):
-            return row | {"result": "unknown"}
+        else:
+            if self.w.stop.wait(SETTLE_S):
+                return row | {"result": "unknown"}
         after = None
         try:
             table = self._read(node_id).get("0/53/7")

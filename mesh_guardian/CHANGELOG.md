@@ -4,6 +4,17 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.7.3] - 2026-11-15
+
+### Fixed
+
+- Parent search: no answer to the connect command is no longer shown as "refused" (the node may be attaching again): the fail-safe is left armed, the result is followed as for a sleepy node. "Refused" only when the node answers with an error.
+- A node whose route table says it has no link with the parent it routes through (read during a parent change) shows no parent instead of a wrong one.
+
+### Changed
+
+- While the nodes are read again, the status line says "updating… n/N" instead of the time of the last update.
+
 ## [2.7.2] - 2026-11-15
 
 ### Fixed
