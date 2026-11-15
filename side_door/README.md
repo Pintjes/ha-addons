@@ -32,6 +32,7 @@ expects.
 ## Also
 
 - One option to set: the address of the app.
+- Several apps in the same panel, each on a tab with the name you choose.
 - A clear page when the app is off or the address is missing.
 - Extra rewrite rules for the stubborn cases.
 

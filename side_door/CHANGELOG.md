@@ -4,6 +4,13 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-11-15
+
+### Added
+
+- Several apps in the same panel: each app has the name you choose, shown on
+  a tab. An app keeps its page when you switch tabs.
+
 ## [1.0.1] - 2026-11-15
 
 ### Fixed

@@ -2,7 +2,10 @@
 configuration:
   target_url:
     name: "Adresse de l'application"
-    description: "Adresse par laquelle Home Assistant joint l'application, par exemple http://192.168.1.10:8000."
+    description: "Pour une seule application : l'adresse par laquelle Home Assistant la joint, par exemple http://192.168.1.10:8000."
+  apps:
+    name: "Plusieurs applications"
+    description: "Une entrée par application, avec le nom affiché sur son onglet et son adresse. À partir de deux applications, le panneau affiche une rangée d'onglets. Quand cette liste est remplie, l'adresse ci-dessus est ignorée."
   rewrite_paths:
     name: "Réécrire les chemins"
     description: "Nécessaire quand l'application utilise des chemins commençant par / (la plupart). À désactiver pour une application qui gère déjà l'en-tête X-Ingress-Path."

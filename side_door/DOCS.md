@@ -1,6 +1,6 @@
 # Side Door
 
-Opens a web app of your local network in the Home Assistant sidebar, through
+Opens web apps of your local network in the Home Assistant sidebar, through
 the Home Assistant ingress.
 
 ## Contents
@@ -8,6 +8,7 @@ the Home Assistant ingress.
 - [How it works](#how-it-works)
 - [Installation](#installation)
 - [Configuration](#configuration)
+- [Several apps](#several-apps)
 - [What is rewritten](#what-is-rewritten)
 - [Security](#security)
 - [FAQ and troubleshooting](#faq-and-troubleshooting)
@@ -48,7 +49,8 @@ computer that runs the app, and the rules between your networks (VLANs).
 
 | Option | Default | Description |
 |---|---|---|
-| `target_url` | empty | Address Home Assistant uses to reach the app, for example `http://192.168.1.10:8000`. A path is accepted (`http://192.168.1.10/app/`). |
+| `target_url` | empty | For a single app: the address Home Assistant uses to reach it, for example `http://192.168.1.10:8000`. A path is accepted (`http://192.168.1.10/app/`). |
+| `apps` | empty | For several apps: a list of `name` and `url` (see below). When filled, `target_url` is ignored. |
 | `rewrite_paths` | `true` | Rewrites the paths of the app (see below). Turn off for an app that already handles the `X-Ingress-Path` header. |
 | `rewrite_prefixes` | empty | Advanced: more texts after which a path is rewritten. |
 | `max_body_mb` | `100` | Largest upload, in MB. |
@@ -56,6 +58,31 @@ computer that runs the app, and the rules between your networks (VLANs).
 
 The panel title and icon are fixed (a Home Assistant limit: they are not
 options). The panel is shown to administrators only.
+
+## Several apps
+
+Fill `apps` with one entry per app:
+
+```yaml
+apps:
+  - name: Accounting
+    url: http://192.168.1.10:8000
+  - name: Printer
+    url: http://192.168.1.20
+```
+
+With two apps or more, the panel shows a row of tabs with the names you
+chose. An app is loaded the first time its tab is opened and keeps its page
+when you switch tabs. The panel opens on the tab you used last.
+
+With a single entry, the app fills the panel, without tabs.
+
+The sidebar keeps one entry, named Side Door: Home Assistant gives one panel
+to an add-on and takes its title from the add-on itself. The names you choose
+are the ones on the tabs.
+
+Moving from one app to several (or back) changes the path of the apps: you
+log in to them once more.
 
 ## What is rewritten
 
@@ -96,7 +123,7 @@ Limits:
 
 ## FAQ and troubleshooting
 
-**"No target yet"** — `target_url` is empty or not valid. The reason is in
+**"No target yet"** — no address is set, or none is valid. The reason is in
 the **Log** tab.
 
 **"The app does not answer"** — Home Assistant cannot reach the address:
