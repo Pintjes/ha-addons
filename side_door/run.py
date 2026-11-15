@@ -165,9 +165,23 @@ SHELL = """\
   const tabs = [...document.querySelectorAll("nav button")];
   const main = document.querySelector("main");
   const frames = {};
-  function show(id) {
-    const tab = tabs.find((t) => t.dataset.app === id) || tabs[0];
-    id = tab.dataset.app;
+  function find(key) {
+    key = (key || "").trim().toLowerCase();
+    return tabs.find((t) => t.dataset.app === key || t.textContent.trim().toLowerCase() === key);
+  }
+  // "?app=<name>" in the address of the panel: a dashboard button opens a given app
+  function asked() {
+    for (const place of [window.parent, window]) {
+      try {
+        const app = new URLSearchParams(place.location.search).get("app");
+        if (app) return app;
+      } catch (error) { /* not the same site */ }
+    }
+    return null;
+  }
+  function show(key) {
+    const tab = find(key) || tabs[0];
+    const id = tab.dataset.app;
     tabs.forEach((t) => t.classList.toggle("on", t === tab));
     if (!frames[id]) {
       frames[id] = document.createElement("iframe");
@@ -181,7 +195,10 @@ SHELL = """\
   tabs.forEach((t) => t.addEventListener("click", () => show(t.dataset.app)));
   let last = null;
   try { last = localStorage.getItem("side_door_app"); } catch (error) { /* private window */ }
-  show(last);
+  show(find(asked()) ? asked() : last);
+  try {
+    window.parent.addEventListener("location-changed", () => { if (find(asked())) show(asked()); });
+  } catch (error) { /* not the same site */ }
 </script>
 </body>
 </html>

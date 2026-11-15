@@ -77,6 +77,22 @@ when you switch tabs. The panel opens on the tab you used last.
 
 With a single entry, the app fills the panel, without tabs.
 
+### Open a given app from a dashboard
+
+Add `?app=` and the name of the app to the address of the panel. On a
+button card:
+
+```yaml
+type: button
+name: Printer
+tap_action:
+  action: navigate
+  navigation_path: /<slug of the add-on>?app=Printer
+```
+
+The slug is in the address bar when the panel is open (for example
+`/4f047962_side_door`). Upper and lower case do not matter.
+
 The sidebar keeps one entry, named Side Door: Home Assistant gives one panel
 to an add-on and takes its title from the add-on itself. The names you choose
 are the ones on the tabs.
