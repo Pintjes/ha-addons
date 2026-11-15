@@ -326,6 +326,11 @@ def rewrite_rules(origin, base, extra, ingress, rewrite_on, inject):
                 prefixes.append(prefix)
         for prefix in prefixes:
             lines.append(f"sub_filter {quote(prefix + base)} {quote(prefix, ingress)};")
+        # Full addresses of the app itself, as some apps write them in their
+        # answers (pictures of a list, for example); also as JSON may write them
+        own = origin + base
+        lines.append(f"sub_filter {quote(own)} {quote('', ingress)};")
+        lines.append(f"sub_filter {quote(own.replace('/', chr(92) + '/'))} {quote('', ingress)};")
     return "".join(f"            {line}\n" for line in lines)
 
 

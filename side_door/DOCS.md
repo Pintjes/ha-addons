@@ -112,6 +112,8 @@ Behind the ingress, the app is not at `/` but under a path such as
 - rewrites, in HTML, CSS, JavaScript and JSON answers, a path starting with
   `/` found right after `href="`, `src="`, `action="`, `poster="`,
   `srcset="`, `url(`, `fetch("` and `;url=` (single quotes too);
+- rewrites the full addresses of the app itself (`http://192.168.1.10:8000/…`)
+  found in these answers;
 - sends the `Host`, `Origin` and `Referer` headers the app expects, so that
   its cross-site request checks (CSRF) keep working;
 - removes `X-Frame-Options`, since the app is shown inside the panel.
