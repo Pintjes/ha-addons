@@ -126,6 +126,8 @@ class Healer:
             self.last_result = st.get("last_result", self.last_result)
             self.recent = [r for r in st.get("recent", []) if r[0] >= time.time() - 86400]
             self.history_done = st.get("history_done", True)
+            # nodes the recovery pings gave up on: kept across a restart (the advice depends on it)
+            self.gave_up_saved = {k: v for k, v in (st.get("gave_up_nodes") or {}).items() if time.time() - v < 7 * 86400}
         except Exception:  # noqa: BLE001
             pass
 
@@ -135,7 +137,9 @@ class Healer:
                 json.dump({"enabled": self.enabled, "success": self.success,
                            "self_recovered": self.self_recovered, "failures": self.failures,
                            "pings_sent": self.pings_sent, "last_result": self.last_result,
-                           "recent": self.recent, "history_done": self.history_done}, f)
+                           "recent": self.recent, "history_done": self.history_done,
+                           "gave_up_nodes": {k: n.get("gave_up_t") or time.time() for k, n in self.nodes.items()
+                                             if n.get("gave_up") and not n.get("available")}}, f)
         except Exception as err:  # noqa: BLE001
             LOG.warning(t("Cannot save state: {err}", err=err))
 
@@ -607,6 +611,9 @@ class Healer:
                 n = self.nodes.get(node)
                 if n is None:
                     n = {"available": avail, "since": since, "pings": 0, "last_ping": None, "gave_up": False}
+                    saved = getattr(self, "gave_up_saved", {}).get(node)
+                    if saved and not avail:   # still unavailable after a restart: the pings already gave up
+                        n.update({"gave_up": True, "gave_up_t": saved, "pings": 0})
                     self.nodes[node] = n
                     first = True
                 else:
@@ -659,7 +666,7 @@ class Healer:
                 if n["last_ping"] and now - n["last_ping"] < self.ping_retry * (3 if storm else 1):
                     continue
                 if n["pings"] >= self.max_attempts:
-                    n["gave_up"] = True
+                    n["gave_up"], n["gave_up_t"] = True, now
                     self.failures += 1
                     self.tally("gave_up")
                     self.w.emit("ping_gave_up",

@@ -4,6 +4,13 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.9.0] - 2026-11-15
+
+### Fixed
+
+- An unavailable node showed its parent, signal ("good"), border router and response time read before the outage, as if they were current: they are now left empty.
+- The nodes the recovery pings gave up on are kept across a restart ("Remove the battery for 10s" no longer becomes "Check its batteries").
+
 ## [2.8.9] - 2026-11-15
 
 ### Changed

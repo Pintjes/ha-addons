@@ -705,14 +705,15 @@ function renderList() {
     const cell = {
       node: `<span class="nm"><b>${esc(r.name)}${isNew(r) ? ` <span class="new">${L("new")}</span>` : ""}</b><small>${meta}</small></span>`,
       status: `<span>${status(r)}${r.role && !narrow ? `<span class="rl">${esc(L("roles")[r.role] || r.role)}</span>` : ""}</span>`,
-      link: `<span class="lk">${link(r)}${signal(r)}</span>`,
-      resp: `<span class="rt r">${resp}<br><small class="num">${F("avg", {v: ms(r.rtt_avg_ms)})}</small></span>`,
+      // unavailable: link, border router and response not known now, left empty
+      link: r.available ? `<span class="lk">${link(r)}${signal(r)}</span>` : `<span class="lk"></span>`,
+      resp: r.available ? `<span class="rt r">${resp}<br><small class="num">${F("avg", {v: ms(r.rtt_avg_ms)})}</small></span>` : `<span class="rt r"></span>`,
       bat: `<span class="bt">${narrow ? battery(r) : power(r)}</span>`,
       last: `<span class="lc"><span class="lab">${L("contact")}</span>${last}</span>`,
       adv,
     };
     return `<div class="row ${r.available ? "" : "down"}" data-id="${esc(r.id)}" role="button" tabindex="0">${cols.map(c => cell[c.k] ??
-      `<span class="x0 ${c.r ? "r" : ""}">${c.h(r)}</span>`).join("")}</div>`;
+      `<span class="x0 ${c.r ? "r" : ""}">${!r.available && (c.k === "br" || c.k === "route") ? "" : c.h(r)}</span>`).join("")}</div>`;
   }).join("") || `<p class="empty">${L("none_match")}</p>`;
 }
 
@@ -974,6 +975,11 @@ async function load(force) {
     const r = await fetch("api/table" + (force ? "?force=1" : ""), {cache: "no-store"});
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || r.status);
+    // an unavailable node: nobody knows its link now, so nothing is shown rather than the
+    // last values read before the outage (they looked current)
+    d.rows = (d.rows || []).map(r => r.available ? r : {...r, parent: null, rssi: null, lqi: null, best_link: null,
+      best_rssi: null, best_lqi: null, route: null, new_parent: null, rtt_ms: null, rtt_avg_ms: null, rtt_fail: false,
+      access_point: null, channel: null});
     D = d; TH = d.thresholds || TH;
     if (d.lang && d.lang !== LANG) { LANG = d.lang; texts(); }
     theme(); renderAll();
