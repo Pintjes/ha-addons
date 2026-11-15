@@ -56,6 +56,9 @@ http {
         allow 127.0.0.1;
         deny all;
         root %(web)s;
+        # A rewritten redirection stays a path: the browser keeps the address
+        # it used to reach Home Assistant
+        absolute_redirect off;
 """
 
 NOT_SET = """\
