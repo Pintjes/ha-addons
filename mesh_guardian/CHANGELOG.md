@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.9.7] - 2026-11-15
+
+### Fixed
+
+- Many nodes dropping together no longer show "Home Assistant or the Matter Server restarted" when the Supervisor log shows that nothing restarted: it is a network problem, and each node keeps its own card.
+
 ## [2.9.6] - 2026-11-15
 
 ### Changed

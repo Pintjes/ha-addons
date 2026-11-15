@@ -737,6 +737,8 @@ class NodeTable:
                 fact = None      # nodes dropped together later, without a restart
             else:
                 m = None         # an older outage
+        if m and not fact and not m.get("cause") and sup and sup.rules_out(m["t"]):
+            m = None             # nodes dropped together and nothing restarted: each keeps its own card
         if not m and not fact:
             return []
         ids = {f"0x{k.lstrip('0') or '0'}" for k in m["nodes"]} if m else set()

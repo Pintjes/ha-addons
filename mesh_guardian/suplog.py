@@ -77,6 +77,7 @@ class SupervisorLog:
         self.app_name = "Matter Server"
         self.own_slug = None
         self.tz = None        # offset of the log timestamps when the lines give none
+        self.first_t = None   # time of the oldest line read
         self.seen = collections.deque(maxlen=400)   # last lines, against duplicates when the stream reopens
         self.status = {"ok": False, "since": None, "lines": 0, "used": 0, "error": None, "http": None}
 
@@ -223,6 +224,16 @@ class SupervisorLog:
                     return dict(r)
         return None
 
+    def rules_out(self, when):
+        """True when the log was being read at that time and shows no restart then, done or
+        in progress: nodes that dropped together did not drop because of a restart."""
+        with self.lock:
+            if not self.status["ok"] or self.first_t is None or self.first_t > when:
+                return False
+            if any("t" in e and abs(e["t"] - when) < 300 for e in self.pending.values()):
+                return False
+            return not any(r["t"] - 120 <= when <= r["up"] + 300 for r in self.restarts)
+
     def summary(self):
         with self.lock:
             return {**self.status, "restarts": [dict(r) for r in self.restarts],
@@ -234,6 +245,10 @@ class SupervisorLog:
             self.status["http"] = r.status
             lines = r.read().decode("utf-8", "replace").splitlines()
         self._calibrate([ANSI.sub("", x) for x in lines])
+        for line in lines:
+            if stamp(ANSI.sub("", line))[0] is not None:
+                self.first_t = self._time(ANSI.sub("", line), False)
+                break
         for line in lines:
             self.seen.append(line)
             self.feed(line, live=False)
