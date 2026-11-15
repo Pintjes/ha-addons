@@ -8,6 +8,9 @@ published, Home Assistant does the authentication.
 
 One app is shown alone in the panel. Several apps are shown under a row of
 tabs, each app under its own path (/app/<id>/).
+
+nginx relays the requests; njs/side_door.js changes the answers (addresses of
+the app moved under the ingress path, cookies in plain HTTP).
 """
 import html
 import json
@@ -19,6 +22,8 @@ from urllib.parse import urlsplit
 OPTIONS = "/data/options.json"
 CONF = "/tmp/side_door.conf"
 SHELL_DIR = "/tmp/side_door_web"
+NJS_SOURCE = "/njs/side_door.js"
+NJS = "/tmp/side_door.js"
 PORT = 8792
 WEB = "/web"
 
@@ -30,10 +35,6 @@ PREFIXES = [
     'srcset="', "srcset='", "url(", 'url("', "url('",
     'fetch("', "fetch('", ";url=",
 ]
-REWRITTEN_TYPES = (
-    "text/css application/javascript text/javascript application/x-javascript "
-    "application/json application/graphql-response+json application/manifest+json"
-)
 
 HEAD = """\
 load_module modules/ngx_http_js_module.so;
@@ -60,18 +61,11 @@ http {
     server_tokens off;
     client_body_temp_path /tmp/nginx_body;
     proxy_temp_path /tmp/nginx_proxy;
-    js_import sd_cookies from /njs/cookies.js;
+    js_import sd from %(njs)s;
 
     map $http_upgrade $connection_upgrade {
         default upgrade;
         ''      close;
-    }
-    # A permanent redirection of an app is never kept by the browser: it would
-    # still be followed after the address of the app has been corrected
-    map $status $sd_redirect {
-        default  '';
-        301      no-store;
-        308      no-store;
     }
     # 1 when the browser reaches Home Assistant in plain HTTP
     map $http_x_forwarded_proto $sd_plain {
@@ -82,12 +76,6 @@ http {
     map "$http_x_forwarded_proto:$http_x_forwarded_host" $sd_public {
         default '';
         "~^(?<sd_public_proto>https?):(?<sd_public_host>[^/ ]+)$" "$sd_public_proto://$sd_public_host";
-    }
-    # Option inject_script: pages and scripts are not kept by the browser
-    map $upstream_http_content_type $sd_cache {
-        default       $upstream_http_cache_control;
-        ~*javascript  no-cache;
-        ~*text/html   no-cache;
     }
 %(maps)s
     server {
@@ -114,7 +102,6 @@ NOT_SET = """\
 SERVER = """\
         client_max_body_size %(max_body_mb)dm;
         error_page 502 503 504 /side_door_unreachable.html;
-        recursive_error_pages on;
 
         location = /side_door_unreachable.html {
             internal;
@@ -140,27 +127,9 @@ SHELL_LOCATION = """\
 APP_LOCATION = """\
 
         location %(path)s {
-            # Home Assistant opened in plain HTTP: the next block answers
-            error_page 418 = @plain_%(n)d;
-            error_page 502 503 504 /side_door_unreachable.html;
-            if ($sd_plain) {
-                return 418;
-            }
+            # Which app of njs/side_door.js this is
+            set $sd_app %(n)d;
             proxy_pass %(target)s;
-%(common)s        }
-
-        # The same app when Home Assistant is opened in plain HTTP. The browser
-        # would refuse the cookies the app reserves to HTTPS, and nobody could
-        # log in: here they lose that mark.
-        location @plain_%(n)d {
-            error_page 502 503 504 /side_door_unreachable.html;
-            rewrite ^%(path)s(.*)$ %(base)s$1 break;
-            proxy_pass %(origin)s;
-            js_header_filter sd_cookies.plain;
-%(common)s        }
-"""
-
-APP_COMMON = """\
             proxy_http_version 1.1;
             proxy_set_header Host %(host)s;
             proxy_set_header Upgrade $http_upgrade;
@@ -169,6 +138,7 @@ APP_COMMON = """\
             proxy_set_header Origin $sd_origin_%(n)d;
             proxy_set_header Referer $sd_referer_%(n)d;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            # Answers must come uncompressed to be rewritten
             proxy_set_header Accept-Encoding "";
             proxy_ssl_server_name on;
             proxy_connect_timeout 10s;
@@ -177,8 +147,10 @@ APP_COMMON = """\
             proxy_buffering off;
             # The page is shown inside the Home Assistant panel
             proxy_hide_header X-Frame-Options;
-            add_header Cache-Control $sd_redirect;
-%(rewrite)s"""
+            js_header_filter sd.headers;
+            js_body_filter sd.body buffer_type=buffer;
+%(rewrite)s        }
+"""
 
 MAPS = """\
     map $http_origin $sd_origin_%(n)d {
@@ -241,6 +213,18 @@ SHELL = """\
     }
     return null;
   }
+  // Between two pages of an app the frame shows its own background: it takes
+  // the colour of the page, so that a dark app does not flash white.
+  function follow(frame) {
+    frame.addEventListener("load", () => {
+      try {
+        const page = frame.contentDocument;
+        const colours = [page.body, page.documentElement].map((part) => getComputedStyle(part).backgroundColor);
+        const colour = colours.find((c) => c && c !== "transparent" && !/, 0\\)$/.test(c));
+        frame.style.background = colour || "#fff";
+      } catch (error) { /* not the same site */ }
+    });
+  }
   function show(key) {
     const tab = find(key) || tabs[0];
     const id = tab.dataset.app;
@@ -248,6 +232,7 @@ SHELL = """\
     if (!frames[id]) {
       frames[id] = document.createElement("iframe");
       frames[id].title = tab.textContent;
+      follow(frames[id]);
       frames[id].src = "app/" + id + "/";
       main.appendChild(frames[id]);
     }
@@ -271,12 +256,6 @@ def log(message):
     print(f"[side_door] {message}", flush=True)
 
 
-def quote(text, variable=""):
-    """nginx single-quoted string, optionally ended by an nginx variable.
-    A '$' in the text would start a variable: such texts are refused before."""
-    return "'" + text.replace("\\", "\\\\").replace("'", "\\'") + variable + "'"
-
-
 def parse_target(url):
     """Returns (proxy_pass, origin, host header, base path) or raises ValueError."""
     parts = urlsplit(url.strip())
@@ -295,53 +274,26 @@ def parse_target(url):
     return origin + base, origin, parts.netloc, base
 
 
-def rewrite_rules(origin, base, extra, ingress, rewrite_on, inject):
-    """nginx directives moving the paths of the target under 'ingress', the
-    path of the app as the browser sees it. 'inject' also loads the script
-    that moves the addresses the app builds in JavaScript."""
-    if not rewrite_on and not inject:
-        return ""
-    lines = []
-    if rewrite_on:
-        lines += [
-            f"proxy_redirect {origin}{base} {ingress};",
-            f"proxy_redirect {base} {ingress};",
-            f"proxy_cookie_path {base} {ingress};",
-        ]
-    lines += ["sub_filter_once off;", f"sub_filter_types {REWRITTEN_TYPES};"]
-    if inject:
-        # No quote in the tag: it stays harmless inside a text of a script
-        tag = f"<head><script src=$http_x_ingress_path/side_door_shim.js data-base={ingress}></script>"
-        lines += [
-            f"sub_filter '<head>' '{tag}';",
-            "sub_filter 'window.location' 'window.__sd_loc';",
-            "sub_filter 'document.location' 'document.__sd_loc';",
-            # The app sees itself as the top page, not inside the panel
-            "sub_filter 'window.top' 'window.self';",
-            "sub_filter 'window.parent' 'window.self';",
-            # Pages and scripts are checked again at each visit: turning the
-            # option on or off takes effect without emptying the browser cache
-            "proxy_hide_header Cache-Control;",
-            "proxy_hide_header Expires;",
-            "add_header Cache-Control $sd_cache;",
-        ]
-    if rewrite_on:
-        prefixes = list(PREFIXES)
-        for prefix in extra:
-            if not prefix or "$" in prefix or "\n" in prefix:
-                log(f"rewrite_prefixes: {prefix!r} ignored (empty, or contains '$' or a line break)")
-            elif prefix not in prefixes:
-                prefixes.append(prefix)
-        for prefix in prefixes:
-            lines.append(f"sub_filter {quote(prefix + base)} {quote(prefix, ingress)};")
-        # Full addresses of the app itself, as some apps write them in their
-        # answers (pictures of a list, for example); also as JSON may write them
-        # They stay full addresses (an app may refuse a bare path there): the
-        # address of Home Assistant as the browser uses it, then the path
-        own = origin + base
-        lines.append(f"sub_filter {quote(own)} {quote('', '$sd_public' + ingress)};")
-        lines.append(f"sub_filter {quote(own.replace('/', chr(92) + '/'))} {quote('', '$sd_public' + ingress)};")
+def redirect_rules(origin, base, ingress):
+    """nginx directives moving the redirections and the cookies of the target
+    under 'ingress', the path of the app as the browser sees it."""
+    lines = [
+        f"proxy_redirect {origin}{base} {ingress};",
+        f"proxy_redirect {base} {ingress};",
+        f"proxy_cookie_path {base} {ingress};",
+    ]
     return "".join(f"            {line}\n" for line in lines)
+
+
+def all_prefixes(extra):
+    """The texts found right before a path of an app."""
+    prefixes = list(PREFIXES)
+    for prefix in extra:
+        if not prefix or "\n" in prefix:
+            log(f"rewrite_prefixes: {prefix!r} ignored (empty, or contains a line break)")
+        elif prefix not in prefixes:
+            prefixes.append(prefix)
+    return prefixes
 
 
 def app_id(name, used):
@@ -392,27 +344,31 @@ def shell_page(apps):
 
 
 def build(options):
-    """Returns (nginx configuration, tabs page or None, message for the log)."""
+    """Returns (nginx configuration, apps for njs/side_door.js, tabs page or
+    None, message for the log)."""
     apps = read_apps(options)
     if not apps:
-        head = HEAD % {"port": PORT, "web": WEB, "maps": ""}
-        return head + NOT_SET, None, "no valid app: set one in the add-on configuration"
+        head = HEAD % {"port": PORT, "web": WEB, "njs": NJS, "maps": ""}
+        return head + NOT_SET, {}, None, "no valid app: set one in the add-on configuration"
     several = len(apps) > 1
-    rewrite_on = options.get("rewrite_paths", True)
+    rewrite_on = bool(options.get("rewrite_paths", True))
     inject = bool(options.get("inject_script", False))
-    extra = options.get("rewrite_prefixes") or []
+    prefixes = all_prefixes(options.get("rewrite_prefixes") or [])
     timeout = int(options.get("timeout", 120))
-    maps, locations = "", ""
+    maps, locations, script_apps = "", "", {}
     for n, app in enumerate(apps, 1):
         path = f"/app/{app['id']}/" if several else "/"
         maps += MAPS % {"n": n, "origin": app["origin"]}
-        rewrite = rewrite_rules(app["origin"], app["base"], extra, "$http_x_ingress_path" + path, rewrite_on, inject)
-        common = APP_COMMON % {"host": app["host"], "n": n, "timeout": timeout, "rewrite": rewrite}
+        rewrite = redirect_rules(app["origin"], app["base"], "$http_x_ingress_path" + path) if rewrite_on else ""
         locations += APP_LOCATION % {
-            "path": path, "target": app["target"], "origin": app["origin"],
-            "base": app["base"], "n": n, "common": common,
+            "path": path, "target": app["target"], "host": app["host"],
+            "n": n, "timeout": timeout, "rewrite": rewrite,
         }
-    conf = HEAD % {"port": PORT, "web": WEB, "maps": maps}
+        script_apps[str(n)] = {
+            "path": path, "base": app["base"], "own": app["origin"] + app["base"],
+            "rewrite": rewrite_on, "inject": inject, "prefixes": prefixes,
+        }
+    conf = HEAD % {"port": PORT, "web": WEB, "njs": NJS, "maps": maps}
     conf += SERVER % {"max_body_mb": int(options.get("max_body_mb", 100))}
     if several:
         conf += SHELL_LOCATION % {"shell_dir": SHELL_DIR}
@@ -421,7 +377,15 @@ def build(options):
     if inject:
         paths += ", script injected"
     listed = ", ".join(f"{app['name']} -> {app['target']}" for app in apps)
-    return conf, shell_page(apps) if several else None, f"{len(apps)} app(s), {paths}: {listed}"
+    return conf, script_apps, shell_page(apps) if several else None, f"{len(apps)} app(s), {paths}: {listed}"
+
+
+def script(source, script_apps):
+    """njs/side_door.js with the apps of the configuration."""
+    marker = "var APPS = {};"
+    if marker not in source:
+        raise ValueError(f"{NJS_SOURCE}: line '{marker}' not found")
+    return source.replace(marker, "var APPS = " + json.dumps(script_apps, ensure_ascii=True) + ";", 1)
 
 
 def main():
@@ -431,9 +395,13 @@ def main():
     except (OSError, ValueError) as error:
         log(f"options not readable ({error}): default values")
         options = {}
-    conf, shell, message = build(options)
+    conf, script_apps, shell, message = build(options)
     with open(CONF, "w", encoding="utf-8") as handle:
         handle.write(conf)
+    with open(NJS_SOURCE, encoding="utf-8") as handle:
+        source = handle.read()
+    with open(NJS, "w", encoding="utf-8") as handle:
+        handle.write(script(source, script_apps))
     if shell:
         os.makedirs(SHELL_DIR, exist_ok=True)
         with open(os.path.join(SHELL_DIR, "index.html"), "w", encoding="utf-8") as handle:

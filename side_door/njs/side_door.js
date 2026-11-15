@@ -1,0 +1,163 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Side Door: what nginx changes in the answers of the apps.
+//
+// run.py copies this file and puts the apps of the configuration in APPS:
+//   { "<number>": { path, base, own, rewrite, inject, prefixes } }
+//   path      path of the app under the ingress path ("/" or "/app/<id>/")
+//   base      path of the app on its own server ("/" most of the time)
+//   own       full address of the app ("http://192.168.1.10:8000/")
+//   rewrite   move the paths of the app under the ingress path
+//   inject    load the script that moves the addresses built in JavaScript
+//   prefixes  texts found right before a path of the app
+var APPS = {};
+
+// Answers that are texts and may hold addresses
+var TEXTS = {
+    'text/html': 'html',
+    'text/css': 'css',
+    'application/javascript': 'js',
+    'text/javascript': 'js',
+    'application/x-javascript': 'js',
+    'application/json': 'json',
+    'application/graphql-response+json': 'json',
+    'application/manifest+json': 'json'
+};
+// A bigger answer is relayed as it is
+var LARGEST = 32 * 1024 * 1024;
+
+// Kept for the whole answer (one copy of this script runs per request)
+var kind = null;
+var chunks = [];
+var size = 0;
+
+function app(r) {
+    return APPS[r.variables.sd_app];
+}
+
+function textKind(r) {
+    var type = r.headersOut['Content-Type'] || '';
+    return TEXTS[type.split(';')[0].trim().toLowerCase()] || null;
+}
+
+function escapeRegExp(text) {
+    return text.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&');
+}
+
+function replaceAll(text, from, to) {
+    return text.indexOf(from) === -1 ? text : text.split(from).join(to);
+}
+
+// The texts of an answer, with the addresses of the app moved
+function rewrite(r, a, type, text) {
+    var ingress = (r.variables.http_x_ingress_path || '') + a.path;
+    if (a.rewrite) {
+        // A path of the app right after a known text. Upper and lower case
+        // are told apart: 'src="/' must not catch 'imgSrc="/' in a script.
+        // "//host/..." is another site, not a path: left as it is.
+        a.prefixes.forEach(function (prefix) {
+            if (text.indexOf(prefix + a.base) === -1) {
+                return;
+            }
+            var found = new RegExp(escapeRegExp(prefix + a.base) + (a.base === '/' ? '(?!\\/)' : ''), 'g');
+            text = text.replace(found, function () { return prefix + ingress; });
+        });
+        // Full addresses of the app itself, as some apps write them in their
+        // answers. They stay full addresses: an app may refuse a bare path.
+        var full = (r.variables.sd_public || '') + ingress;
+        text = replaceAll(text, a.own, full);
+        text = replaceAll(text, a.own.replace(/\//g, '\\/'), full);
+    }
+    if (a.inject && (type === 'html' || type === 'js')) {
+        // The app sees an address bar without the ingress path, and itself
+        // as the top page (see web/shim.js)
+        text = text.replace(/\bwindow\.location(?![\w$])/g, 'window.__sd_loc')
+            .replace(/\bdocument\.location(?![\w$])/g, 'document.__sd_loc')
+            .replace(/\bwindow\.(top|parent)(?![\w$])/g, 'window.self');
+        if (type === 'html') {
+            var tag = '<script src="' + (r.variables.http_x_ingress_path || '') + '/side_door_shim.js" data-base="'
+                + ingress + '"></script>';
+            text = text.replace(/<head(\s[^>]*)?>/i, function (head) { return head + tag; });
+        }
+    }
+    return text;
+}
+
+// Cookies when Home Assistant is opened in plain HTTP. A browser refuses, on
+// a plain HTTP page, a cookie marked "Secure", and one marked "Partitioned"
+// or "SameSite=None" without "Secure": nobody could log in to an app that
+// marks its session cookie that way. Over HTTPS the cookies are left alone.
+function plainCookies(r) {
+    var cookies = r.headersOut['Set-Cookie'];
+    if (!cookies) {
+        return;
+    }
+    if (!Array.isArray(cookies)) {
+        cookies = [cookies];
+    }
+    r.headersOut['Set-Cookie'] = cookies.map(function (cookie) {
+        return cookie
+            .replace(/;\s*(secure|partitioned)(?=\s*(;|$))/ig, '')
+            .replace(/;\s*samesite=none/ig, '; SameSite=Lax');
+    });
+}
+
+function headers(r) {
+    try {
+        var a = app(r);
+        if (r.variables.sd_plain === '1') {
+            plainCookies(r);
+        }
+        // A permanent redirection is never kept by the browser: it would
+        // still be followed after the address of the app has been corrected
+        if (r.status === 301 || r.status === 308) {
+            r.headersOut['Cache-Control'] = 'no-store';
+        }
+        var type = textKind(r);
+        if (!a || !type || !(a.rewrite || a.inject)) {
+            return;
+        }
+        // The text will change: so will its length
+        delete r.headersOut['Content-Length'];
+        if (a.inject && (type === 'html' || type === 'js')) {
+            // Checked again at each visit: turning the option on or off takes
+            // effect without emptying the cache of the browser
+            r.headersOut['Cache-Control'] = 'no-cache';
+            delete r.headersOut['Expires'];
+        }
+    } catch (error) {
+        r.error('side_door headers: ' + error);
+    }
+}
+
+function body(r, data, flags) {
+    var a = app(r);
+    if (kind === null) {
+        kind = (a && (a.rewrite || a.inject) && textKind(r)) || 'as it is';
+    }
+    if (kind === 'as it is') {
+        r.sendBuffer(data, flags);
+        return;
+    }
+    chunks.push(data);
+    size += data.length;
+    if (size > LARGEST) {
+        // Too big to be a page or a script: relayed as it is from here on
+        r.sendBuffer(Buffer.concat(chunks), flags);
+        chunks = [];
+        kind = 'as it is';
+        return;
+    }
+    if (!flags.last) {
+        return;
+    }
+    var whole = Buffer.concat(chunks);
+    chunks = [];
+    try {
+        r.sendBuffer(rewrite(r, a, kind, whole.toString('utf8')), flags);
+    } catch (error) {
+        r.error('side_door body: ' + error);
+        r.sendBuffer(whole, flags);
+    }
+}
+
+export default { headers, body };

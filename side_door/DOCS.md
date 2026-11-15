@@ -142,7 +142,6 @@ Limits:
 
 - a path built in JavaScript at run time is not seen. If it always follows the
   same text, add that text to `rewrite_prefixes` (for example `data-url="`);
-- a URL without scheme (`href="//example.com/x"`) is wrongly rewritten;
 - an app that sends a `Content-Security-Policy: frame-ancestors` header may
   refuse to be shown in the panel;
 - a single-page app with its own router may need a base path setting on its

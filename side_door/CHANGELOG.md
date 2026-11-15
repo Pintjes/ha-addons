@@ -4,6 +4,22 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-11-15
+
+### Changed
+
+- The answers of the apps are rewritten by a script of the add-on instead of
+  nginx text filters. Upper and lower case are now told apart.
+
+### Fixed
+
+- An app stayed blank when one of its scripts had a name ending like a
+  rewritten text (`resolveUrl("/…")`, `baseHref="/…"`): the name was put in
+  lower case.
+- An address without scheme (`href="//example.com/x"`) is left as it is.
+- Between two pages of an app, the tab no longer flashes white: it keeps the
+  background colour of the app.
+
 ## [1.3.8] - 2026-11-15
 
 ### Fixed
