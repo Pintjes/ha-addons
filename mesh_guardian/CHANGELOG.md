@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.8.8] - 2026-11-15
+
+### Changed
+
+- "Good to know" notes under their own title, below "To handle", shown only when there is one.
+
 ## [2.8.7] - 2026-11-15
 
 ### Changed
