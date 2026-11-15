@@ -13,7 +13,15 @@
   var real = window.location;
   var origin = real.origin;
   var realTop = window.top;
-  var BACK = "side_door_back";
+  // When the app is a tab of the Side Door panel: the address of that panel,
+  // ready to receive the page the app must open (see the tabs page of run.py)
+  var panel = null;
+  var tab = /\/app\/([^\/]+)\/$/.exec(base);
+  if (tab && realTop !== window) {
+    try {
+      panel = realTop.location.origin + realTop.location.pathname + "?app=" + tab[1] + "&sd_path=";
+    } catch (error) { /* the panel is on another site */ }
+  }
 
   // The panel around the app is on the same site. An app that looks at its
   // parent must not take it for its own shell: it sees itself as the top page.
@@ -56,18 +64,20 @@
     }
   }
   // An app that sends the browser to another site (a login service) tells it
-  // where to come back. That address is the one the app sees: it gets the
-  // ingress path back, plain or encoded.
+  // where to come back. That address is the one the app sees; it becomes,
+  // plain or encoded, the address of the panel followed by the page to open.
+  // Coming back straight to the app would be refused: Home Assistant only
+  // lets its own pages reach an app, not a page arriving from another site.
   function withReturnAddress(text) {
-    [[origin + "/", origin + base], [encodeURIComponent(origin + "/"), encodeURIComponent(origin + base)]]
+    var back = panel || origin + base;
+    [[origin + "/", back], [encodeURIComponent(origin + "/"), encodeURIComponent(back)]]
       .forEach(function (pair) {
         text = text.split(pair[1]).join(pair[0]).split(pair[0]).join(pair[1]);
       });
     return text;
   }
   // Going to a page. Another site is opened in the whole window, not in the
-  // panel: login pages refuse to be shown inside another page. The way back
-  // to Home Assistant is remembered (see the button at the end).
+  // panel: login pages refuse to be shown inside another page.
   function go(how, value) {
     if (!elsewhere(value)) {
       real[how](fix(value));
@@ -76,7 +86,6 @@
     var address = withReturnAddress(String(value));
     if (realTop !== window) {
       try {
-        sessionStorage.setItem(BACK, realTop.location.href);
         realTop.location[how](address);
         return;
       } catch (error) { /* the panel is on another site: stay in the frame */ }
@@ -179,25 +188,4 @@
     }
     return originalSetAttribute.call(this, name, value);
   };
-
-  // Back from another site, the app fills the whole window, outside Home
-  // Assistant: a button leads back to the panel.
-  if (realTop === window) {
-    var back = null;
-    try { back = sessionStorage.getItem(BACK); } catch (error) { /* private window */ }
-    if (back) {
-      document.addEventListener("DOMContentLoaded", function () {
-        var button = document.createElement("button");
-        button.textContent = "← Home Assistant";
-        button.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:2147483647;padding:10px 16px;"
-          + "border:0;border-radius:20px;background:#1f6feb;color:#fff;font:600 14px system-ui,sans-serif;"
-          + "cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.4)";
-        button.addEventListener("click", function () {
-          try { sessionStorage.removeItem(BACK); } catch (error) { /* private window */ }
-          real.href = back;
-        });
-        document.body.appendChild(button);
-      });
-    }
-  }
 })();

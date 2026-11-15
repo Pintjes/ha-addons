@@ -54,6 +54,7 @@ computer that runs the app, and the rules between your networks (VLANs).
 | `rewrite_paths` | `true` | Rewrites the paths of the app (see below). Turn off for an app that already handles the `X-Ingress-Path` header. |
 | `rewrite_prefixes` | empty | Advanced: more texts after which a path is rewritten. |
 | `inject_script` | `false` | Experimental: for apps that build their addresses in JavaScript (see below). |
+| `hide_proxy` | `false` | For apps that ask for a login through Side Door but not on the local network (see below). |
 | `max_body_mb` | `100` | Largest upload, in MB. |
 | `timeout` | `120` | Seconds to wait for an answer of the app. A WebSocket with no traffic for that long is closed. |
 
@@ -138,13 +139,26 @@ app stays blank or leaves the panel. With `inject_script` on, the add-on:
 
 When the app sends the browser to another site to log in, that site opens in
 the whole window (login pages refuse to be shown inside another page). Once
-logged in, the browser comes back to the app alone, with a button to return
-to Home Assistant; the app then stays logged in inside the panel.
+logged in, the browser comes back to the Side Door panel, which opens the app
+on the page it expects. This needs the app to be a tab (two apps or more).
 
 This is experimental and cannot work with every app: a script that reads
 `location` without `window.` in front is not caught, and neither is an
 address built inside a web worker. Leave the option off when the app works
 without it. It applies to every app of the list.
+
+### Apps that only trust the local network
+
+Some apps let the local network in without a login, and ask for one as soon
+as a request was relayed (they look at the `X-Forwarded-For` header). Plex
+does. With `hide_proxy` on, the add-on no longer says the request was
+relayed: the app sees a request coming from Home Assistant itself. The
+address of Home Assistant must then be one the app lets in without a login
+(in Plex: Settings → Network → *List of IP addresses and networks that are
+allowed without auth*).
+
+Everyone who can open the panel then enters the app without a login: only
+use it when that is what you want.
 
 Limits:
 

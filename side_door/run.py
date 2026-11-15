@@ -147,8 +147,7 @@ APP_LOCATION = """\
             # The target sees requests coming from its own address
             proxy_set_header Origin $sd_origin_%(n)d;
             proxy_set_header Referer $sd_referer_%(n)d;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            # Answers must come uncompressed to be rewritten
+%(forwarded)s            # Answers must come uncompressed to be rewritten
             proxy_set_header Accept-Encoding "";
             proxy_set_header If-None-Match $sd_if_none_match;
             proxy_set_header If-Modified-Since "";
@@ -162,6 +161,21 @@ APP_LOCATION = """\
             js_header_filter sd.headers;
             js_body_filter sd.body buffer_type=buffer;
 %(rewrite)s        }
+"""
+
+# What the app is told about the browser behind Home Assistant
+FORWARDED = """\
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+"""
+# Option hide_proxy: nothing. Some apps treat a relayed request as coming from
+# outside and ask for a login they do not ask on the local network.
+NOT_FORWARDED = """\
+            proxy_set_header X-Forwarded-For "";
+            proxy_set_header X-Forwarded-Host "";
+            proxy_set_header X-Forwarded-Proto "";
+            proxy_set_header X-Real-IP "";
+            proxy_set_header Forwarded "";
+            proxy_set_header Via "";
 """
 
 MAPS = """\
@@ -237,7 +251,23 @@ SHELL = """\
       } catch (error) { /* not the same site */ }
     });
   }
-  function show(key) {
+  // Back from a login on another site (see web/shim.js): the address of the
+  // panel ends with "sd_path=" and the page the app must open. It is taken
+  // out of the address, so that reloading the panel does not open it again.
+  function comeback() {
+    try {
+      const where = window.parent.location;
+      const at = where.search.indexOf("sd_path=");
+      if (at < 0) return "";
+      const page = (where.search.slice(at + 8) + where.hash).replace(/^[/]+/, "");
+      window.parent.history.replaceState(window.parent.history.state, "",
+        where.pathname + where.search.slice(0, at).replace(/[?&]$/, ""));
+      return /^[a-z][a-z0-9+.-]*:|(^|[/])[.][.]([/]|$)/i.test(page) ? "" : page;
+    } catch (error) {
+      return "";
+    }
+  }
+  function show(key, page) {
     const tab = find(key) || tabs[0];
     const id = tab.dataset.app;
     tabs.forEach((t) => t.classList.toggle("on", t === tab));
@@ -245,7 +275,7 @@ SHELL = """\
       frames[id] = document.createElement("iframe");
       frames[id].title = tab.textContent;
       follow(frames[id]);
-      frames[id].src = "app/" + id + "/";
+      frames[id].src = "app/" + id + "/" + (page || "");
       main.appendChild(frames[id]);
     }
     for (const key in frames) frames[key].hidden = key !== id;
@@ -254,7 +284,8 @@ SHELL = """\
   tabs.forEach((t) => t.addEventListener("click", () => show(t.dataset.app)));
   let last = null;
   try { last = localStorage.getItem("side_door_app"); } catch (error) { /* private window */ }
-  show(find(asked()) ? asked() : last);
+  const first = find(asked()) ? asked() : null;
+  show(first || last, first ? comeback() : "");
   try {
     window.parent.addEventListener("location-changed", () => { if (find(asked())) show(asked()); });
   } catch (error) { /* not the same site */ }
@@ -365,6 +396,7 @@ def build(options, mark="sd0"):
     several = len(apps) > 1
     rewrite_on = bool(options.get("rewrite_paths", True))
     inject = bool(options.get("inject_script", False))
+    forwarded = NOT_FORWARDED if options.get("hide_proxy", False) else FORWARDED
     prefixes = all_prefixes(options.get("rewrite_prefixes") or [])
     timeout = int(options.get("timeout", 120))
     maps, locations, script_apps = "", "", {}
@@ -374,7 +406,7 @@ def build(options, mark="sd0"):
         rewrite = redirect_rules(app["origin"], app["base"], "$http_x_ingress_path" + path) if rewrite_on else ""
         locations += APP_LOCATION % {
             "path": path, "target": app["target"], "host": app["host"],
-            "n": n, "timeout": timeout, "rewrite": rewrite,
+            "n": n, "timeout": timeout, "rewrite": rewrite, "forwarded": forwarded,
         }
         script_apps[str(n)] = {
             "path": path, "base": app["base"], "own": app["origin"] + app["base"],

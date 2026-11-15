@@ -4,6 +4,20 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-11-15
+
+### Added
+
+- Option `hide_proxy`, for apps that ask for a login through Side Door but
+  not on the local network: the app is no longer told that the request was
+  relayed.
+
+### Fixed
+
+- `inject_script`: back from a login on another site, Home Assistant
+  answered `401: Unauthorized`. The browser now comes back to the panel,
+  which opens the app on the right page.
+
 ## [1.4.4] - 2026-11-15
 
 ### Added

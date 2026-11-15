@@ -15,6 +15,9 @@ configuration:
   inject_script:
     name: Inject a script (experimental)
     description: "For apps that build their addresses in JavaScript and stay blank or leave the panel. A script loaded before the app moves these addresses under the ingress path. Leave off when the app works without it."
+  hide_proxy:
+    name: Hide the relay from the apps
+    description: "For apps that ask for a login through Side Door but not on the local network (Plex, for example): they treat a relayed request as coming from outside. The app then only sees the address of Home Assistant."
   max_body_mb:
     name: Largest upload (MB)
     description: Largest file that can be sent to the app.

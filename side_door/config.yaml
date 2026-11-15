@@ -1,5 +1,5 @@
 name: Side Door
-version: "1.4.4"
+version: "1.5.0"
 slug: side_door
 url: https://github.com/Pintjes/ha-addons
 description: >-
@@ -21,6 +21,7 @@ options:
   rewrite_paths: true
   rewrite_prefixes: []
   inject_script: false
+  hide_proxy: false
   max_body_mb: 100
   timeout: 120
 schema:
@@ -32,5 +33,6 @@ schema:
   rewrite_prefixes:
     - str
   inject_script: bool
+  hide_proxy: bool
   max_body_mb: int(1,10000)
   timeout: int(10,3600)
