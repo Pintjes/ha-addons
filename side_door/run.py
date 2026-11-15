@@ -7,7 +7,7 @@ with nginx. Only the Home Assistant ingress can reach the proxy: no port is
 published, Home Assistant does the authentication.
 
 One app is shown alone in the panel. Several apps are shown under a row of
-tabs, each app under its own path (/a/<id>/).
+tabs, each app under its own path (/app/<id>/).
 """
 import html
 import json
@@ -53,6 +53,13 @@ http {
     map $http_upgrade $connection_upgrade {
         default upgrade;
         ''      close;
+    }
+    # A permanent redirection of an app is never kept by the browser: it would
+    # still be followed after the address of the app has been corrected
+    map $status $sd_redirect {
+        default  '';
+        301      no-store;
+        308      no-store;
     }
     # Option inject_script: pages and scripts are not kept by the browser
     map $upstream_http_content_type $sd_cache {
@@ -127,6 +134,7 @@ APP_LOCATION = """\
             proxy_buffering off;
             # The page is shown inside the Home Assistant panel
             proxy_hide_header X-Frame-Options;
+            add_header Cache-Control $sd_redirect;
 %(rewrite)s        }
 """
 
@@ -198,7 +206,7 @@ SHELL = """\
     if (!frames[id]) {
       frames[id] = document.createElement("iframe");
       frames[id].title = tab.textContent;
-      frames[id].src = "a/" + id + "/";
+      frames[id].src = "app/" + id + "/";
       main.appendChild(frames[id]);
     }
     for (const key in frames) frames[key].hidden = key !== id;
@@ -347,7 +355,7 @@ def build(options):
     timeout = int(options.get("timeout", 120))
     maps, locations = "", ""
     for n, app in enumerate(apps, 1):
-        path = f"/a/{app['id']}/" if several else "/"
+        path = f"/app/{app['id']}/" if several else "/"
         maps += MAPS % {"n": n, "origin": app["origin"]}
         rewrite = rewrite_rules(app["origin"], app["base"], extra, "$http_x_ingress_path" + path, rewrite_on, inject)
         locations += APP_LOCATION % {

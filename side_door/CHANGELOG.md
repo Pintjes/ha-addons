@@ -4,6 +4,15 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.2] - 2026-11-15
+
+### Fixed
+
+- A tab stayed blank after the address of its app had been corrected: the
+  browser kept following the permanent redirection the first address had
+  answered. Such redirections are no longer kept, and the apps of the tabs
+  moved to a new path (you log in to them once more).
+
 ## [1.3.1] - 2026-11-15
 
 ### Fixed
