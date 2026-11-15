@@ -4,6 +4,17 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] - 2026-11-15
+
+### Added
+
+- An app of the list can have `headers`, sent with every request: for an app
+  behind a gate that lets a token in (a service token of an access proxy).
+- The rule of a page that says who may show it (`frame-ancestors` of its
+  Content-Security-Policy) is removed, like `X-Frame-Options`.
+- `inject_script`: the injected script carries the pass (`nonce`) of a
+  page that only runs the scripts it knows.
+
 ## [1.5.1] - 2026-11-15
 
 ### Added

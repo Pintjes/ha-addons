@@ -364,14 +364,14 @@ def read_apps(options):
     for entry in options.get("apps") or []:
         if isinstance(entry, dict):
             entries.append(((entry.get("name") or "").strip(), (entry.get("url") or "").strip(),
-                            (entry.get("start") or "").strip()))
+                            (entry.get("start") or "").strip(), entry.get("headers") or ""))
     single = (options.get("target_url") or "").strip()
     if entries and single:
         log("apps is set: target_url is ignored")
     elif single:
-        entries = [("", single, "")]
+        entries = [("", single, "", "")]
     apps, used = [], set()
-    for name, url, start in entries:
+    for name, url, start, headers in entries:
         label = name or url or "(empty)"
         if not url:
             log(f"app {label!r} ignored: no address")
@@ -387,8 +387,38 @@ def read_apps(options):
             log(f"app {label!r}: start page {start!r} ignored (only letters, digits and ._~/#?=&%!- are accepted)")
             start = ""
         apps.append({"name": name, "id": app_id(name, used), "target": target,
-                     "origin": origin, "host": host, "base": base, "start": start})
+                     "origin": origin, "host": host, "base": base, "start": start,
+                     "headers": read_headers(label, headers)})
     return apps
+
+
+# Headers the add-on sets itself: an app entry cannot replace them
+OWN_HEADERS = {"host", "connection", "upgrade", "content-length", "transfer-encoding", "accept-encoding",
+               "if-none-match", "if-modified-since"}
+
+
+def read_headers(label, text):
+    """Headers sent to an app with every request, written "Name: value" and
+    separated by " | ". For an app behind a gate that lets a token in.
+    Returns [(name, value)]. The values are secrets: never logged."""
+    headers = []
+    for part in str(text).split("|"):
+        part = part.strip()
+        if not part:
+            continue
+        name, colon, value = part.partition(":")
+        name, value = name.strip(), value.strip()
+        if not colon or not re.fullmatch(r"[A-Za-z0-9-]+", name) or not value:
+            log(f"app {label!r}: a header is ignored (expected \"Name: value\")")
+        elif name.lower() in OWN_HEADERS:
+            log(f"app {label!r}: header {name} ignored (set by the add-on)")
+        elif not re.fullmatch(r"[\x20-\x7e]+", value) or any(c in value for c in "\"$\\;{}"):
+            log(f"app {label!r}: header {name} ignored (its value has a character that is not accepted)")
+        else:
+            headers.append((name, value))
+    if headers:
+        log(f"app {label!r}: sends the headers {', '.join(name for name, _ in headers)}")
+    return headers
 
 
 def shell_page(apps):
@@ -418,9 +448,10 @@ def build(options, mark="sd0"):
         path = f"/app/{app['id']}/" if several else "/"
         maps += MAPS % {"n": n, "origin": app["origin"]}
         rewrite = redirect_rules(app["origin"], app["base"], "$http_x_ingress_path" + path) if rewrite_on else ""
+        extra = "".join(f'            proxy_set_header {name} "{value}";\n' for name, value in app["headers"])
         locations += APP_LOCATION % {
             "path": path, "target": app["target"], "host": app["host"],
-            "n": n, "timeout": timeout, "rewrite": rewrite, "forwarded": forwarded,
+            "n": n, "timeout": timeout, "rewrite": rewrite, "forwarded": forwarded + extra,
         }
         if app["start"] and not several:
             locations += START_LOCATION % {"start": app["start"]}

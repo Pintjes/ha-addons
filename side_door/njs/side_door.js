@@ -30,6 +30,7 @@ var TEXTS = {
 var LARGEST = 32 * 1024 * 1024;
 
 // Kept for the whole answer (one copy of this script runs per request)
+var nonce = '';
 var kind = null;
 var chunks = [];
 var size = 0;
@@ -88,7 +89,7 @@ function rewrite(r, a, type, text) {
             .replace(/\bwindow\.(top|parent)(?![\w$])/g, 'window.self');
         if (type === 'html') {
             var tag = '<script src="' + (r.variables.http_x_ingress_path || '') + '/side_door_shim.js" data-base="'
-                + ingress + '"></script>';
+                + ingress + '"' + (nonce ? ' nonce="' + nonce + '"' : '') + '></script>';
             text = text.replace(/<head(\s[^>]*)?>/i, function (head) { return head + tag; });
         }
     }
@@ -114,9 +115,37 @@ function plainCookies(r) {
     });
 }
 
+// The security policy of a page (Content-Security-Policy). The page is shown
+// inside the Home Assistant panel: the rule that says who may show it
+// ("frame-ancestors") is taken out, like X-Frame-Options. The rest is kept;
+// when the policy only runs the scripts that carry its pass ("nonce"), the
+// pass is noted for the script the add-on injects.
+function framePolicy(r) {
+    ['Content-Security-Policy', 'Content-Security-Policy-Report-Only'].forEach(function (name) {
+        var policy = r.headersOut[name];
+        if (!policy) {
+            return;
+        }
+        var text = Array.isArray(policy) ? policy.join(', ') : String(policy);
+        var pass = /'nonce-([A-Za-z0-9+\/_=-]+)'/.exec(text);
+        if (pass && !nonce) {
+            nonce = pass[1];
+        }
+        var kept = text.split(';').filter(function (rule) {
+            return !/^\s*frame-ancestors(\s|$)/i.test(rule);
+        }).join(';');
+        if (kept.trim()) {
+            r.headersOut[name] = kept;
+        } else {
+            delete r.headersOut[name];
+        }
+    });
+}
+
 function headers(r) {
     try {
         var a = app(r);
+        framePolicy(r);
         if (r.variables.sd_plain === '1') {
             plainCookies(r);
         }

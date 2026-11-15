@@ -76,6 +76,19 @@ apps:
 An entry can also have a `start` page, for an app whose interface is not at
 its root: `start: web/index.html` for Plex.
 
+An entry can have `headers`, sent to the app with every request. They are
+written `Name: value` and separated by ` | `. This is for an app behind a
+gate that lets a token in, such as a service token of Cloudflare Access:
+
+```yaml
+  - name: Remote app
+    url: https://app.example.com
+    headers: "CF-Access-Client-Id: <id> | CF-Access-Client-Secret: <secret>"
+```
+
+The gate then lets the add-on in on its own: everyone who can open the panel
+goes through it without logging in there.
+
 With two apps or more, the panel shows a row of tabs with the names you
 chose. An app is loaded the first time its tab is opened and keeps its page
 when you switch tabs. The panel opens on the tab you used last.
@@ -121,7 +134,8 @@ Behind the ingress, the app is not at `/` but under a path such as
   found in these answers;
 - sends the `Host`, `Origin` and `Referer` headers the app expects, so that
   its cross-site request checks (CSRF) keep working;
-- removes `X-Frame-Options`, since the app is shown inside the panel;
+- removes `X-Frame-Options` and the `frame-ancestors` rule of the
+  Content-Security-Policy, since the app is shown inside the panel;
 - drops the fingerprint check of scripts (Subresource Integrity): a rewritten
   script no longer has the fingerprint the app expects.
 
@@ -167,8 +181,6 @@ Limits:
 
 - a path built in JavaScript at run time is not seen. If it always follows the
   same text, add that text to `rewrite_prefixes` (for example `data-url="`);
-- an app that sends a `Content-Security-Policy: frame-ancestors` header may
-  refuse to be shown in the panel;
 - a single-page app with its own router may need a base path setting on its
   side instead.
 
