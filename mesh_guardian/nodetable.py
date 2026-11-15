@@ -792,7 +792,8 @@ class NodeTable:
             if self.live.connected:
                 try:
                     with self.lock:
-                        self.cache = {"rows": self.build()}
+                        rows = self.build()
+                        self.cache = {"rows": rows, "notes": self._advise(rows)}
                         self.cache_t = time.time()
                     self._ping_silent(self.cache["rows"])
                 except Exception as err:  # noqa: BLE001
