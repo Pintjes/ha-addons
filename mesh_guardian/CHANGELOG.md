@@ -4,6 +4,25 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.8.0] - 2026-11-15
+
+### Changed
+
+- Advice rewritten: computed every time the table is shown (no longer every 30 minutes), each with its proof in the detail.
+- Weak link of an end device: "Find a new parent" first, naming a better parent when one is known (a router it hears better, or a past parent with a good link) or the routers of its room or floor; "Move the node" or "Add a router in <room>" only after a search made since the link is weak found nothing better.
+- Weak link of a router: "Add a router between <room> and <room>".
+- Restarts: a power cut is no longer instability (power on reported, or several mains nodes restarting together); only crashes reported by the node count against a parent.
+- Unavailable node: the cause first (parent unavailable too, power cut in the room, low batteries, recovery pings exhausted).
+
+### Added
+
+- Advice for a node that crashes or keeps restarting, a router that detaches (with the nodes that depend on it), a node hesitating between two parents, a weak Wi-Fi signal.
+- Network notes: border router offline or detaching, node announced but unknown to the Matter Server.
+
+### Fixed
+
+- No link advice from a state read in the middle of a parent search.
+
 ## [2.7.3] - 2026-11-15
 
 ### Fixed

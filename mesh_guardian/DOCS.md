@@ -204,21 +204,55 @@ In Thread, a device picks its parent when it joins the network. Some firmwares
 look for a better parent when the signal drops; many stay on a weak parent as
 long as the link holds, and nobody can force a parent remotely.
 
-After each radio survey, Mesh Guardian lists the nodes whose parent link is weak
-(link quality 1 or 0) or unstable, and suggests the action:
+The advice is computed every time the table is shown, from what is known right
+now. Four rules: one proof per advice (shown in its detail), the cheapest action
+first (the button before moving a node, moving before buying a router), the
+cause before the symptom, and the room and the floor of Home Assistant as hints
+(the radio always decides).
 
-- **battery device:** remove the battery for 10 seconds and put it back — it
-  rejoins and picks the best parent available;
-- **mains device:** unplug it for 10 seconds;
-- **already tried:** add a mains-powered Thread router (e.g. a Matter smart
-  plug) near that area;
-- **unstable parent** (shown with ℹ️, a risk rather than a problem now): the node loses its
-  parent each time the parent restarts or detaches; remove the battery of the node (or
-  unplug it) for 10 seconds so it picks a steadier parent. A parent is unstable when it
-  restarted at least twice over about 24h (reboot counter of the node; software updates
-  excluded), or detached at least 3 times; detaches shared by many nodes in the same
-  survey interval (one network episode) are not counted. A node that just moved to a
-  better parent gets no such advice for 24h.
+**End device with a weak link** (link quality 1 or 0):
+
+1. a better parent is known — a router it hears better, or a parent it had a
+   good link with in the last 7 days: *Find a new parent: X, LQI 3, 36 min ago*;
+2. other routers are in its room, or on its floor: *Find a new parent (4 routers
+   in the room)*; none known: *Find a new parent*;
+3. a search made since the link is weak found nothing better, and routers are in
+   the room: *Move the node: none of the 4 routers of the room hears it well*;
+4. same, without any router in the room: *Add a router in <room>*.
+
+A search made before the link became weak proves nothing and does not count. No
+link advice is shown while a search is under way.
+
+**Router with a weak link** (a router has no parent to change): *Add a router
+between <room> and <room of the other end>*.
+
+**Unstable parent** (ℹ️, a risk rather than a problem now): the node loses its
+parent each time it restarts or detaches: *Find a new parent*. A parent is
+unstable when it crashed at least twice in 24h or detached at least 3 times
+(detaches shared by many nodes in one survey interval are a network episode and
+are not counted). The advice is hidden for 24h after a search.
+
+**Restarts** — a power cut is never instability. A restart counts as a crash
+when the node reports one (watchdog, brown-out, software reset); *power on*, a
+software update, or several mains nodes restarting within 5 minutes are a power
+cut and are ignored. Without any reason reported, an isolated restart is not
+held against a parent; from 3 in 24h the node itself gets *Restarts: check its
+power*. Two crashes or more: *Restarts: update its firmware*.
+
+**Other advice:** a router that detaches without a weak link (with the number
+of nodes that depend on it); a node that changes parent 4 times or more in 24h
+between good links (information); a Wi-Fi node at -85 dBm or below; *Change
+the batteries*.
+
+**Unavailable node** — the cause first: *Comes back with <parent>* when its
+parent is unavailable too; *Power cut in <room>?* when several mains nodes of
+the room dropped together; *Change the batteries* when they were low; *Remove
+the battery / unplug it for 10s* once the recovery pings are exhausted;
+otherwise *Check its batteries / its power*.
+
+**Network notes**, above the cards: a border router offline or detaching 3
+times or more in 24h (with the number of nodes going through it), and a node
+announced on the fabric but unknown to the Matter Server (information).
 
 Every parent change is then reported with the signal before / after (✅ better,
 ≈ similar, ⚠️ worse, ? when a signal is unknown) and its probable cause. Over time, the add-on also learns
@@ -265,8 +299,7 @@ What to know:
 - When the result is not known right away (a sleepy node answers at its next
   wake-up), the node and its parent are read again every 30 s for 5 minutes;
   the page shows the result as soon as it is known.
-- After a search, the advice follows: an unstable-parent advice is hidden for
-  24 h; a weak link that kept the same parent becomes *Add a router near …*.
+- After a search, the advice follows at once (see Radio advice).
 - If a node answers with an error, the fail-safe is cancelled and the node
   keeps the network configuration it had. If it does not answer (it may be
   attaching again), the fail-safe is left armed: the node goes back to its

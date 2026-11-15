@@ -21,7 +21,7 @@ class History:
     def __init__(self, watch):
         self.w = watch
         self.lock = threading.Lock()
-        self.data = {}   # node hex -> [[t, available, parent, rssi, response ms], ...]
+        self.data = {}   # node hex -> [[t, available, parent, rssi, response ms, link quality], ...]
         try:
             with open(FILE) as f:
                 self.data = json.load(f)
@@ -42,7 +42,8 @@ class History:
         router = r.get("role") in ("router", "leader")
         parent = r.get("parent") or (("↔ " + r["best_link"]) if router and r.get("best_link") else None)
         rssi = r.get("rssi") if r.get("rssi") is not None else (r.get("best_rssi") if router else None)
-        return [now, bool(r.get("available")), parent, rssi, r.get("rtt_ms")]
+        lqi = r.get("lqi") if r.get("parent") else (r.get("best_lqi") if router else None)
+        return [now, bool(r.get("available")), parent, rssi, r.get("rtt_ms"), lqi]
 
     def sample_one(self, nid):
         """One point now for one node, from the table just rebuilt (after a parent search:

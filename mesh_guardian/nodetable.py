@@ -20,7 +20,7 @@ import time
 from i18n import lang, t
 
 LOG = logging.getLogger("mg.table")
-from advice import lowest, min_known, weak_link  # noqa: E402
+from advice import advise, lowest, min_known, weak_link  # noqa: E402
 
 ROLE = {0: "unspecified", 1: "unassigned", 2: "sleepy_end_device", 3: "end_device", 4: "reed",
         5: "router", 6: "leader"}
@@ -457,9 +457,6 @@ class NodeTable:
         if self.radio and self.radio.leader_name and time.time() - self.radio.leader_t < 2400:
             leader = self.radio.leader_name   # Home Assistant names loaded: parent history can start
         ref = (self.radio.reference(now, min_age=3600) or {}).get("nodes", {}) if self.radio else {}
-        advice = {a["node"]: ("; ".join(a.get("short") or a["actions"]), "; ".join(a["actions"]), a.get("severity", "high"),
-                              a.get("parent"))
-                  for a in (self.advisor.advice if self.advisor else [])}
         rows = []
         for nid, v in thread.items():
             a, m = v["attrs"], v["meta"]
@@ -491,29 +488,17 @@ class NodeTable:
                 elif hist["key"] != p[3]:
                     hist.update({"prev": hist["parent"], "prev_rssi": hist["rssi"], "since": now, "key": p[3]})
                 hist["parent"], hist["rssi"] = p[0], p[1]
-            # advice is computed at the radio survey (every 30 min): drop it as soon as the
-            # node has left the parent it was about (weak link fixed, unstable parent left)
-            adv = advice.get(v["name"])
-            strong = bool(p) and (p[1] is not None or bool(p[2])) and not weak_link(p[1], p[2])   # known and not weak
-            if adv and p and adv[3] and p[0] != adv[3] and (adv[2] == "low" or not weak_link(p[1], p[2])):
-                adv = None
-            elif adv and adv[2] == "high" and strong:
-                adv = None   # weak-link advice, but the link shown is no longer weak
-            # a parent search was just done (the advice is only computed again at the next survey)
-            tried = (self.advisor.tried.get(v["name"]) if self.advisor else None) or (0, None)
-            if adv and tried[1] not in (None, "noanswer") and now - tried[0] < 86400:
-                if adv[2] == "low":
-                    adv = None   # unstable parent: the search was the action, wait 24 h
-                elif tried[1] == "same" and p and weak_link(p[1], p[2]):
-                    adv = (t("Add a router near {area}", area=m.get("area") or "?"),
-                           t("add a mains-powered Thread router (e.g. a Matter smart plug) near \"{area}\": "
-                             "the node already had a chance to find a better parent and did not", area=m.get("area") or "?"),
-                           "high", p[0])
-            if not adv and not p and bl and weak_link(bl[1], bl[2]) and v["meta"].get("available", True):
-                # a router has no parent to change: the link it sends through is weak, it needs a closer router
-                adv = (t("Add a router near {area}", area=m.get("area") or "?"),
-                       t("weak link with {peer}: add a mains-powered Thread router (e.g. a Matter smart plug) between them",
-                         peer=bl[0]), "high", None)
+            # a full end device hears routers other than its parent: the best of them is a
+            # proof that a better parent exists (advice)
+            cand = None
+            if p and role in (2, 3, 4):
+                heard = [(nb.get("5") or 0, nb_rssi(nb) if nb_rssi(nb) is not None else -200, match(nb.get("0"), labels))
+                         for nb in a.get("0/53/7") or [] if isinstance(nb, dict) and nb.get("2") is not None
+                         and not nb["2"] & 0x3FF and not nb.get("13")]
+                heard = [h for h in heard if h[2] and h[2] != p[0] and h[0] >= 3]
+                if heard:
+                    q, rssi_c, name_c = max(heard)
+                    cand = (name_c, rssi_c if rssi_c > -200 else None, q)
             new_parent = None
             if p and hist and hist.get("since") and now - hist["since"] <= NEW_PARENT_S and hist.get("prev"):
                 new_parent = {"before": hist["prev"], "before_rssi": hist["prev_rssi"], "at": hist["since"]}
@@ -565,9 +550,8 @@ class NodeTable:
                 "uptime_h": round(uptime / 3600, 1) if isinstance(uptime, (int, float)) else None,
                 "uptime_s": round(uptime) if isinstance(uptime, (int, float)) else None,
                 "battery_pct": bat[0], "battery_level": bat[1],
-                "advice": "; ".join(x for x in (bat_short, (adv or (None, None, None))[0]) if x) or None,
-                "advice_level": "high" if low else (adv or (None, None, None))[2],
-                "advice_detail": "; ".join(x for x in (bat_short, (adv or (None, None, None))[1]) if x) or None,
+                "advice": None, "advice_level": None, "advice_detail": None,   # filled by advise()
+                "_bat": bat_short, "_cand": cand,
                 "contact_src": src[0], "active_gap_max_s": src[1], "since_active_s": src[2], **self._silence(nid, bool(avail)),
                 "rtt_ms": rtt_last, "rtt_avg_ms": rtt_avg, "rtt_fail": rtt_fail,
                 "last_report": v["node"].get("last"), "last_radio": v["node"].get("radio"),
@@ -732,6 +716,31 @@ class NodeTable:
                             "routing_problem": self.h.routing.get("details") if self.h.routing.get("problem") else None,
                             "auto_recovery": self.h.enabled}}
 
+    def _advise(self, rows):
+        """Advice of every row, from what is known right now (advice.py). Returns the notes
+        about the network itself."""
+        adv, hist, h = self.advisor, getattr(self.w, "history", None), self.h
+        try:
+            with h.lock:
+                gave_up = {f"0x{k.lstrip('0') or '0'}" for k, n in h.nodes.items() if n.get("gave_up")}
+
+            def points(rid):
+                if not hist:
+                    return []
+                with hist.lock:
+                    return list(hist.data.get(f"{int(rid, 16):016X}", []))
+            ctx = {"now": time.time(), "tried": adv.tried if adv else {}, "forced": adv.forced if adv else {},
+                   "weak_since": adv.weak_since if adv else self.__dict__.setdefault("_weak_since", {}),
+                   "unstable": adv.unstable if adv else {}, "history": points, "gave_up": gave_up,
+                   "ghosts": ["0x" + (k.lstrip("0") or "0") for k in getattr(self.w, "ghosts", [])]}
+            return advise(rows, self.header()["border_routers"], ctx)
+        except Exception as err:  # noqa: BLE001 - never break the table for the advice
+            LOG.warning("advice: %s", err)
+            for r in rows:
+                r.pop("_bat", None)
+                r.pop("_cand", None)
+            return []
+
     def get(self, force=False):
         """Answer of /api/table. Cached a few seconds (several open pages share it)."""
         with self.lock:
@@ -740,10 +749,12 @@ class NodeTable:
                 if force and not self.live.connected:
                     self.live.resync()
                 rows = self.build()
-                self.cache = {"rows": rows}
+                self.cache = {"rows": rows, "notes": self._advise(rows)}
                 self.cache_t = time.time()
             out = dict(self.cache)
+        notes = out.pop("notes", [])
         out.update(self.header())
+        out["network"]["notes"] = notes
         out.update({"time": time.time(), "lang": lang(), "thresholds": THRESHOLDS,
                     "live": self.live.connected, "live_since": self.live.since,
                     "reading": self.quality.reading() if getattr(self, "quality", None) else None})
