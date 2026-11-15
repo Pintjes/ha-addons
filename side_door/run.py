@@ -61,6 +61,11 @@ http {
         301      no-store;
         308      no-store;
     }
+    # 1 when the browser reaches Home Assistant in plain HTTP
+    map $http_x_forwarded_proto $sd_plain {
+        default  0;
+        http     1;
+    }
     # Option inject_script: pages and scripts are not kept by the browser
     map $upstream_http_content_type $sd_cache {
         default       $upstream_http_cache_control;
@@ -92,6 +97,7 @@ NOT_SET = """\
 SERVER = """\
         client_max_body_size %(max_body_mb)dm;
         error_page 502 503 504 /side_door_unreachable.html;
+        recursive_error_pages on;
 
         location = /side_door_unreachable.html {
             internal;
@@ -117,7 +123,27 @@ SHELL_LOCATION = """\
 APP_LOCATION = """\
 
         location %(path)s {
+            # Home Assistant opened in plain HTTP: the next block answers
+            error_page 418 = @plain_%(n)d;
+            error_page 502 503 504 /side_door_unreachable.html;
+            if ($sd_plain) {
+                return 418;
+            }
             proxy_pass %(target)s;
+%(common)s        }
+
+        # The same app when Home Assistant is opened in plain HTTP. The browser
+        # would refuse the cookies the app reserves to HTTPS, and nobody could
+        # log in: here they lose that mark.
+        location @plain_%(n)d {
+            error_page 502 503 504 /side_door_unreachable.html;
+            rewrite ^%(path)s(.*)$ %(base)s$1 break;
+            proxy_pass %(origin)s;
+            proxy_cookie_flags ~ nosecure samesite=lax;
+%(common)s        }
+"""
+
+APP_COMMON = """\
             proxy_http_version 1.1;
             proxy_set_header Host %(host)s;
             proxy_set_header Upgrade $http_upgrade;
@@ -135,8 +161,7 @@ APP_LOCATION = """\
             # The page is shown inside the Home Assistant panel
             proxy_hide_header X-Frame-Options;
             add_header Cache-Control $sd_redirect;
-%(rewrite)s        }
-"""
+%(rewrite)s"""
 
 MAPS = """\
     map $http_origin $sd_origin_%(n)d {
@@ -358,9 +383,10 @@ def build(options):
         path = f"/app/{app['id']}/" if several else "/"
         maps += MAPS % {"n": n, "origin": app["origin"]}
         rewrite = rewrite_rules(app["origin"], app["base"], extra, "$http_x_ingress_path" + path, rewrite_on, inject)
+        common = APP_COMMON % {"host": app["host"], "n": n, "timeout": timeout, "rewrite": rewrite}
         locations += APP_LOCATION % {
-            "path": path, "target": app["target"], "host": app["host"],
-            "n": n, "timeout": timeout, "rewrite": rewrite,
+            "path": path, "target": app["target"], "origin": app["origin"],
+            "base": app["base"], "n": n, "common": common,
         }
     conf = HEAD % {"port": PORT, "web": WEB, "maps": maps}
     conf += SERVER % {"max_body_mb": int(options.get("max_body_mb", 100))}

@@ -153,6 +153,11 @@ Limits:
 - Every Home Assistant administrator can open the panel, and so reach the
   app, from wherever Home Assistant is reachable. The login of the app itself
   still applies: keep it.
+- When Home Assistant is opened in plain HTTP (`http://` on the local
+  network), the cookies an app reserves to HTTPS lose that mark, otherwise
+  nobody could log in to it. They then travel unencrypted between the browser
+  and Home Assistant, like the rest of that session. Over HTTPS nothing
+  changes.
 - The TLS certificate of an `https://` target is not checked (self-signed
   certificates are common on a local network).
 
