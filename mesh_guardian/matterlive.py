@@ -49,6 +49,7 @@ class MatterLive:
         self.nodes = {}       # node hex -> {"available", "attributes", "last": ts, "radio": ts}
         self.connected = False
         self.since = None     # time of the current connection
+        self.lost_t = None    # last time an open link to the Matter Server dropped (restart of the server)
         self.contacts = {}    # node hex -> time of the last contact, kept in /data
         self._saved = 0
         self.t0 = time.time()   # start of the add-on: silences across a restart are not the node's
@@ -396,6 +397,8 @@ class MatterLive:
                         raise ConnectionError("server shutdown")
                     self._event(msg)
         finally:
+            if self.connected:
+                self.lost_t = time.time()
             self.connected = False
             try:
                 ws.close()

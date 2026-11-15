@@ -550,7 +550,7 @@ function todoGroups(issues) {
 }
 function renderTodo() {
   const n = D.network || {};
-  const issues = (D.rows || []).filter(r => sev(r) < 3).sort((a, b) => sev(a) - sev(b) || a.name.localeCompare(b.name));
+  const issues = (D.rows || []).filter(r => sev(r) < 3 && !r.after_restart).sort((a, b) => sev(a) - sev(b) || a.name.localeCompare(b.name));
   const net = [];
   if (n.storm) net.push(["warn", L("storm")]);
   if (n.routing_problem) net.push(["bad", n.routing_problem]);

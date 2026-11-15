@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.9.1] - 2026-11-15
+
+### Changed
+
+- After a restart of the Matter Server (or of Home Assistant), the nodes it took down no longer get one red card each: a single card says when it restarted and how many nodes are still reconnecting. A node still unavailable 30 minutes later gets its own card again.
+
 ## [2.9.0] - 2026-11-15
 
 ### Fixed

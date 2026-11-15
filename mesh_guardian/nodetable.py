@@ -399,6 +399,8 @@ def match(ext, table):
     return None
 
 
+RESTART_GRACE_S = 1800   # nodes taken down by a restart: no card of their own during 30 min
+
 class NodeTable:
     def __init__(self, watch, healer, radio, live, advisor):
         self.w, self.h, self.radio, self.live, self.advisor = watch, healer, radio, live, advisor
@@ -716,6 +718,29 @@ class NodeTable:
                             "routing_problem": self.h.routing.get("details") if self.h.routing.get("problem") else None,
                             "auto_recovery": self.h.enabled}}
 
+    def _restart_note(self, rows, now):
+        """After a restart of the Matter Server (or of Home Assistant), the nodes it took down
+        are one fact, not one card each: they are marked (row "after_restart", no card) and a
+        single note tells what happened. Past RESTART_GRACE_S, a node still unavailable gets its
+        own card again."""
+        m = getattr(self.h, "mass", None)
+        if not m or now - m["t"] > 86400:
+            return []
+        ids = {f"0x{k.lstrip('0') or '0'}" for k in m["nodes"]}
+        waiting = [r for r in rows if r["id"] in ids and not r.get("available")]
+        at = time.strftime("%H:%M", time.localtime(m["t"]))
+        who = {"matter": t("The Matter Server restarted at {t}", t=at),
+               "ha": t("Home Assistant restarted at {t}", t=at)}.get(
+            m.get("cause"), t("Home Assistant or the Matter Server restarted at {t}", t=at))
+        if waiting and now - m["t"] < RESTART_GRACE_S:
+            for r in waiting:
+                r["after_restart"] = True
+            return [("warn", who + ": " + t("{n} of {total} nodes are reconnecting, nothing to do",
+                                             n=len(waiting), total=len(ids)))]
+        if waiting:
+            return [("info", who + ": " + t("{n} of {total} nodes did not come back", n=len(waiting), total=len(ids)))]
+        return [("info", who + ": " + t("all {total} nodes came back", total=len(ids)))]
+
     def _advise(self, rows):
         """Advice of every row, from what is known right now (advice.py). Returns the notes
         about the network itself."""
@@ -733,7 +758,8 @@ class NodeTable:
                    "weak_since": adv.weak_since if adv else self.__dict__.setdefault("_weak_since", {}),
                    "unstable": adv.unstable if adv else {}, "history": points, "gave_up": gave_up,
                    "ghosts": ["0x" + (k.lstrip("0") or "0") for k in getattr(self.w, "ghosts", [])]}
-            return advise(rows, self.header()["border_routers"], ctx)
+            notes = advise(rows, self.header()["border_routers"], ctx)
+            return self._restart_note(rows, ctx["now"]) + notes
         except Exception as err:  # noqa: BLE001 - never break the table for the advice
             LOG.warning("advice: %s", err)
             for r in rows:

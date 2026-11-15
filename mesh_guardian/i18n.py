@@ -23,6 +23,13 @@ FR = {
     "unspecified": "non précisé", "unassigned": "non attribué", "sleepy_end_device": "appareil final dormant",
     "end_device": "appareil final", "reed": "appareil final", "not_initialized": "non initialisée", "inactive": "inactive",
     "active": "active", "unknown": "inconnu", "offline": "hors ligne",
+    # restart of the Matter Server / Home Assistant
+    'The Matter Server restarted at {t}': 'Le Matter Server a redémarré à {t}',
+    'Home Assistant restarted at {t}': 'Home Assistant a redémarré à {t}',
+    'Home Assistant or the Matter Server restarted at {t}': 'Home Assistant ou le Matter Server a redémarré à {t}',
+    '{n} of {total} nodes are reconnecting, nothing to do': '{n} nodes sur {total} se reconnectent, rien à faire',
+    '{n} of {total} nodes did not come back': "{n} nodes sur {total} ne sont pas revenues",
+    'all {total} nodes came back': 'les {total} nodes sont revenues',
     # advice
     'Advice: {n} nodes': 'Conseils : {n} nodes',
     'Advice: {n} node': 'Conseils : {n} node',

@@ -87,6 +87,8 @@ class Healer:
         self.fast_until = 0      # fast reaction after a prefix change
         self._backfilled = False
         self.mass_until = 0      # pause after a global outage (Home Assistant / Matter Server restart)
+        self.mass = None         # last global outage: {"t", "cause": "matter"/"ha"/None, "nodes": [hex]}
+        self.ha_down_t = None    # last time Home Assistant did not answer (restart)
         self.success = 0         # nodes back after a ping
         self.self_recovered = 0  # nodes back without a ping
         self.failures = 0        # given up after the maximum number of pings
@@ -127,6 +129,8 @@ class Healer:
             self.recent = [r for r in st.get("recent", []) if r[0] >= time.time() - 86400]
             self.history_done = st.get("history_done", True)
             # nodes the recovery pings gave up on: kept across a restart (the advice depends on it)
+            m = st.get("mass")
+            self.mass = m if m and time.time() - m.get("t", 0) < 86400 else None
             self.gave_up_saved = {k: v for k, v in (st.get("gave_up_nodes") or {}).items() if time.time() - v < 7 * 86400}
         except Exception:  # noqa: BLE001
             pass
@@ -137,7 +141,7 @@ class Healer:
                 json.dump({"enabled": self.enabled, "success": self.success,
                            "self_recovered": self.self_recovered, "failures": self.failures,
                            "pings_sent": self.pings_sent, "last_result": self.last_result,
-                           "recent": self.recent, "history_done": self.history_done,
+                           "recent": self.recent, "history_done": self.history_done, "mass": self.mass,
                            "gave_up_nodes": {k: n.get("gave_up_t") or time.time() for k, n in self.nodes.items()
                                              if n.get("gave_up") and not n.get("available")}}, f)
         except Exception as err:  # noqa: BLE001
@@ -591,6 +595,7 @@ class Healer:
     def cycle(self):
         data = self.fetch_ha_nodes()
         if data is None:
+            self.ha_down_t = time.time()
             return
         if not self._backfilled:
             self._backfilled = True
@@ -648,7 +653,8 @@ class Healer:
                     else:
                         events.append(("node_unavailable", t("{name} unavailable",
                                                              name=n["name"], area=n["area"]),
-                                       dict(node=short_id(node), name=n["name"], area=n["area"]), "down"))
+                                       dict(node=short_id(node), name=n["name"], area=n["area"],
+                                            node_hex=node), "down"))
                     n["available"] = avail
                     n["since"] = since
                     lst = self.outages.setdefault(node, [])
@@ -685,8 +691,16 @@ class Healer:
                 # global outage (Home Assistant or Matter Server restart): no ping for 5min
                 self.mass_until = now + 300
                 due = []
+                live = getattr(self.w, "live", None)
+                lost = getattr(live, "lost_t", None)
+                cause = "matter" if lost and now - lost < 300 else \
+                    "ha" if self.ha_down_t and now - self.ha_down_t < 300 else None
+                self.mass = {"t": min(n_since for n_since in (self.nodes[d[2]["node_hex"]]["since"] for d in downs)),
+                             "cause": cause, "nodes": [d[2]["node_hex"] for d in downs]}
+                self._save_state()
         if len(downs) >= mass:
             for kind, txt, d, _ in downs:  # not counted in the per-node statistics
+                d.pop("node_hex", None)
                 for node, lst in self.outages.items():
                     if lst and lst[-1][1] is None and short_id(node) == d["node"]:
                         lst[-1][2] = True
@@ -696,7 +710,12 @@ class Healer:
             self.w.emit("global_outage", t("{n} nodes unavailable together: pings paused 5min", n=len(downs)),
                         count=len(downs), nodes=[d["name"] for _, _, d, _ in downs])
         else:
+            m = self.mass
             for kind, txt, data, _ in downs:
+                hexid = data.pop("node_hex", None)
+                # stragglers of a restart (down in the next cycles): part of the same restart
+                if m and now - m["t"] < 180 and hexid and hexid not in m["nodes"]:
+                    m["nodes"].append(hexid)
                 self.w.emit(kind, txt, **data)
         if len(ups) >= mass:
             # global return after a restart: counted neither as a ping success nor as a self recovery
