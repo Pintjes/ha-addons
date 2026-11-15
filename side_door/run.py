@@ -14,9 +14,13 @@ the app moved under the ingress path, cookies in plain HTTP).
 """
 import hashlib
 import html
+import ipaddress
 import json
 import os
 import re
+import signal
+import socket
+import subprocess
 import sys
 from urllib.parse import urlsplit
 
@@ -430,7 +434,26 @@ def shell_page(apps):
     return SHELL % {"tabs": tabs}
 
 
-def build(options, mark="sd0"):
+def ipv4_servers(origin):
+    """The IPv4 addresses ("address:port") of an app given by a host name, or
+    None for an app given by an address or a name without IPv4. Home Assistant
+    often has no IPv6 route: nginx, left alone, tries the IPv6 addresses of
+    the name first, fails, and only then uses the others."""
+    parts = urlsplit(origin)
+    host, port = parts.hostname, parts.port or (443 if parts.scheme == "https" else 80)
+    try:
+        ipaddress.ip_address(host)
+        return None
+    except ValueError:
+        pass
+    try:
+        found = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+    except OSError:
+        return None
+    return sorted({f"{info[4][0]}:{port}" for info in found}) or None
+
+
+def build(options, mark="sd0", resolve=ipv4_servers):
     """Returns (nginx configuration, apps for njs/side_door.js, tabs page or
     None, message for the log)."""
     apps = read_apps(options)
@@ -449,8 +472,16 @@ def build(options, mark="sd0"):
         maps += MAPS % {"n": n, "origin": app["origin"]}
         rewrite = redirect_rules(app["origin"], app["base"], "$http_x_ingress_path" + path) if rewrite_on else ""
         extra = "".join(f'            proxy_set_header {name} "{value}";\n' for name, value in app["headers"])
+        target = app["target"]
+        servers = resolve(app["origin"])
+        if servers:
+            # A host name: reached at its IPv4 addresses, under its own name
+            scheme, name = app["origin"].split("://")[0], urlsplit(app["origin"]).hostname
+            maps += "    upstream sd_app_%d {\n%s    }\n" % (n, "".join(f"        server {s};\n" for s in servers))
+            target = f"{scheme}://sd_app_{n}{app['base']}"
+            extra += f"            proxy_ssl_name {name};\n"
         locations += APP_LOCATION % {
-            "path": path, "target": app["target"], "host": app["host"],
+            "path": path, "target": target, "host": app["host"],
             "n": n, "timeout": timeout, "rewrite": rewrite, "forwarded": forwarded + extra,
         }
         if app["start"] and not several:
@@ -511,7 +542,27 @@ def main():
     log(message)
     if "--check" in sys.argv:
         os.execvp("nginx", ["nginx", "-t", "-c", CONF])
-    os.execvp("nginx", ["nginx", "-c", CONF])
+    sys.exit(run_nginx())
+
+
+# What follows "?" in an address: it may hold a token of the app
+PARAMETERS = re.compile(r"\?[^\s\"']*")
+
+
+def run_nginx():
+    """Runs nginx and relays what it says, without the parameters of the
+    addresses: nginx writes whole addresses in its error messages."""
+    child = subprocess.Popen(["nginx", "-c", CONF], stderr=subprocess.PIPE, text=True, errors="replace")
+
+    def stop(signum, frame):
+        child.send_signal(signal.SIGTERM)
+
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(signum, stop)
+    for line in child.stderr:
+        sys.stderr.write(PARAMETERS.sub("?...", line))
+        sys.stderr.flush()
+    return child.wait()
 
 
 if __name__ == "__main__":

@@ -4,6 +4,16 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.2] - 2026-11-15
+
+### Fixed
+
+- The log no longer shows the parameters of the addresses (what follows `?`):
+  the error messages of nginx wrote whole addresses, tokens of the apps
+  included.
+- An app given by a host name is reached at its IPv4 addresses: without an
+  IPv6 route, each request first failed on an IPv6 address.
+
 ## [1.6.1] - 2026-11-15
 
 ### Fixed
