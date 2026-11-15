@@ -594,7 +594,9 @@ class Healer:
     # ------------------------------------------------------------- loop
     def cycle(self):
         data = self.fetch_ha_nodes()
-        if data is None:
+        if data is None or (len(self.nodes) >= 10 and len(data) < len(self.nodes) // 2):
+            # Home Assistant is starting (its Matter integration not loaded yet): the nodes are
+            # not gone, wait for the full list
             self.ha_down_t = time.time()
             return
         if not self._backfilled:

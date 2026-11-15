@@ -50,6 +50,8 @@ class MatterLive:
         self.connected = False
         self.since = None     # time of the current connection
         self.lost_t = None    # last time an open link to the Matter Server dropped (restart of the server)
+        self._up_before = set()   # nodes available when the link dropped
+        self.restart = None   # last restart of the Matter Server seen: {"t", "cause", "nodes": [hex]}
         self.contacts = {}    # node hex -> time of the last contact, kept in /data
         self._saved = 0
         self.t0 = time.time()   # start of the add-on: silences across a restart are not the node's
@@ -390,6 +392,13 @@ class MatterLive:
                         self.nodes = {}
                     for n in msg.get("result") or []:
                         self._set_node(n)
+                    with self.lock:
+                        # back after a drop: the nodes the restart took down (available before,
+                        # not yet now: a restarted Matter Server waits for each node's first report)
+                        down = [k for k in self._up_before if not (self.nodes.get(k) or {}).get("available")]
+                        if self.lost_t and down:
+                            self.restart = {"t": self.lost_t, "cause": "matter", "nodes": down}
+                        self._up_before = set()
                     self.connected, self.since = True, time.time()
                     LOG.info(t("Live link to the Matter Server: {n} nodes", n=len(self.nodes)))
                 elif "event" in msg:
@@ -399,6 +408,8 @@ class MatterLive:
         finally:
             if self.connected:
                 self.lost_t = time.time()
+                with self.lock:
+                    self._up_before = {k for k, n in self.nodes.items() if n.get("available")}
             self.connected = False
             try:
                 ws.close()

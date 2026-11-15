@@ -4,6 +4,17 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.9.2] - 2026-11-15
+
+### Fixed
+
+- A restart of the Matter Server is now detected by Mesh Guardian itself (its live link drops and comes back), no longer through Home Assistant: 2.9.1 missed it when Home Assistant restarted at the same time.
+- While Home Assistant starts, an incomplete list of nodes no longer makes their names and outage times disappear ("0x14", "Since ?").
+
+### Changed
+
+- The nodes taken down by a restart get their own card again after 5 minutes (was 30).
+
 ## [2.9.1] - 2026-11-15
 
 ### Changed

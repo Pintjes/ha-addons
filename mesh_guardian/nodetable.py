@@ -399,7 +399,7 @@ def match(ext, table):
     return None
 
 
-RESTART_GRACE_S = 1800   # nodes taken down by a restart: no card of their own during 30 min
+RESTART_GRACE_S = 300    # nodes taken down by a restart: no card of their own during 5 min
 
 class NodeTable:
     def __init__(self, watch, healer, radio, live, advisor):
@@ -723,7 +723,8 @@ class NodeTable:
         are one fact, not one card each: they are marked (row "after_restart", no card) and a
         single note tells what happened. Past RESTART_GRACE_S, a node still unavailable gets its
         own card again."""
-        m = getattr(self.h, "mass", None)
+        cands = [x for x in (getattr(self.h, "mass", None), getattr(self.live, "restart", None)) if x]
+        m = max(cands, key=lambda x: x["t"]) if cands else None
         if not m or now - m["t"] > 86400:
             return []
         ids = {f"0x{k.lstrip('0') or '0'}" for k in m["nodes"]}
