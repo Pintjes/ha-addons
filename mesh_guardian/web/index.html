@@ -586,10 +586,10 @@ function renderBrs() {
   $("#brTitle").textContent = L("brs");
   $("#brTitle").style.display = brs.length ? "" : "none";
   $("#brs").innerHTML = brs.map(b => {
-    const k = !b.online ? "bad" : b.role === "detached" || b.detached_24h || b.same_subnet === false ? "warn" : "ok";
+    // the card shows the state now; past detaches are a note in "To handle"
+    const k = !b.online ? "bad" : b.role === "detached" || b.same_subnet === false ? "warn" : "ok";
     const extra = [b.online ? (L("roles")[b.role] || b.role) : L("offline")];
     if (b.primary) extra.push(L("br_primary"));
-    if (b.detached_24h) extra.push(F("detached24", {n: b.detached_24h}));
     if (b.same_subnet === false) extra.push(L("other_subnet"));
     extra.push(b.last_contact ? F("br_seen", {t: ago(b.last_contact)}) : L("br_never"));
     return `<div class="card br"><span class="st ${k} ic">${k === "ok" ? IC.ok : k === "bad" ? IC.bad : IC.warn}</span>

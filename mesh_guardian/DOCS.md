@@ -250,8 +250,10 @@ the battery / unplug it for 10s* once the recovery pings are exhausted;
 otherwise *Check its batteries / its power*.
 
 **Network notes**, above the cards: a border router offline or detaching 3
-times or more in 24h (with the number of nodes going through it), and a node
-announced on the fabric but unknown to the Matter Server (information).
+times or more in 24h (with the number of nodes going through it). As
+information (*Good to know*, with a *Seen* button): border routers that
+detached once or twice in 24h — the border router cards only show the state
+now — and a node announced on the fabric but unknown to the Matter Server.
 
 Every parent change is then reported with the signal before / after (✅ better,
 ≈ similar, ⚠️ worse, ? when a signal is unknown) and its probable cause. Over time, the add-on also learns

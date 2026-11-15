@@ -267,14 +267,24 @@ def advise(rows, brs, ctx):
     for gone in [k for k in ctx["weak_since"] if k not in by_name]:
         del ctx["weak_since"][gone]
 
-    notes = []
+    notes, brief = [], []
     for b in brs:
         through = sum(1 for r in rows if (r.get("route") or {}).get("br") == b["name"])
         dep = tn(" · {n} node goes through it", " · {n} nodes go through it", through) if through else ""
+        n_det = b.get("detached_24h") or 0
         if not b.get("online"):
             notes.append(("bad", t("{name} is offline: check its power and its network", name=b["name"])))
-        elif (b.get("detached_24h") or 0) >= UNSTABLE_DETACHES:
-            notes.append(("warn", t("{name} detaches ({n}× in 24h): check its power and its network", name=b["name"], n=b["detached_24h"]) + dep))
+        elif n_det >= UNSTABLE_DETACHES:
+            notes.append(("warn", t("{name} detaches ({n}× in 24h): check its power and its network", name=b["name"], n=n_det) + dep))
+        elif n_det:
+            brief.append((b["name"], n_det, b.get("last_detached")))
+    if brief:
+        # a few detaches of border routers: good to know, one note for all (often the same storm)
+        names = ", ".join(f"{n} ({k}×)" if k > 1 else n for n, k, _ in brief)
+        last = max((x[2] for x in brief if x[2]), default=None)
+        when = last[11:16] if last else None
+        notes.append(("info", t("{names} detached in the last 24h, the last time at {t}", names=names, t=when)
+                      if when else t("{names} detached in the last 24h", names=names)))
     if ctx["ghosts"]:
         notes.append(("info", t("Announced but unknown to the Matter Server: {ids} (removed without a factory reset?)",
                                 ids=", ".join(ctx["ghosts"]))))

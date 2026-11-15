@@ -95,6 +95,8 @@ FR = {
     " · {n} node goes through it": " · {n} node passe par lui",
     " · {n} nodes go through it": " · {n} nodes passent par lui",
     "{name} is offline: check its power and its network": "{name} est hors ligne : vérifier son alimentation et son réseau",
+    "{names} detached in the last 24h, the last time at {t}": "{names} : décroché dans les dernières 24 h, la dernière fois à {t}",
+    "{names} detached in the last 24h": "{names} : décroché dans les dernières 24 h",
     "{name} detaches ({n}× in 24h): check its power and its network": "{name} décroche ({n}× en 24 h) : vérifier son alimentation et son réseau",
     "Announced but unknown to the Matter Server: {ids} (removed without a factory reset?)": "Annoncée mais inconnue du Matter Server : {ids} (retirée sans réinitialisation ?)",
     "{node}: {action}": "{node} : {action}",
