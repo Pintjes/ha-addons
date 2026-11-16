@@ -397,9 +397,13 @@ names, areas, addresses or prefixes) to copy or download and paste in an issue.
 ### Actions on one node
 
 - **Ping** — through the Matter Server; the answer counts as a contact.
-- **Find a better parent** — end devices only: the node attaches again and
-  picks the best parent it hears now (see *Find better parents*), even when its
-  link is not poor (you are asked to confirm: the new parent can be weaker).
+- **Find a new link** — an end device attaches again and picks the best parent
+  it hears now (see *Find better parents*), even when its link is not poor (you
+  are asked to confirm: the new parent can be weaker). Trial, provisional: on a
+  router (not the leader) the button restarts its Thread interface, after a
+  warning; its end devices drop and attach elsewhere, and no better link is
+  expected since a router picks its routes by itself. The result comes 3
+  minutes later.
 - **Interview** — the Matter Server reads again everything the node describes
   (endpoints, clusters, attributes); useful after a firmware update.
 

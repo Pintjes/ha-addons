@@ -141,7 +141,7 @@ FR = {
     "{node}: {action}": "{node} : {action}",
     "Remove the battery 10s": "Retirer la pile 10 s",
     "Finding a new parent could improve the situation": "Rechercher un nouveau parent pourrait améliorer la situation",
-    "press Find a new parent on its line: it attaches again and picks the best parent it hears (if it refuses: remove the battery or unplug it for 10s)": "Bouton « Recherche d'un nouveau parent ». Si refus : couper son alimentation 10 s.",
+    "press Find a new parent on its line: it attaches again and picks the best parent it hears (if it refuses: remove the battery or unplug it for 10s)": "Bouton « Recherche d'un nouveau lien ». Si refus : couper son alimentation 10 s.",
     "{parent} restarts ({n}× in 24h): finding a new parent could improve the situation":
         "{parent} redémarre ({n}× en 24 h) : rechercher un nouveau parent pourrait améliorer la situation",
     "{parent} detaches ({n}× in 24h): finding a new parent could improve the situation":
@@ -317,6 +317,10 @@ FR = {
     "{node}: looking for a better parent": "{node} : recherche d'un meilleur parent",
     "{node}: new parent not known yet": "{node} : résultat en attente de la node",
     "{node}: no answer from the node": "{node} : pas de réponse de la node",
+    "{node}: Thread restart of a router (trial), first link {link}": "{node} : relance du Thread d'un routeur (essai), premier lien {link}",
+    "{node}: Thread restarted, result in 3 minutes": "{node} : Thread relancé, résultat dans 3 minutes",
+    "{node}: Thread restarted, router again, first link {link} (before: {before})": "{node} : Thread relancé, de nouveau routeur, premier lien {link} (avant : {before})",
+    "{node}: Thread restarted, still an end device, first link {link} (before: {before})": "{node} : Thread relancé, encore appareil final, premier lien {link} (avant : {before})",
     "{node}: same parent {link}": "{node} : même parent {link}",
     "{node}: new parent {link}": "{node} : nouveau parent {link}",
     'Parent search already running': 'Recherche de parents déjà en cours',

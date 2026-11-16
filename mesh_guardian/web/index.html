@@ -291,11 +291,11 @@ const T = {
     best_tip:"Router: the neighbor it sends through towards the border router", link_tip:"End device: its parent. Router: the neighbor it sends through",
     parent_tip:"The router this end device sends all its traffic through", h_br:"Border router", hop1:"1 hop", hops:"{n} hops", hops_min:"at least", t_path:"Full path",
     drag_tip:"Drag to move the column", h_act:"Actions",
-    a_ping:"Ping", a_parent:"Find a new parent", a_interview:"Interview", a_remove:"Remove", a_remove_tip:"Remove",
+    a_ping:"Ping", a_parent:"Find a new link", a_interview:"Interview", a_remove:"Remove", a_remove_tip:"Remove",
     a_remove_confirm:"{n}: remove this node? It must be commissioned again.", a_remove_ok:"{n} removed",
-    a_ping_tip:"Ping", a_parent_tip:"Find a new parent",
-    a_interview_tip:"Reinterview", a_parent_router:"A router has no parent: nothing to search",
-    a_parent_confirm:"{n}: find a new parent? The new one may be weaker.", a_interview_confirm:"{n}: interview the node again? It can take a minute.",
+    a_ping_tip:"Ping", a_parent_tip:"Find a new link",
+    a_interview_tip:"Reinterview", a_parent_router:"Thread nodes only, except the leader",
+    a_parent_confirm:"{n}: find a new parent? The new one may be weaker.", a_parent_confirm_router:"{n} is a router: its Thread will restart (trial). Its end devices drop and attach elsewhere, and it can stay out of reach for 2 minutes. A router picks its routes by itself: a better link is not expected. Go on?", a_interview_confirm:"{n}: interview the node again? It can take a minute.",
     a_ping_ok:"{n}: answers the ping", a_ping_ko:"{n}: no answer to ping", a_interview_ok:"{n} interviewed again ({s} s)",
     a_parent_same:"{n}: same parent {l}", a_parent_unknown:"{n}: waiting for the node…",
     a_parent_unsupported:"{n}: parent search not supported", a_parent_failed:"{n}: parent search refused",
@@ -342,11 +342,11 @@ const T = {
     best_tip:"Routeur : le voisin par lequel il transmet vers le border router", link_tip:"Appareil final : son parent. Routeur : le voisin par lequel il transmet",
     parent_tip:"Le routeur par lequel cet appareil final fait passer tout son trafic", h_br:"Border router", hop1:"1 saut", hops:"{n} sauts", hops_min:"au moins", t_path:"Chemin complet",
     drag_tip:"Glisser pour déplacer la colonne", h_act:"Actions",
-    a_ping:"Ping", a_parent:"Recherche d'un nouveau parent", a_interview:"Ré-interviewer", a_remove:"Supprimer", a_remove_tip:"Supprimer",
+    a_ping:"Ping", a_parent:"Recherche d'un nouveau lien", a_interview:"Ré-interviewer", a_remove:"Supprimer", a_remove_tip:"Supprimer",
     a_remove_confirm:"{n} : supprimer cette node ? Il faudra l'appairer à nouveau.", a_remove_ok:"{n} supprimée",
-    a_ping_tip:"Ping", a_parent_tip:"Recherche d'un nouveau parent",
-    a_interview_tip:"Reinterview", a_parent_router:"Un routeur n'a pas de parent : rien à chercher",
-    a_parent_confirm:"{n} : rechercher un nouveau parent ? Le nouveau peut être moins bon.", a_interview_confirm:"{n} : ré-interviewer la node ? Ça peut prendre une minute.",
+    a_ping_tip:"Ping", a_parent_tip:"Recherche d'un nouveau lien",
+    a_interview_tip:"Reinterview", a_parent_router:"Réservé aux nodes Thread, sauf le leader",
+    a_parent_confirm:"{n} : rechercher un nouveau parent ? Le nouveau peut être moins bon.", a_parent_confirm_router:"{n} est un routeur : son Thread va redémarrer (essai). Ses nodes finales décrochent et se rattachent ailleurs, et il peut rester injoignable 2 minutes. Un routeur choisit seul ses routes : un meilleur lien n'est pas attendu. Continuer ?", a_interview_confirm:"{n} : ré-interviewer la node ? Ça peut prendre une minute.",
     a_ping_ok:"{n} : répond au ping", a_ping_ko:"{n} : pas de réponse au ping", a_interview_ok:"{n} ré-interviewée ({s} s)",
     a_parent_same:"{n} : même parent {l}", a_parent_unknown:"{n} : en attente de la node…",
     a_parent_unsupported:"{n} : recherche de parent non prise en charge", a_parent_failed:"{n} : recherche de parent refusée",
@@ -824,7 +824,8 @@ const ACT_ICON = {
   interview: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg>',
   remove: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 7V4h4v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>',
 };
-const canParent = r => net(r) === "thread" && !isRouter(r) && r.role !== "leader";
+// PROVISIONAL (2.12.0): routers too (trial); to go back, add "&& !isRouter(r)" again
+const canParent = r => net(r) === "thread" && r.role !== "leader";
 function actions(r) {
   const list = [["ping", true], ["parent", canParent(r)], ["interview", true], ["remove", true]];
   return `<span class="acts">${list.map(([a, ok]) => `<button class="act" data-act="${a}" data-node="${esc(r.id)}" ${ok ? "" : "disabled"}
@@ -833,7 +834,7 @@ function actions(r) {
 async function runAction(btn) {
   const a = btn.dataset.act, id = btn.dataset.node, r = (D.rows || []).find(x => x.id === id);
   if (!r) return;
-  if (a === "parent" && !confirm(F("a_parent_confirm", {n: r.name}))) return;
+  if (a === "parent" && !confirm(F(isRouter(r) ? "a_parent_confirm_router" : "a_parent_confirm", {n: r.name}))) return;
   if (a === "interview" && !confirm(F("a_interview_confirm", {n: r.name}))) return;
   if (a === "remove" && !confirm(F("a_remove_confirm", {n: r.name}))) return;
   document.querySelectorAll(`[data-act="${a}"][data-node="${id}"]`).forEach(b => { b.disabled = true; b.classList.add("busy"); });
@@ -847,9 +848,10 @@ async function runAction(btn) {
     else if (a === "remove") msg = F("a_remove_ok", {n: r.name});
     else {
       const k = ["better", "worse", "similar"].includes(res.result) ? "new" : res.result || "unknown";
+      if (res.result === "restarted") followSearch(id);   // router (provisional trial)
       // the parent (new or same) and its link now, as the table shows them
       const lk = [res.parent, res.lqi != null ? "LQI " + res.lqi : null, res.rssi != null ? res.rssi + " dBm" : null].filter(Boolean).join(" · ");
-      msg = F("a_parent_" + (res.parent ? k : k === "new" || k === "same" ? "unknown" : k), {n: r.name, l: lk});
+      msg = res.result === "restarted" ? res.text : F("a_parent_" + (res.parent ? k : k === "new" || k === "same" ? "unknown" : k), {n: r.name, l: lk});
       if (res.result === "unknown") followSearch(id);   // the add-on keeps reading the node: its result comes later
     }
   } catch (e) { msg = F("a_failed", {n: r.name}); }

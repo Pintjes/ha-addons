@@ -4,6 +4,13 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.12.0] - 2026-11-16
+
+### Changed
+
+- The button "Find a new parent" is now "Find a new link".
+- Trial, provisional: the button also works on a router (not on the leader). It restarts the Thread interface of the router, after a warning: its end devices drop and attach elsewhere, and a better link is not expected since a router picks its routes by itself. The result (router again or not, first link before and after) comes 3 minutes later. This will be removed if the trials show no benefit.
+
 ## [2.11.2] - 2026-11-16
 
 ### Fixed

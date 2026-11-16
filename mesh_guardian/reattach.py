@@ -40,6 +40,12 @@ FOLLOW_FOR_S = 300    # s: ...for this long
 RESULT_KEEP_S = 900   # s: a result stays in the table this long (the page shows it when it arrives)
 END_DEVICE_ROLES = (2, 3, 4)   # sleepy end device, end device, REED (a full end device attached as a child)
 CONNECT_NETWORK = 6   # Network Commissioning command id
+# PROVISIONAL (2.12.0, trial asked by the user): the same command on a router. A router has no
+# parent and picks its routes by itself, so no better link is expected; the trial is to see what
+# it does on a router that answers badly. To go back: remove ROUTER_ROLE, ROUTER_SETTLE_S, _row,
+# _router and _follow_router, the call in run_node, and in the page canParent / the router confirm.
+ROUTER_ROLE = 5       # Thread routing role "router" (the leader, 6, is left alone: a new leader would be elected)
+ROUTER_SETTLE_S = 180  # s: a router attaches as a child first and becomes a router again within 2 minutes
 PATHS = ["0/53/1", "0/53/7", "0/51/0", "0/49/1", "0/49/65529"]   # table and addresses read together: same moment
 
 
@@ -326,6 +332,90 @@ class Reattach:
         self._done(nid, name, "noanswer", text)
         self.w.emit("reattach_result", text, node=name, result="noanswer")
 
+    # ------------------------------------------------------------ router (provisional, see top)
+    def _row(self, nid):
+        """Row of the node in the table, read again."""
+        if not self.table:
+            return {}
+        rid = f"0x{nid.lstrip('0') or '0'}"
+        try:
+            self.table.cache_t = 0
+            return next((r for r in self.table.get(force=True).get("rows") or [] if r.get("id") == rid), {})
+        except Exception as err:  # noqa: BLE001
+            LOG.debug("table row of %s: %s", nid, err)
+            return {}
+
+    @staticmethod
+    def _first_link(row):
+        """(name, rssi, lqi) of the first link of a node: its parent, or the first hop of a router."""
+        if row.get("parent"):
+            return row.get("parent"), row.get("rssi"), row.get("lqi")
+        return row.get("best_link"), row.get("best_rssi"), row.get("best_lqi")
+
+    @staticmethod
+    def _link_text(link):
+        name, rssi, lqi = link
+        return " · ".join(x for x in (name, f"LQI {lqi}" if lqi is not None else None,
+                                      f"{rssi} dBm" if rssi is not None else None) if x) or "?"
+
+    def _router(self, nid, name, area):
+        """Restart the Thread interface of a router. Returns None when the node is not a router."""
+        node_id = int(nid, 16)
+        attrs = self._read(node_id)
+        if attrs.get("0/53/1") != ROUTER_ROLE:
+            return None
+        before = self._first_link(self._row(nid))
+        network = connected_network(attrs.get("0/49/1"))
+        if network is None or CONNECT_NETWORK not in (attrs.get("0/49/65529") or []):
+            return {"result": "unsupported"}
+        self.w.emit("reattach_node", t("{node}: Thread restart of a router (trial), first link {link}",
+                                       node=name, area=area, link=self._link_text(before)), node=name)
+        try:
+            self._reattach(node_id, network)
+        except NoAnswer as err:
+            LOG.debug("thread restart of %s: no answer to the connect command (%s)", name, err)
+            if not self.w.stop.wait(SETTLE_S):
+                try:
+                    self._command(node_id, 48, "CommissioningComplete", {}, timeout=30)
+                except Exception as err2:  # noqa: BLE001
+                    LOG.debug("commissioning complete of %s after no answer: %s", name, err2)
+        except Exception as err:  # noqa: BLE001
+            LOG.warning(t("{node}: parent search refused: {err}", node=name, area=area, err=err))
+            return {"result": "failed"}
+        text = t("{node}: Thread restarted, result in 3 minutes", node=name)
+        self.results[nid] = {"state": "pending", "text": text, "at": time.time()}
+        threading.Thread(target=self._follow_router, args=(nid, name, before), daemon=True, name="reattach-router").start()
+        return {"result": "restarted", "text": text}
+
+    def _follow_router(self, nid, name, before):
+        """Role and first link of the router once it had the time to become a router again."""
+        if self.w.stop.wait(ROUTER_SETTLE_S):
+            return
+        node_id = int(nid, 16)
+        try:
+            res = self.h.matter_command("read_attribute", {"node_id": node_id,
+                                                           "attribute_path": ["0/53/1", "0/53/7", "0/53/8", "0/51/0"]}, timeout=60)
+            if not isinstance(res, dict) or res.get("0/53/1") is None:
+                raise RuntimeError("no value")
+            if self.live:
+                for path, value in res.items():
+                    self.live.set_attribute(nid, path, value)
+                self.live.note_contact(nid, src="read")
+            row = self._row(nid)
+            again = row.get("role") in ("router", "leader")
+            text = (t("{node}: Thread restarted, router again, first link {link} (before: {before})", node=name,
+                      link=self._link_text(self._first_link(row)), before=self._link_text(before)) if again else
+                    t("{node}: Thread restarted, still an end device, first link {link} (before: {before})", node=name,
+                      link=self._link_text(self._first_link(row)), before=self._link_text(before)))
+            result = "restarted"
+        except Exception as err:  # noqa: BLE001
+            LOG.debug("read after thread restart of %s: %s", name, err)
+            text, result = t("{node}: no answer from the node", node=name), "noanswer"
+        self.results[nid] = {"state": "done", "result": result, "text": text, "at": time.time()}
+        if self.table:
+            self.table.cache_t = 0
+        self.w.emit("reattach_result", text, node=name, result=result)
+
     def run_node(self, nid):
         """Parent search for one node, asked from the node table: done even when its link is
         not poor (the user chose). Returns the result dict, or {"result": "router"} when
@@ -340,6 +430,12 @@ class Reattach:
             except Exception as err:  # noqa: BLE001 - asleep or out of reach
                 LOG.debug("parent search of %s: %s", nid, err)
                 return {"result": "noanswer"}
+            if row is None:   # not an end device: a router (provisional trial), or nothing to do
+                try:
+                    row = self._router(nid, n.get("name") or f"0x{nid.lstrip('0')}", n.get("area", "?"))
+                except Exception as err:  # noqa: BLE001
+                    LOG.debug("thread restart of %s: %s", nid, err)
+                    return {"result": "noanswer"}
             return row or {"result": "router"}
         finally:
             self.busy.release()
