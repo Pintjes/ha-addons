@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.9.8] - 2026-11-16
+
+### Added
+
+- The "Seen" button also hides the orange network notes (e.g. a border router that detaches). A hidden note comes back when it changes.
+
 ## [2.9.7] - 2026-11-15
 
 ### Fixed

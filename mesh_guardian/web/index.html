@@ -555,20 +555,21 @@ function renderTodo() {
   if (n.storm) net.push(["warn", L("storm")]);
   if (n.routing_problem) net.push(["bad", n.routing_problem]);
   // notes about the network itself (border routers, unknown nodes); "info" is not something to handle
-  for (const [k, txt] of n.notes || []) net.push([k, txt]);
+  for (const [k, txt] of n.notes || []) net.push([k, txt, true]);   // true: a note, can be hidden with "Seen"
   const groups = todoGroups(issues);
   // one section, "good to know" notes included (those hidden with "Seen" not counted)
   const seenSet = new Set(P.seen || []);
-  const total = groups.length + net.filter(x => x[0] !== "info" || !seenSet.has(x[1])).length;
+  const total = groups.length + net.filter(x => !x[2] || !seenSet.has(x[1])).length;
   $("#todoTitle").textContent = total ? F("todo", {n: total}) : L("todo_none");
   net.sort((a, b) => (a[0] === "info") - (b[0] === "info"));
-  // "good to know" notes can be hidden ("seen"); a note that changes comes back
+  // notes can be hidden ("seen"), the orange ones too; a note that changes comes back
   const seen = new Set(P.seen || []);
   const infoCards = net.filter(x => x[0] === "info" && !seen.has(x[1])).map(([k, txt]) => `<div class="card issue info"><span class="ic">${IC.info}</span>
       <span style="flex:1"><span class="what" style="display:block">${L("w_info")}</span><span>${esc(txt)}</span></span>
       <button class="seen" data-seen="${esc(txt)}" title="${esc(L("seen_tip"))}">${esc(L("seen"))}</button></div>`).join("");
-  $("#todo").innerHTML = net.filter(x => x[0] !== "info").map(([k, txt]) => `<div class="card issue ${k}"><span class="ic">${k === "bad" ? IC.bad : IC.warn}</span>
-      <span><span class="what" style="display:block">${L("w_net")}</span><span>${esc(txt)}</span></span></div>`).join("") +
+  $("#todo").innerHTML = net.filter(x => x[0] !== "info" && !(x[2] && seen.has(x[1]))).map(([k, txt, note]) => `<div class="card issue ${k}"><span class="ic">${k === "bad" ? IC.bad : IC.warn}</span>
+      <span style="flex:1"><span class="what" style="display:block">${L("w_net")}</span><span>${esc(txt)}</span></span>${note
+      ? `<button class="seen" data-seen="${esc(txt)}" title="${esc(L("seen_tip"))}">${esc(L("seen"))}</button>` : ""}</div>`).join("") +
     groups.map(({rows}) => {
       const r = rows[0];
       if (rows.length > 1) return `<button class="card issue info" data-id="${esc(r.id)}" title="${esc(r.advice_detail || "")}"><span class="ic">${IC.bulb}</span>
@@ -994,7 +995,7 @@ document.addEventListener("click", e => {
   const act = e.target.closest("button[data-act]");
   if (act) { e.stopPropagation(); if (!act.disabled) runAction(act); return; }
   const sn = e.target.closest("button[data-seen]");
-  if (sn) {   // hide a "good to know" note; the list only keeps the notes still shown
+  if (sn) {   // hide a note; the list only keeps the notes still shown
     const shown = new Set(((D.network || {}).notes || []).map(x => x[1]));
     P.seen = [...new Set([...(P.seen || []).filter(x => shown.has(x)), sn.dataset.seen])];
     save(); return renderTodo();
