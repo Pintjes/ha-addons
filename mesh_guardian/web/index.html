@@ -309,6 +309,8 @@ const T = {
     d_power:"Power", mains:"mains", battery:"battery", bat_level:["ok", "low", "critical"], d_last:"Last contact",
     sig7:"Signal · last 7 days", resp7:"Response · last 7 days", outages:"Outages", pchanges:"Parent changes", none:"none", ongoing:"ongoing",
     hist_wait:"History available within 15 min.", now:"now", d7:"7 d ago", average:"average", threshold:"weak threshold", off_scale:"off scale",
+    srv_t:"Matter Server · 24h", srv_sub:"Subscriptions lost", srv_session:"Sessions closed", srv_off:"Offline for the Matter Server", srv_unreach:"Address unreachable", srv_ping:"Pings without answer", srv_addr:"Address used",
+    srv_cover:"Counted since {t}", srv_missed:"log not read for {d}", srv_none:"The Matter Server log is not read: nothing is counted.", srv_now:"offline now", t_srv:"Losses 24h", srv_tip:"Subscriptions lost and sessions closed, read in the Matter Server log",
     tech:"Technical details", t_id:"Id", t_rloc:"RLOC16", t_nb:"Neighbors", t_weak:"Weak links", t_det:"Detaches 24h", t_pch:"Parent changes 24h",
     t_partch:"Partition changes 24h", t_out:"Outages 24h · 7d", t_down:"Downtime 7d", t_reb:"Reboots total · 24h", t_boot:"Last boot reason", t_up:"Uptime",
     t_src:"Last contact source", t_gap:"Longest silence", copy:"Copy", copied:"Copied", download:"Download", report_tip:"Anonymized report (no names, areas or addresses) to paste in an issue",
@@ -358,6 +360,8 @@ const T = {
     d_power:"Alimentation", mains:"secteur", battery:"pile", bat_level:["ok", "faible", "critique"], d_last:"Dernier contact",
     sig7:"Signal · 7 derniers jours", resp7:"Réponse · 7 derniers jours", outages:"Coupures", pchanges:"Changements de parent", none:"aucun", ongoing:"en cours",
     hist_wait:"Historique disponible dans 15 min au plus.", now:"maintenant", d7:"il y a 7 j", average:"moyenne", threshold:"seuil faible", off_scale:"hors échelle",
+    srv_t:"Matter Server · 24 h", srv_sub:"Abonnements perdus", srv_session:"Sessions fermées", srv_off:"Hors ligne pour le Matter Server", srv_unreach:"Adresse injoignable", srv_ping:"Pings sans réponse", srv_addr:"Adresse utilisée",
+    srv_cover:"Compté depuis {t}", srv_missed:"journal non lu pendant {d}", srv_none:"Le journal du Matter Server n'est pas lu : rien n'est compté.", srv_now:"hors ligne maintenant", t_srv:"Pertes 24 h", srv_tip:"Abonnements perdus et sessions fermées, lus dans le journal du Matter Server",
     tech:"Détails techniques", t_id:"Id", t_rloc:"RLOC16", t_nb:"Voisins", t_weak:"Liens faibles", t_det:"Décrochages 24 h", t_pch:"Chgt de parent 24 h",
     t_partch:"Chgt de partition 24 h", t_out:"Coupures 24 h · 7 j", t_down:"Indisponibilité 7 j", t_reb:"Redémarrages total · 24 h", t_boot:"Raison du dernier démarrage", t_up:"En marche depuis",
     t_src:"Source du dernier contact", t_gap:"Plus long silence", copy:"Copier", copied:"Copié", download:"Télécharger", report_tip:"Rapport anonymisé (sans noms, pièces ni adresses) à coller dans une issue",
@@ -662,6 +666,7 @@ const COLS = [
   {k:"route", lab:"to_ha", w:"minmax(170px, 1.5fr)", x:true, h:r => aged(r.link_old && r.route, r.link_t, esc(route(r) || "—")), s:r => r.route ? r.route.cost : null},
   {k:"nb", lab:"t_nb", w:"80px", r:true, x:true, h:r => n0(r.neighbors), s:r => r.neighbors},
   {k:"weak", lab:"t_weak", w:"90px", r:true, x:true, h:r => n0(r.weak), s:r => r.weak},
+  {k:"srv", lab:"t_srv", w:"96px", r:true, x:true, h:r => r.server ? `<span title="${esc(L("srv_tip"))}">${n0(r.server.sub + r.server.session)}</span>` : n0(null), s:r => r.server ? r.server.sub + r.server.session : null},
   {k:"det", lab:"t_det", w:"100px", r:true, x:true, h:r => aged(r.counters_old && r.detaches_24h != null, r.counters_t, n0(r.detaches_24h)), s:r => r.detaches_24h},
   {k:"pch", lab:"t_pch", w:"110px", r:true, x:true, h:r => aged(r.counters_old && r.parent_changes_24h != null, r.counters_t, n0(r.parent_changes_24h)), s:r => r.parent_changes_24h},
   {k:"out", lab:"t_out", w:"120px", r:true, x:true, h:r => `${r.outages_24h ?? "—"} · ${r.outages_7d ?? "—"}`, s:r => (r.outages_24h || 0) * 1000 + (r.outages_7d || 0)},
@@ -935,7 +940,14 @@ async function openNode(id) {
   const top = head(esc(r.name), [r.area, r.model].filter(Boolean).map(esc).join(" · "), `<div style="margin-top:8px">${status(r)}</div>`) + adv + grid(kv) +
     `<div class="sheet-acts">${[["ping", true], ["parent", canParent(r)], ["interview", true], ["remove", true]].map(([a, ok]) =>
       `<button class="btn act" data-act="${a}" data-node="${esc(r.id)}" ${ok ? "" : "disabled"} title="${esc(ok ? L("a_" + a + "_tip") : L("a_parent_router"))}">${ACT_ICON[a]}<span>${L("a_" + a)}</span></button>`).join("")}</div>`;
-  const techBlock = `<details><summary>${L("tech")}</summary>${grid(tech)}</details>`;
+  // what the Matter Server log says of the node over 24h (subscriptions lost, sessions closed…)
+  const sv = r.server;
+  const cover = sv ? [D.time - sv.since < 86000 ? F("srv_cover", {t: dt(sv.since)}) : "", sv.missed_s > 60 ? F("srv_missed", {d: dur1(sv.missed_s)}) : ""].filter(Boolean).join(" · ") : "";
+  const srvBlock = `<h2>${L("srv_t")}</h2>` + (!sv ? `<p class="mut">${L("srv_none")}</p>` : grid([[L("srv_sub"), sv.sub], [L("srv_session"), sv.session],
+    [L("srv_off"), sv.offline ? `${sv.offline}× · ${dur1(sv.offline_s)}` + (sv.offline_since ? ` <small class="mut">(${esc(L("srv_now"))})</small>` : "") : "0"],
+    [L("srv_unreach"), sv.unreachable], [L("srv_ping"), sv.ping], [L("srv_addr"), sv.address ? `<small>${esc(sv.address)}</small>` : "—"]]) +
+    (cover ? `<p class="mut"><small>${esc(cover)}</small></p>` : ""));
+  const techBlock = srvBlock + `<details><summary>${L("tech")}</summary>${grid(tech)}</details>`;
   openSheet(top + `<p class="mut">${L("loading")}</p>` + techBlock);
   try {
     const d = await (await fetch("api/node?id=" + encodeURIComponent(id), {cache: "no-store"})).json();

@@ -495,13 +495,34 @@ What it reads:
 - the Supervisor log, through one stream kept open (no polling). Only the
   lines about a stop, an exit, an update or a start of the Matter Server or of
   Home Assistant are used; nothing else is kept;
-- the name of the Matter Server add-on.
+- the name, version and log level of the Matter Server add-on;
+- the log of the Matter Server, through one stream kept open. A line is read,
+  counted and dropped: no text of the log is kept, only numbers per node and
+  per hour, and the last address the Matter Server used for the node.
 
 What it never does: start, stop, restart, update or configure another add-on,
 or read another add-on's options.
 
 If the log cannot be read, restarts are still detected by the add-on's live
-link to the Matter Server, without the cause. `/api/supervisor` (through
+link to the Matter Server, without the cause.
+
+**Matter Server · 24h** (node panel, and the optional *Losses 24h* column).
+Home Assistant only shows a node as unavailable after a while. Before that,
+the Matter Server already wrote what went wrong; the add-on counts it per node
+over 24 hours:
+
+| Count | Meaning |
+|-------|---------|
+| Subscriptions lost | the node sent no report in the time it had promised |
+| Sessions closed | the node stopped answering, the Matter Server closed its session |
+| Offline for the Matter Server | how many times and for how long, even a few seconds |
+| Address unreachable | the address of the node could not be reached or was not known |
+| Pings without answer | a ping of the node got no answer |
+
+A node with many of these and no outage in Home Assistant has a fragile link.
+The counts need the Matter Server log level `info` (its default). They only
+cover the time the log was read: the panel says since when, and for how long
+it was not read. `/api/supervisor` (through
 ingress) shows what was read: state of the stream, number of lines, restarts
 found.
 

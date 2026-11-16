@@ -469,6 +469,7 @@ class NodeTable:
         # a router has no parent: the link shown is the one it really sends through
         best = hop_links(thread, routes, parent_of, rlocs, src_h)
         named = bool(meta)
+        ml = getattr(self.w, "matterlog", None)
 
         def given(pairs):
             """When the nodes gave these values: the oldest time, None if one is not known."""
@@ -567,6 +568,7 @@ class NodeTable:
                 up_t = self.live.stamp(nid, "0/51/2")
             rows.append({
                 "network": "thread",
+                "server": ml.node(nid, now) if ml else None,   # what the Matter Server log says of the node (24h)
                 "link_t": link_t, "link_old": bool(p or bl) and is_old(link_t),
                 "counters_t": cnt_t, "counters_old": is_old(cnt_t),
                 "uptime_t": up_t, "uptime_old": uptime is not None and is_old(up_t),
@@ -715,7 +717,9 @@ class NodeTable:
 
         def old(when):
             return when is None or now - when > OLD_S
+        ml = getattr(self.w, "matterlog", None)
         return {
+            "server": ml.node(nid, now) if ml else None,
             "link_t": link_t, "link_old": wifi and a.get("0/54/4") is not None and old(link_t),
             "counters_t": None, "counters_old": False,
             "uptime_t": up_t, "uptime_old": uptime is not None and old(up_t),

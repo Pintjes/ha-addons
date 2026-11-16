@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.11.0] - 2026-11-16
+
+### Added
+
+- The add-on follows the log of the Matter Server and counts, per node over 24 hours, what Home Assistant does not show: subscriptions lost, sessions closed, how many times and how long the node was offline for the Matter Server, addresses that could not be reached, pings without answer, and the address the Matter Server uses. Shown in the node panel ("Matter Server · 24h") and in an optional column "Losses 24h". No text of the log is kept, only the counts.
+
 ## [2.10.7] - 2026-11-16
 
 ### Added

@@ -72,10 +72,11 @@ from reattach import Reattach  # noqa: E402
 from history import History  # noqa: E402
 from radio import Radio  # noqa: E402
 from storm import Storm  # noqa: E402
+from matterlog import MatterLog  # noqa: E402
 from suplog import SupervisorLog  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.10.7"
+VERSION = "2.11.0"
 
 _MQ = _load_mqtt()
 MQTT_HOST = _MQ.get("host") or os.environ.get("MQTT_HOST", "core-mosquitto")
@@ -1510,6 +1511,7 @@ class Watch:
             else:
                 LOG.warning(t("Matter fabric not found: every node followed"))
         self.suplog = SupervisorLog(self)
+        self.matterlog = MatterLog(self)
         self.advice_on = bool(OPTIONS.get("advice", True))   # option: advice for the available nodes
         client.reconnect_delay_set(1, 60)
         client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=60)
@@ -1522,7 +1524,7 @@ class Watch:
         threads = [threading.Thread(target=f, daemon=True, name=f.__name__)
                    for f in (self.worker, self.worker, self.prober, self.publisher, self.confirmer,
                              self.healer.run, self.healer.run_sweeper, self.radio.run, self.radio.run_leader,
-                             self.labels.run, self.live.run, self.suplog.run, self.table.run, self.webui.run,
+                             self.labels.run, self.live.run, self.suplog.run, self.matterlog.run, self.table.run, self.webui.run,
                              self.quality.run_probe, self.quality.run_sniffer, self.quality.run_score,
                              self.history.run)]
         for th in threads:
@@ -1544,6 +1546,7 @@ class Watch:
             time.sleep(1)
         try:
             self.live.save_fresh()
+            self.matterlog.save()
         except Exception:  # noqa: BLE001
             pass
         for b in self.browsers.values():

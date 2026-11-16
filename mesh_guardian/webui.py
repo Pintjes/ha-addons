@@ -86,7 +86,9 @@ class WebUI:
                         self._send(400, json.dumps({"error": str(err)}, ensure_ascii=False))
                 elif path == "/api/supervisor":   # diagnostics: restarts read in the Supervisor log
                     sup = getattr(ui.w, "suplog", None)
-                    self._send(200, json.dumps(sup.summary() if sup else {}, ensure_ascii=False))
+                    ml = getattr(ui.w, "matterlog", None)
+                    self._send(200, json.dumps({**(sup.summary() if sup else {}),
+                                                "matter_log": ml.summary() if ml else {}}, ensure_ascii=False))
                 elif path == "/api/report":
                     try:
                         import report
