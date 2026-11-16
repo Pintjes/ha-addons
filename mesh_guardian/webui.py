@@ -16,17 +16,54 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from i18n import t
+from pairing import Pairing, identity
 
 LOG = logging.getLogger("mg.web")
 PORT = 8790
 ALLOWED = {"172.30.32.2", "127.0.0.1", "::1"}
-PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "index.html")
+WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+PAGE = os.path.join(WEB, "index.html")
+SCRIPTS = ("jsqr.js", "qrcode.js")   # QR code reader and writer, loaded by the page when a pairing code needs them
 
 
 class WebUI:
     def __init__(self, watch, table):
         self.w = watch
         self.table = table
+        self.pairing = Pairing()
+
+    def _node(self, nid):
+        """(ids of the nodes there now, attributes of this node, its name, area and model)."""
+        nodes = self.table._nodes()
+        present = {f"{int(n.get('node_id', 0)):016X}" for n in nodes}
+        attrs = next(((n.get("attributes") or {}) for n in nodes if f"{int(n.get('node_id', 0)):016X}" == nid), {})
+        rid = f"0x{nid.lstrip('0') or '0'}"
+        row = next((r for r in self.table.get().get("rows") or [] if r.get("id") == rid), {})
+        return present, attrs, row.get("name") or "", row.get("area") or "", row.get("model") or ""
+
+    def pairing_get(self, nid):
+        """Pairing code of a node and the kept codes it could take; without node, every code
+        whose node is gone (the ones needed to pair a device again)."""
+        if nid is None:
+            present = {f"{int(n.get('node_id', 0)):016X}" for n in self.table._nodes()}
+            return {"free": self.pairing.free(present), "count": self.pairing.count()}
+        present, attrs, name, area, model = self._node(nid)
+        ident = identity(attrs)
+        code = self.pairing.of(nid, attrs, present)
+        if code:
+            self.pairing.refresh(nid, attrs, name, area, model)
+        return {"code": code, "free": [] if code else self.pairing.free(present, ident["vid"], ident["pid"])}
+
+    def pairing_post(self, body):
+        if body.get("delete"):
+            return {"ok": self.pairing.delete(str(body["delete"]))}
+        nid = f"{int(str(body.get('id')), 16):016X}"
+        present, attrs, name, area, model = self._node(nid)
+        if nid not in present:
+            raise ValueError("node")
+        if body.get("attach"):
+            return {"ok": True, "code": self.pairing.attach(str(body["attach"]), nid, attrs, name, area, model)}
+        return {"ok": True, "code": self.pairing.set(nid, attrs, present, str(body.get("code") or ""), name, area, model)}
 
     def _handler(self):
         ui = self
@@ -63,6 +100,19 @@ class WebUI:
                         self._send(500, '{"error": "page not found"}')
                 elif path == "/favicon.ico":
                     self._send(204, b"", "image/x-icon")
+                elif path.lstrip("/") in SCRIPTS:
+                    try:
+                        with open(os.path.join(WEB, path.lstrip("/")), "rb") as f:
+                            self._send(200, f.read(), "text/javascript; charset=utf-8")
+                    except OSError:
+                        self._send(404, '{"error": "not found"}')
+                elif path == "/api/pairing":   # pairing code of a node (never in the log nor in the report)
+                    try:
+                        nid = f"{int(query.split('id=')[1].split('&')[0], 16):016X}" if "id=" in query else None
+                        self._send(200, json.dumps(ui.pairing_get(nid), ensure_ascii=False))
+                    except Exception as err:  # noqa: BLE001
+                        LOG.debug("pairing code: %s", type(err).__name__)
+                        self._send(400, '{"error": "pairing"}')
                 elif path == "/api/table":
                     try:
                         data = ui.table.get(force="force=1" in query)
@@ -153,6 +203,17 @@ class WebUI:
                     q = getattr(ui.w, "quality", None)
                     started = bool(q and q.reread_all())
                     return self._send(200, json.dumps({"started": started}))
+                if path == "/api/pairing":   # keep, attach or delete a pairing code
+                    try:
+                        n = int(self.headers.get("Content-Length") or 0)
+                        body = json.loads(self.rfile.read(min(n, 4096)) or b"{}")
+                        return self._send(200, json.dumps(ui.pairing_post(body), ensure_ascii=False))
+                    except ValueError as err:   # format, check, device or node: said to the user, the code is not logged
+                        why = str(err) if str(err) in ("format", "check", "device", "node") else "format"
+                        return self._send(200, json.dumps({"ok": False, "error": why}))
+                    except Exception as err:  # noqa: BLE001
+                        LOG.warning("pairing code: %s", type(err).__name__)
+                        return self._send(200, '{"ok": false, "error": "error"}')
                 if path == "/api/br_forget":   # remove an offline border router from the list
                     try:
                         n = int(self.headers.get("Content-Length") or 0)

@@ -418,6 +418,37 @@ names, areas, addresses or prefixes) to copy or download and paste in an issue.
 - **Interview** — the Matter Server reads again everything the node describes
   (endpoints, clusters, attributes); useful after a firmware update.
 
+### Pairing codes
+
+A node cannot be asked for the code it was paired with, and Home Assistant
+does not keep it: after a factory reset the label of the device is the only
+way back, and the device may be in a wall box or on a ceiling. The node panel
+has a **Pairing code** block to keep it:
+
+- drop a photo of the QR code on the panel (or choose one, or paste it): the
+  QR code is read in your browser, the photo is not sent anywhere;
+- or type the code (11 or 21 digits, or the `MT:…` text of the QR code). A
+  mistyped digit is refused, and so is the QR code of another product.
+
+The panel then shows the QR code and the code in digits, with a Copy button.
+From a typed code only the digits are shown: they do not hold what a QR code
+needs.
+
+The codes are kept by the add-on (`/data/pairing_codes.json`), not in the
+Matter Server: they survive the reset or the removal of the node, an update
+and a restart of the add-on. They are lost if the add-on is uninstalled, and
+they are part of its backup. They are never written to the log, the events or
+the report.
+
+A device that is paired again gets a new node id. Its code follows it when
+the device reports a serial number; otherwise by its hardware address or
+unique id, which some devices change at a reset. When nothing matches, the
+code waits under **Pairing codes** (top of the page), where you read it to
+pair the device again, and the panel of the new node offers to attach it.
+
+Anyone who can open the Mesh Guardian page can read these codes: a pairing
+code gives full control of a device once it is reset.
+
 ### Silent nodes
 
 A node gives a sign of life at a steady pace (about every minute for most mains

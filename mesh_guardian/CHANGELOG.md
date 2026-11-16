@@ -4,6 +4,13 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.14.0] - 2026-11-16
+
+### Added
+
+- Pairing codes: the node panel keeps the code printed on the device, given by a photo of the QR code (dropped, chosen or pasted; read in the browser) or typed. It then shows the QR code and the code in digits, to pair the device again after a reset without reaching its label. The codes are kept by the add-on and survive the reset or removal of the node; a "Pairing codes" button lists those of the devices that left the table. They never appear in the log, the events or the report.
+- The page ships jsQR 1.4.0 (Apache-2.0) and qrcode-generator 1.4.4 (MIT) to read and draw QR codes locally; they are loaded only when a pairing code needs them.
+
 ## [2.13.1] - 2026-11-16
 
 ### Fixed

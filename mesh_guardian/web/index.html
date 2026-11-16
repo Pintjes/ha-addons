@@ -211,6 +211,17 @@
   .apf input { flex: 1; min-width: 0; min-height: 36px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); padding: 0 8px; }
   .apf .btn { min-height: 36px; padding: 0 10px; }
   .kv div:has(.apf) { grid-column: 1 / -1; }
+  .pcdrop { margin-top: 10px; border: 2px dashed var(--line); border-radius: 10px; padding: 14px; text-align: center; color: var(--mut); }
+  .pcdrop.over { border-color: var(--acc); background: var(--acc-soft); }
+  .pcdrop .btn { display: inline-flex; align-items: center; min-height: 32px; padding: 0 10px; cursor: pointer; }
+  .pcf, .pca { display: flex; gap: 6px; margin-top: 8px; }
+  .pcf input, .pca select { flex: 1; min-width: 0; min-height: 36px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--txt); padding: 0 8px; }
+  .pcf .btn, .pca .btn, .pcbtns .btn, .pccard .btn { min-height: 36px; padding: 0 10px; }
+  .pccard { display: flex; gap: 14px; align-items: center; margin-top: 12px; }
+  .pccard .qrbox { width: 132px; height: 132px; flex: none; }
+  .pccard .qr { width: 100%; height: 100%; display: block; border-radius: 6px; }
+  .pccode { font: 600 19px ui-monospace, monospace; user-select: all; display: inline-block; margin: 2px 0 6px; }
+  .pcbtns { display: flex; gap: 8px; margin: 10px 0 0; }
   .acts { display: inline-grid; grid-template-columns: repeat(2, 28px); gap: 4px; }
   .act[data-act="remove"]:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); }
   .act { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--mut);
@@ -239,6 +250,7 @@
     <span class="live" id="live"></span>
     <span class="sp"></span>
     <button class="btn" id="refresh"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg><span></span></button>
+    <button class="btn" id="codes"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2zM18 14h2M14 18v2"/></svg><span></span></button>
     <button class="btn" id="report"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg><span></span></button>
   </div>
 
@@ -319,6 +331,14 @@ const T = {
     tech:"Technical details", t_id:"Id", t_rloc:"RLOC16", t_nb:"Neighbors", t_weak:"Weak links", t_det:"Detaches 24h", t_pch:"Parent changes 24h",
     t_partch:"Partition changes 24h", t_out:"Outages 24h · 7d", t_down:"Downtime 7d", t_reb:"Reboots total · 24h", t_boot:"Last boot reason", t_up:"Uptime",
     t_src:"Last contact source", t_gap:"Longest silence", copy:"Copy", copied:"Copied", download:"Download", report_tip:"Anonymized report (no names, areas or addresses) to paste in an issue",
+    pc_t:"Pairing code", pc_tip:"Kept by the add-on: the device can be paired again after a reset without reaching its label",
+    pc_drop:"Drop a photo of the QR code here, or", pc_pick:"choose a photo", pc_ph:"or type the code: 1234-567-8901 or MT:…",
+    pc_none_qr:"Typed code: no QR code to show", pc_replace:"Replace", pc_delete:"Delete", pc_delete_confirm:"Delete this pairing code?",
+    pc_saved:"Pairing code saved", pc_deleted:"Pairing code deleted", pc_reading:"Reading the photo…", pc_noqr:"No QR code found in this photo",
+    pc_e_format:"This is not a Matter pairing code", pc_e_check:"Wrong code: a digit is mistyped", pc_e_device:"This QR code is the one of another product",
+    pc_e_node:"Node not found", pc_e_error:"Error", pc_attach:"A code kept for a device that left the table: give it to this node if it is the same device", pc_attach_btn:"Attach",
+    pc_list:"Pairing codes", pc_list_tip:"Codes of the devices that left the table (removed or reset): what is needed to pair them again",
+    pc_list_none:"No code waiting: every code kept belongs to a node of the table.", pc_count:"Codes kept in all: {n}",
     note_t:"About these values", note:"Radio values: latest reports of the nodes. Battery nodes update less often (see Last contact). The page refreshes every minute.",
     roles:{leader:"Leader router", router:"Router", reed:"End", end_device:"End", sleepy_end_device:"Sleepy end", unassigned:"unassigned", unspecified:"unspecified", detached:"detached", child:"End device", offline:"offline"},
     boot:{unspecified:"unspecified", power_on:"power on", brown_out:"brown-out", software_watchdog:"software watchdog", hardware_watchdog:"hardware watchdog", software_update:"software update", software_reset:"software reset"},
@@ -375,6 +395,14 @@ const T = {
     tech:"Détails techniques", t_id:"Id", t_rloc:"RLOC16", t_nb:"Voisins", t_weak:"Liens faibles", t_det:"Décrochages 24 h", t_pch:"Chgt de parent 24 h",
     t_partch:"Chgt de partition 24 h", t_out:"Coupures 24 h · 7 j", t_down:"Indisponibilité 7 j", t_reb:"Redémarrages total · 24 h", t_boot:"Raison du dernier démarrage", t_up:"En marche depuis",
     t_src:"Source du dernier contact", t_gap:"Plus long silence", copy:"Copier", copied:"Copié", download:"Télécharger", report_tip:"Rapport anonymisé (sans noms, pièces ni adresses) à coller dans une issue",
+    pc_t:"Code d'appairage", pc_tip:"Conservé par l'add-on : l'appareil peut être appairé à nouveau après une réinitialisation sans accéder à son étiquette",
+    pc_drop:"Déposer ici une photo du QR code, ou", pc_pick:"choisir une photo", pc_ph:"ou saisir le code : 1234-567-8901 ou MT:…",
+    pc_none_qr:"Code saisi : pas de QR code à afficher", pc_replace:"Remplacer", pc_delete:"Supprimer", pc_delete_confirm:"Supprimer ce code d'appairage ?",
+    pc_saved:"Code d'appairage enregistré", pc_deleted:"Code d'appairage supprimé", pc_reading:"Lecture de la photo…", pc_noqr:"Aucun QR code trouvé dans cette photo",
+    pc_e_format:"Ce n'est pas un code d'appairage Matter", pc_e_check:"Code erroné : un chiffre est mal saisi", pc_e_device:"Ce QR code est celui d'un autre produit",
+    pc_e_node:"Node introuvable", pc_e_error:"Erreur", pc_attach:"Code conservé pour un appareil sorti du tableau : le rattacher à cette node si c'est le même appareil", pc_attach_btn:"Rattacher",
+    pc_list:"Codes d'appairage", pc_list_tip:"Codes des appareils sortis du tableau (supprimés ou réinitialisés) : ce qu'il faut pour les appairer à nouveau",
+    pc_list_none:"Aucun code en attente : chaque code conservé appartient à une node du tableau.", pc_count:"Codes conservés au total : {n}",
     note_t:"À propos de ces valeurs", note:"Valeurs radio : derniers rapports des nodes. Sur pile, mises à jour moins fréquentes (voir « Dernier contact »). Page actualisée chaque minute.",
     roles:{leader:"Routeur leader", router:"Routeur", reed:"Final", end_device:"Final", sleepy_end_device:"Final dormant", unassigned:"non attribué", unspecified:"non précisé", detached:"détaché", child:"Appareil final", offline:"hors ligne"},
     boot:{unspecified:"non précisée", power_on:"mise sous tension", brown_out:"baisse de tension", software_watchdog:"watchdog logiciel", hardware_watchdog:"watchdog matériel", software_update:"mise à jour", software_reset:"redémarrage logiciel"},
@@ -963,7 +991,8 @@ async function openNode(id) {
     [L("t_src"), r.contact_src ? esc(L("csrc")[r.contact_src] || r.contact_src) : "—"], [L("t_gap"), r.active_gap_max_s == null ? "—" : dur(Math.round(r.active_gap_max_s / 60))]];
   const top = head(esc(r.name), [r.area, r.model].filter(Boolean).map(esc).join(" · "), `<div style="margin-top:8px">${status(r)}</div>`) + adv + grid(kv) +
     `<div class="sheet-acts">${nodeActs(r).map(([a, ok]) =>
-      `<button class="btn act" data-act="${a}" data-node="${esc(r.id)}" ${ok ? "" : "disabled"} title="${esc(ok ? L("a_" + a + "_tip") : L("a_parent_router"))}">${ACT_ICON[a]}<span>${L("a_" + a)}</span></button>`).join("")}</div>`;
+      `<button class="btn act" data-act="${a}" data-node="${esc(r.id)}" ${ok ? "" : "disabled"} title="${esc(ok ? L("a_" + a + "_tip") : L("a_parent_router"))}">${ACT_ICON[a]}<span>${L("a_" + a)}</span></button>`).join("")}</div>` +
+    `<h2 title="${esc(L("pc_tip"))}">${L("pc_t")}</h2><div id="pair"></div>`;
   // what the Matter Server log says of the node over 24h (subscriptions lost, sessions closed…)
   const sv = r.server;
   const cover = sv ? [D.time - sv.since < 86000 ? F("srv_cover", {t: dt(sv.since)}) : "", sv.missed_s > 60 ? F("srv_missed", {d: dur1(sv.missed_s)}) : ""].filter(Boolean).join(" · ") : "";
@@ -973,6 +1002,7 @@ async function openNode(id) {
     (cover ? `<p class="mut"><small>${esc(cover)}</small></p>` : ""));
   const techBlock = srvBlock + `<details><summary>${L("tech")}</summary>${grid(tech)}</details>`;
   openSheet(top + `<p class="mut">${L("loading")}</p>` + techBlock);
+  loadPair(id);
   try {
     const d = await (await fetch("api/node?id=" + encodeURIComponent(id), {cache: "no-store"})).json();
     if (!$("#sheet").classList.contains("on")) return;
@@ -990,6 +1020,7 @@ async function openNode(id) {
   } catch (e) {
     $("#sheet").innerHTML = top + `<p class="mut">${L("error")}</p>` + techBlock;
   }
+  renderPair();   // the panel was drawn again: its pairing block too
 }
 
 // panel of a border router: everything known about it, and "Remove" when it is offline
@@ -1033,6 +1064,110 @@ async function removeBr(id) {
   await load(true);
 }
 
+// ------------------------------------------------------------ pairing codes
+// The code printed on a device, kept by the add-on: given once (photo of the QR code, read here
+// in the browser, or typed), shown again the day the device must be paired again.
+const scripts = {};
+const needScript = src => scripts[src] || (scripts[src] = new Promise((ok, ko) => {
+  const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = ko; document.head.appendChild(s); }));
+const manualFmt = m => m && m.length === 11 ? `${m.slice(0, 4)}-${m.slice(4, 7)}-${m.slice(7)}` : (m || "");
+function qrSvg(text) {
+  const q = qrcode(0, "M"); q.addData(text, "Alphanumeric"); q.make();
+  const n = q.getModuleCount(); let d = "";
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (q.isDark(y, x)) d += `M${x + 4} ${y + 4}h1v1h-1z`;
+  return `<svg class="qr" viewBox="0 0 ${n + 8} ${n + 8}" role="img" aria-label="QR code"><rect width="100%" height="100%" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+}
+const codeCard = (c, who) => `<div class="pccard">${c.qr ? `<div class="qrbox" data-qr="${esc(c.qr)}"></div>` : ""}<div>
+  ${who ? `<b>${esc(c.name || "?")}</b><br><small class="mut">${esc([c.area, c.model].filter(Boolean).join(" · "))}</small><br>` : ""}
+  <span class="pccode">${esc(manualFmt(c.manual))}</span><br>
+  <button class="btn" data-copy="${esc(c.manual)}">${L("copy")}</button>${c.qr ? "" : `<br><small class="mut">${L("pc_none_qr")}</small>`}</div></div>`;
+async function fillQr() {   // draws the QR codes of the cards shown
+  const boxes = [...document.querySelectorAll("#sheet .qrbox:empty")];
+  if (!boxes.length) return;
+  try { await needScript("qrcode.js"); boxes.forEach(b => { b.innerHTML = qrSvg(b.dataset.qr); }); } catch (e) { /* the typed code is shown anyway */ }
+}
+let pair = {id: null, data: null, edit: false};
+function renderPair() {
+  const el = $("#pair"); if (!el || !pair.data || pair.id !== openId) return;
+  const c = pair.data.code, free = pair.data.free || [];
+  el.innerHTML = c && !pair.edit
+    ? codeCard(c) + `<p class="pcbtns"><button class="btn" data-pc="replace">${L("pc_replace")}</button><button class="btn" data-pc="delete" data-key="${esc(c.key)}">${L("pc_delete")}</button></p>`
+    : `<div class="pcdrop">${L("pc_drop")} <label class="btn">${L("pc_pick")}<input type="file" accept="image/*" hidden></label></div>
+       <form class="pcf"><input name="c" placeholder="${esc(L("pc_ph"))}" autocomplete="off" spellcheck="false" maxlength="80"><button class="btn">${L("save")}</button></form>` +
+      (free.length ? `<form class="pca"><select name="k" aria-label="${esc(L("pc_attach"))}">${free.map(f =>
+        `<option value="${esc(f.key)}">${esc([f.name || "?", f.area, manualFmt(f.manual)].filter(Boolean).join(" · "))}</option>`).join("")}</select><button class="btn">${L("pc_attach_btn")}</button></form>
+        <small class="mut">${L("pc_attach")}</small>` : "");
+  fillQr();
+}
+async function loadPair(id) {
+  pair = {id, data: null, edit: false};
+  try {
+    const d = await (await fetch("api/pairing?id=" + encodeURIComponent(id), {cache: "no-store"})).json();
+    if (pair.id === id && !d.error) { pair.data = d; renderPair(); }
+  } catch (e) { /* the block stays empty */ }
+}
+async function pairPost(body, okText) {
+  try {
+    const res = await (await fetch("api/pairing", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)})).json();
+    if (!res.ok) { toast(L("pc_e_" + res.error) || L("error")); return false; }
+    toast(L(okText));
+    if (pair.id && pair.id === openId) await loadPair(pair.id);
+    return true;
+  } catch (e) { toast(L("error")); return false; }
+}
+// QR code of a photo: the browser's own reader when it has one, else jsQR at several sizes
+// (a small code in a large photo is found once the photo is reduced, and the other way round)
+async function readQr(file) {
+  const bmp = await createImageBitmap(file);
+  if ("BarcodeDetector" in window) {
+    try {
+      const found = await new BarcodeDetector({formats: ["qr_code"]}).detect(bmp);
+      const m = found.find(x => /MT:/i.test(x.rawValue)) || found[0];
+      if (m) return m.rawValue;
+    } catch (e) { /* jsQR below */ }
+  }
+  await needScript("jsqr.js");
+  const side = Math.max(bmp.width, bmp.height), done = new Set();
+  for (const max of [1600, 1000, 2400, 600]) {
+    const k = Math.min(1, max / side), w = Math.round(bmp.width * k), h = Math.round(bmp.height * k);
+    if (done.has(w)) continue;
+    done.add(w);
+    const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+    const ctx = cv.getContext("2d", {willReadFrequently: true}); ctx.drawImage(bmp, 0, 0, w, h);
+    const r = jsQR(ctx.getImageData(0, 0, w, h).data, w, h);
+    if (r && r.data) return r.data;
+  }
+  return null;
+}
+async function pairPhoto(file) {
+  if (!file || !pair.id || !$("#sheet .pcdrop")) return;
+  toast(L("pc_reading"));
+  let text = null;
+  try { text = await readQr(file); } catch (e) { /* told below */ }
+  if (!text) return toast(L("pc_noqr"));
+  await pairPost({id: pair.id, code: text}, "pc_saved");
+}
+async function openCodes() {   // codes of the devices that left the table: what is needed to pair them again
+  openId = null; pair = {id: null, data: null, edit: false};
+  openSheet(head(L("pc_list"), L("pc_list_tip")) + `<p class="mut">${L("loading")}</p>`);
+  try {
+    const d = await (await fetch("api/pairing", {cache: "no-store"})).json();
+    $("#sheet").innerHTML = head(L("pc_list"), L("pc_list_tip")) +
+      ((d.free || []).length ? d.free.map(c => codeCard(c, true) +
+        `<p class="pcbtns"><button class="btn" data-pc="delete" data-key="${esc(c.key)}">${L("pc_delete")}</button></p>`).join("")
+        : `<p class="mut" style="margin-top:14px">${L("pc_list_none")}</p>`) +
+      `<p class="mut" style="margin-top:18px"><small>${esc(F("pc_count", {n: d.count || 0}))}</small></p>`;
+    fillQr();
+  } catch (e) { $("#sheet").innerHTML = head(L("pc_list")) + `<p class="mut">${L("error")}</p>`; }
+}
+async function pairClick(b) {
+  if (b.dataset.pc === "replace") { pair.edit = true; return renderPair(); }
+  if (b.dataset.pc === "delete" && confirm(L("pc_delete_confirm"))) {
+    const list = !pair.id;
+    if (await pairPost({delete: b.dataset.key}, "pc_deleted") && list) openCodes();
+  }
+}
+
 async function openReport() {
   openSheet(head(L("report"), L("report_tip")) + `<p class="mut">${L("loading")}</p>`);
   try {
@@ -1057,6 +1192,7 @@ function texts() {
   document.documentElement.lang = LANG;
   $("#refresh span").textContent = L("refresh"); $("#refresh").title = L("refresh");
   $("#report span").textContent = L("report"); $("#report").title = L("report_tip");
+  $("#codes span").textContent = L("pc_list"); $("#codes").title = L("pc_list_tip");
   $("#q").placeholder = L("search"); $("#q").setAttribute("aria-label", L("search"));
   $("#noteTitle").textContent = L("note_t"); $("#noteText").textContent = L("note");
   $("#sheet").setAttribute("aria-label", L("h_node"));
@@ -1109,6 +1245,13 @@ document.addEventListener("click", e => {
     P.seen = [...new Set([...(P.seen || []).filter(x => CARD_KEYS.has(x)), sn.dataset.seen])];
     save(); return renderTodo();
   }
+  const pc = e.target.closest("button[data-pc]");
+  if (pc) return pairClick(pc);
+  const cp = e.target.closest("button[data-copy]");
+  if (cp) {
+    navigator.clipboard.writeText(cp.dataset.copy).then(() => { cp.textContent = L("copied"); }, () => toast(cp.dataset.copy));
+    return;
+  }
   const rm = e.target.closest("#brRemove");
   if (rm) { if (!rm.disabled) removeBr(rm.dataset.brid); return; }
   const t = e.target.closest("[data-id],[data-br],[data-f],[data-sort],.x");
@@ -1140,6 +1283,26 @@ $("#sheet").addEventListener("submit", async e => {   // name of a Wi-Fi access 
   } catch (err) { b.textContent = L("error"); }
   finally { b.disabled = false; }
 });
+$("#sheet").addEventListener("submit", e => {   // pairing code typed, or a kept code given to this node
+  const f = e.target.closest(".pcf,.pca"); if (!f || !pair.id) return;
+  e.preventDefault();
+  if (f.classList.contains("pca")) pairPost({id: pair.id, attach: f.k.value}, "pc_saved");
+  else if (f.c.value.trim()) pairPost({id: pair.id, code: f.c.value}, "pc_saved");
+});
+$("#sheet").addEventListener("change", e => { if (e.target.matches(".pcdrop input[type=file]")) pairPhoto(e.target.files[0]); });
+// a photo dropped anywhere on the panel while it asks for a code, or pasted
+$("#sheet").addEventListener("dragover", e => { const d = $("#sheet .pcdrop"); if (d) { e.preventDefault(); d.classList.add("over"); } });
+$("#sheet").addEventListener("dragleave", e => { const d = $("#sheet .pcdrop"); if (d && !$("#sheet").contains(e.relatedTarget)) d.classList.remove("over"); });
+$("#sheet").addEventListener("drop", e => {
+  const d = $("#sheet .pcdrop"); if (!d) return;
+  e.preventDefault(); d.classList.remove("over");
+  pairPhoto([...(e.dataTransfer.files || [])].find(f => f.type.startsWith("image/")));
+});
+document.addEventListener("paste", e => {
+  if (!$("#sheet").classList.contains("on") || !$("#sheet .pcdrop")) return;
+  const f = [...(e.clipboardData.files || [])].find(x => x.type.startsWith("image/"));
+  if (f) { e.preventDefault(); pairPhoto(f); }
+});
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") closeSheet();
   if ((e.key === "Enter" || e.key === " ") && e.target.classList && (e.target.classList.contains("row") || e.target.matches(".issue[data-id],.br[data-br]"))) { e.preventDefault(); if (e.target.dataset.br) openBr(e.target.dataset.br); else openNode(e.target.dataset.id); }
@@ -1148,6 +1311,7 @@ $("#q").value = P.q;
 $("#q").addEventListener("input", () => { P.q = $("#q").value; save(); if (D) renderList(); });
 $("#refresh").addEventListener("click", async () => { await reread(); load(true); });
 $("#report").addEventListener("click", openReport);
+$("#codes").addEventListener("click", openCodes);
 const layout = () => {
   const was = document.body.classList.contains("narrow");
   document.body.classList.toggle("narrow", window.innerWidth <= 760);
