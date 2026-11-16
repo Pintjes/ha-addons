@@ -120,21 +120,22 @@ class Build(unittest.TestCase):
 
     def test_settings_are_per_app(self):
         conf, apps, _, message, _ = build({"apps": [
-            A, dict(B, inject_script=True, hide_proxy=True), {"name": "Raw", "url": "http://h", "rewrite": False}]})
+            A, dict(B, hide_proxy=True), {"name": "Raw", "url": "http://h", "rewrite": False, "inject_script": False}]})
         immo, plex, raw = self.location(conf, "immo"), self.location(conf, "plex"), self.location(conf, "raw")
         self.assertIn("$proxy_add_x_forwarded_for", immo)
         self.assertIn('proxy_set_header X-Forwarded-For "";', plex)
         self.assertIn("proxy_redirect", immo)
         self.assertNotIn("proxy_redirect", raw)
-        self.assertEqual([apps[n]["inject"] for n in "123"], [False, True, False])
+        # The script is injected unless it is turned off
+        self.assertEqual([apps[n]["inject"] for n in "123"], [True, True, False])
         self.assertEqual([apps[n]["rewrite"] for n in "123"], [True, True, False])
-        self.assertIn("Plex -> http://192.168.0.64:32400/ [script injected, relay hidden]", message)
-        self.assertIn("Raw -> http://h/ [paths not rewritten]", message)
+        self.assertIn("Plex -> http://192.168.0.64:32400/ [relay hidden]", message)
+        self.assertIn("Raw -> http://h/ [paths not rewritten, script not injected]", message)
         self.assertIn("Immo -> http://192.168.0.12:8000/,", message)
 
     def test_old_options_of_the_whole_add_on_are_ignored(self):
-        conf, apps, _, _, _ = build({"apps": [A], "inject_script": True, "hide_proxy": True, "rewrite_paths": False})
-        self.assertFalse(apps["1"]["inject"])
+        conf, apps, _, _, _ = build({"apps": [A], "inject_script": False, "hide_proxy": True, "rewrite_paths": False})
+        self.assertTrue(apps["1"]["inject"])
         self.assertTrue(apps["1"]["rewrite"])
         self.assertIn("$proxy_add_x_forwarded_for", conf)
 

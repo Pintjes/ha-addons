@@ -588,7 +588,9 @@ def read_apps(options):
         apps.append({"name": name, "id": app_id(name, used), "target": target,
                      "origin": origin, "host": host, "base": base, "start": start,
                      "hidden": hidden, "headers": [] if hidden else read_headers(label, headers),
-                     "rewrite": flag(entry, "rewrite", True), "inject": flag(entry, "inject_script", False),
+                     # On unless turned off: harmless for an app that does
+                     # not need it, needed by an app built in JavaScript
+                     "rewrite": flag(entry, "rewrite", True), "inject": flag(entry, "inject_script", True),
                      "hide_proxy": flag(entry, "hide_proxy", False), "verify_tls": verify_tls})
     return apps
 
@@ -739,8 +741,8 @@ def settings(app):
     said = []
     if not app["rewrite"]:
         said.append("paths not rewritten")
-    if app["inject"]:
-        said.append("script injected")
+    if not app["inject"]:
+        said.append("script not injected")
     if app["hide_proxy"]:
         said.append("relay hidden")
     if app["origin"].startswith("https://"):

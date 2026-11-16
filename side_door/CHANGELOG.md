@@ -4,6 +4,15 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] - 2026-11-17
+
+### Changed
+
+- `inject_script` is on by default: an app built in JavaScript works without
+  any setting. Turn it off for an app that behaves badly with it. The
+  certificate stays automatic, and `hide_proxy` stays a choice of yours: it
+  lets everyone who opens the panel into the app without its login.
+
 ## [2.0.0] - 2026-11-17
 
 ### Changed

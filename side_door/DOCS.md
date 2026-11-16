@@ -78,7 +78,7 @@ Each entry can also have, only when the app needs it:
 |---|---|---|
 | `start` | empty | The page the tab opens on, when the interface is not at the root of the app: `web/index.html` for Plex. |
 | `rewrite` | on | Rewrites the paths of the app (see below). Turn off for an app that already handles the `X-Ingress-Path` header. |
-| `inject_script` | off | Experimental: for an app that builds its addresses in JavaScript (see below). |
+| `inject_script` | on | Needed by an app that builds its addresses in JavaScript (see below). Turn off for an app that behaves badly with it. |
 | `hide_proxy` | off | For an app that asks for a login through Side Door but not on the local network (see below). |
 | `verify_tls` | `auto` | The certificate of an `https://` app (see *Security*). |
 | `headers` | empty | Headers sent with every request (see below). |
@@ -183,7 +183,7 @@ Limits of the rewriting:
 
 Some apps send an almost empty page and a program that builds every address
 in the browser. Nothing can be rewritten in what the add-on relays, and the
-app stays blank or leaves the panel. With `inject_script` on for that app, the add-on:
+app stays blank or leaves the panel. With `inject_script` on (the default), the add-on:
 
 - loads a small script before the app. It moves under the ingress path the
   requests of the app (`fetch`, `XMLHttpRequest`, WebSocket), its internal
@@ -197,10 +197,11 @@ the whole window (login pages refuse to be shown inside another page). Once
 logged in, the browser comes back to the Side Door panel, which opens the app
 on the page it expects. This needs the app to be a tab (two apps or more).
 
-This is experimental and cannot work with every app: a script that reads
+It is on by default: an app that does not need it is not disturbed by it. It
+cannot work with every app: a script that reads
 `location` without `window.` in front is not caught, and neither is an
-address built inside a web worker. Leave it off for an app that works
-without it.
+address built inside a web worker. Turn it off for an app that behaves badly
+with it.
 
 ### Apps that only trust the local network
 
