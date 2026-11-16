@@ -32,7 +32,6 @@
   .top { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
   .top h1 { font-size: 18px; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
   .top h1 svg { width: 22px; height: 22px; color: var(--acc); }
-  .tag { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--acc-soft); color: var(--acc-txt); }
   .live { font-size: 12px; color: var(--mut); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
   .live i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
   .live.poll i { background: var(--warn); }
@@ -84,7 +83,7 @@
   .part .bar b.loss { background: var(--bad); opacity: .85; }
   .part span:last-child { text-align: right; }
 
-  .todo { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+  .todo { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 10px; }
   .issue { display: flex; gap: 12px; padding: 12px 14px; text-align: left; width: 100%; border-left-width: 4px; }
   button.issue, .issue[data-id] { cursor: pointer; }
   .issue.bad { border-left-color: var(--bad); } .issue.warn { border-left-color: var(--warn); } .issue.info { border-left-color: var(--acc); }
@@ -173,6 +172,8 @@
   body.narrow .facts { grid-template-columns: repeat(2, 1fr); }
   body.narrow .top .btn span { display: none; }
   body.narrow .top .btn { width: 44px; min-height: 44px; padding: 0; justify-content: center; }
+  body.narrow .acts { grid-template-columns: repeat(2, 36px); }
+  body.narrow .act { width: 36px; height: 36px; }
   body.narrow .cols { display: none; }
   body.narrow .row { grid-template-columns: 1fr auto; gap: 6px 10px; padding: 12px 14px; min-height: 64px; }
   body.narrow .row .lk { grid-column: 1; } body.narrow .row .rt { grid-column: 2; text-align: right; }
@@ -227,7 +228,7 @@
   .pcline .btn.quiet { border-color: transparent; background: none; color: var(--mut); padding: 0 6px; }
   .pcline .btn.quiet:hover { color: var(--txt); }
   .pcline.pcsub { margin-top: 2px; gap: 2px 14px; }
-  .pcline.pcsub .btn { min-height: 28px; padding: 0; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
+  .pcline.pcsub .btn { min-height: 32px; padding: 0; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
   .pcline .pccode { margin: 0 4px 0 0; }
   .pccard.sm { margin-top: 8px; align-items: flex-start; }
   .pccard.sm .qrbox { width: 116px; height: 116px; }
@@ -317,24 +318,24 @@
 "use strict";
 // ------------------------------------------------------------ texts
 const T = {
-  en: {todo_info:"Good to know ({n})", np_before:"Before: {p}, {r} dBm", a_parent_noanswer:"{n}: no answer (asleep?)", a_parent_new:"{n}: new parent {l}", a_failed:"{n}: action failed", check_bat:"Check its batteries", check_power:"Check its power", flap_power:"Answers now and then. Cut its power for 10 s", flap_bat:"Answers now and then. Remove its battery for 10 s", down_since:"Since {t}.", down_do_bat:"Since {t}. Check its batteries.", more_n:"+{n}", refresh:"Refresh", reading:"Reading the nodes again… {d}/{n}", reading0:"Reading the nodes again…", report:"Report", classic:"Classic view", loading:"loading…", error:"error", live:"live", polling:"live link down: values read on demand", updated:"updated at {t}", connecting:"connecting to the Matter Server…", updating:"reading the nodes…", updating_n:"reading the nodes… {d}/{n}",
+  en: {np_before:"Before: {p}, {r} dBm", a_parent_noanswer:"{n}: no answer (asleep?)", a_parent_new:"{n}: new parent {l}", a_failed:"{n}: action failed", check_bat:"Check its batteries", check_power:"Check its power", flap_power:"Answers now and then. Cut its power for 10 s", flap_bat:"Answers now and then. Remove its battery for 10 s", down_since:"Since {t}.", more_n:"+{n}", refresh:"Refresh", reading:"Reading the nodes again… {d}/{n}", reading0:"Reading the nodes again…", report:"Report", loading:"loading…", error:"error", live:"live", polling:"live link down: values read on demand", updated:"updated at {t}", connecting:"connecting to the Matter Server…", updating:"reading the nodes…", updating_n:"reading the nodes… {d}/{n}",
     silent:"silent", w_silent:"Silent", n_silent:"{n} silent node", n_silent_pl:"{n} silent nodes", silent_sub:"{name}: probably without power.",
     silent_tip:"No sign of life for {t} (usually every {u}): probably without power.",
     t_rhythm:"Sign of life", rhythm_v:"every {u} at most · silence flagged after {l}", rhythm_wait:"being measured",
     all_ok:"All good", all_ok_sub:"All nodes are available.", n_down:"{n} node unavailable", n_down_pl:"{n} nodes unavailable", n_act:"{n} action advised", n_act_pl:"{n} actions advised",
     down_sub:"{name}, since {t}.", down_sub_pl:"{names}.", act_sub:"See the advice below.",
     f_avail:"Available nodes", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Automatic recovery", on:"on", off:"off",
-    quality:"Network quality · last {n} min", q_lab:["poor", "to watch", "good", "excellent"], q_trend:"{d} vs 24h", q_24h:"24h: {v} %", part_tip:"Now {v} % · 24h {v24} % · weight {n} %", q_scale:"≥ 95 excellent · 90–95 good · 80–90 to watch",
+    quality:"Network quality · last {n} min", q_lab:["poor", "to watch", "good", "excellent"], q_24h:"24h: {v} %", part_tip:"Now {v} % · 24h {v24} % · weight {n} %", q_scale:"≥ 95 excellent · 90–95 good · 80–90 to watch",
     q_capped:"capped: partitioned network", q_wait:"The score starts after a few minutes.", q_parts:{availability:"Availability", radio:"Radio", outages:"Outages", backbone:"Backbone", partition:"Partition"}, weight:"Weight {n} %",
     todo:"Good to know ({n})", new:"new", todo_none:"Nothing to report", w_down:"Unavailable", w_warn:"Action advised", w_info:"Good to know", seen:"Seen", seen_tip:"Hide this note (it comes back if it changes)", w_net:"Network",
-    down_do:"Since {t}. Check its power.",
+    
     storm:"Thread storm: pings spaced out, sweep paused.",
     br_open:"Details of this border router", br_state:"State", br_online:"online", br_offline_since:"offline since {t}", br_primary_l:"Primary", yes:"yes", no:"no",
-    br_net:"Thread network", br_prefix:"Prefix", br_last:"Last contact", br_subnet:"Same subnet as Home Assistant", br_det:"Detaches (24h)", br_det_last:"Last detach", br_detaches:"Detaches of the last 7 days",
+    br_net:"Thread network", br_prefix:"Prefix", br_last:"Last contact", br_subnet:"Same subnet as Home Assistant", br_det:"Detaches (24h)", br_detaches:"Detaches of the last 7 days",
     br_through:"Nodes going through it ({n})", br_children:"Nodes attached to it ({n})", br_model:"Model", br_id:"Identifier", br_ext:"Extended address", br_xpan:"Extended PAN ID", br_part:"Partition", br_addr:"Addresses", br_if:"Thread interface",
     br_src:{mdns:"announcement", thread:"heard over Thread"}, br_remove:"Remove", br_remove_tip:"Remove this border router from the list. It comes back by itself if it is heard again.", br_remove_online:"Only an offline border router can be removed",
     br_remove_confirm:"{n}: remove this border router from the list? It comes back by itself if it is heard again.", br_removed:"{n} removed from the list", br_offline_adv:"Check its power and its network, or remove it from the list if you took it away on purpose.",
-    brs:"Border routers", br_seen:"seen {t}", br_never:"never seen", br_primary:"primary", offline:"offline", detached24:"detached {n}× in 24h", other_subnet:"other subnet than Home Assistant",
+    brs:"Border routers", br_seen:"seen {t}", br_never:"never seen", br_primary:"primary", offline:"offline", other_subnet:"other subnet than Home Assistant",
     nodes:"Nodes", search:"Filter: name, area, model…", c_all:"All", c_issues:"To handle", c_bat:"On battery",
     h_node:"Node", h_status:"Status · role", h_link:"Attachment · signal", h_resp:"Response", h_bat:"Power", h_last:"Last contact", h_adv:"Advice",
     available:"available", unavailable:"unavailable", unav_since:"unavailable since {t}", no_answer:"no answer", avg:"avg. {v}", contact:"Contact ",
@@ -344,43 +345,43 @@ const T = {
     a_ping:"Ping", a_parent:"Find a new link", a_interview:"Interview", a_remove:"Remove", a_remove_tip:"Remove",
     a_remove_confirm:"{n}: remove this node? It must be commissioned again.", a_remove_confirm_nocode:"{n}: remove this node? Its pairing code is not kept: on most devices only its label will allow pairing it again.", a_remove_ok:"{n} removed",
     a_ping_tip:"Ping", a_parent_tip:"Find a new link",
-    a_interview_tip:"Reinterview", a_parent_router:"Thread nodes only", a_parent_confirm_leader:"{n} is the LEADER of the Thread network: its Thread will restart (trial). The whole network elects a new leader: for about 2 minutes, nodes can become unavailable and the network can split into several partitions. Its end devices drop too. Go on?",
+    a_interview_tip:"Interview again: read everything the node describes", a_parent_router:"Thread nodes only", a_parent_confirm_leader:"{n} is the LEADER of the Thread network: its Thread will restart (trial). The whole network elects a new leader: for about 2 minutes, nodes can become unavailable and the network can split into several partitions. Its end devices drop too. Go on?",
     a_parent_confirm:"{n}: find a new parent? The new one may be weaker.", a_parent_confirm_router:"{n} is a router: its Thread will restart (trial). Its end devices drop and attach elsewhere, and it can stay out of reach for 2 minutes. A router picks its routes by itself: a better link is not expected. Go on?", a_interview_confirm:"{n}: interview the node again? It can take a minute.",
     a_ping_ok:"{n}: answers the ping", a_ping_ko:"{n}: no answer to ping", a_interview_ok:"{n} interviewed again ({s} s)",
     a_parent_same:"{n}: same parent {l}", a_parent_unknown:"{n}: waiting for the node…",
     a_parent_unsupported:"{n}: parent search not supported", a_parent_failed:"{n}: parent search refused",
-    a_parent_busy:"A parent search is already running",
+    a_parent_busy:"A parent search is already running", a_parent_router_res:"{n}: not an end device, no parent to search",
     a_recover:"Recovery attempt", a_recover_tip:"Recovery attempt: restart its Thread connection",
     a_recover_confirm:"{n}: try to recover it? Its Thread connection is restarted if the command reaches it.",
     a_recover_pending:"{n}: recovery attempt started, result within a few minutes",
     a_recover_unsupported:"{n}: recovery attempt not possible (its Thread network is not known)",
     a_recover_busy:"A recovery attempt or a parent search is already running", ap_ph:"Name of this access point", save:"Save", saved:"Saved", ap:"Access point", ap_unknown:"Unnamed access point: name it in the node panel",
     to_ha:"Path to Home Assistant", r_direct:"{br} directly", r_via:"{br} via {via}", r_parent:"parent {p}, then ", r_cost:"cost {c}",
-    r_cost_tip:"Path cost: 1 per good hop, up to 4 for a weak link. The nearest border router is the one with the lowest cost.", r_unknown:"not known yet", no_parent:"Unknown parent (probably a border router)",
-    sig:["very weak", "weak", "fair", "good"], sig_tip:"Weakest direction of the link", new_parent:"new parent", none_match:"No node matches.", columns:"Columns", cols_reset:"Default columns", t_out24:"Outages 24h", t_out7:"Outages 7d", sort_tip:"Click to sort, click again to reverse", sort_reset:"Default order (problems first)",
+    r_cost_tip:"Path cost: 1 per good hop, up to 4 for a weak link. The nearest border router is the one with the lowest cost.", r_unknown:"not known yet", 
+    sig:["very weak", "weak", "fair", "good"], sig_tip:"Weakest direction of the link", new_parent:"new parent", none_match:"No node matches.", columns:"Columns", cols_reset:"Default columns", sort_tip:"Click to sort, click again to reverse", sort_reset:"Default order (problems first)",
     ago_s:"{n}s ago", ago_m:"{n} min ago", ago_h:"{n} h ago", ago_d:"{n} d ago", never:"never",
     old_tip:"Old value: given by the node {t}, it may have changed", old_unknown:"Old value: nobody knows when the node gave it (Matter Server cache)", old_short:"read {t}", old_short_unknown:"age unknown", measured:"Measured {t}",
     d_net:"Network", d_role:"Role", d_parent:"Parent", d_best:"Sends through", d_signal:"Signal", d_lqi:"Link quality (0–3)", d_resp:"Response · average",
-    d_power:"Power", mains:"mains", battery:"battery", bat_level:["ok", "low", "critical"], d_last:"Last contact",
+    mains:"mains", battery:"battery", bat_level:["ok", "low", "critical"], d_last:"Last contact",
     sig7:"Signal · last 7 days", resp7:"Response · last 7 days", outages:"Outages", pchanges:"Parent changes", none:"none", ongoing:"ongoing",
-    hist_wait:"History available within 15 min.", now:"now", d7:"7 d ago", average:"average", threshold:"weak threshold", off_scale:"off scale",
+    hist_wait:"History available within 15 min.", now:"now", average:"average", threshold:"weak threshold", off_scale:"off scale",
     srv_t:"Matter Server · 24h", srv_sub:"Subscriptions lost", srv_session:"Sessions closed", srv_off:"Offline for the Matter Server", srv_unreach:"Address unreachable", srv_ping:"Pings without answer", srv_addr:"Address used",
     srv_cover:"Counted since {t}", srv_missed:"log not read for {d}", srv_none:"The Matter Server log is not read: nothing is counted.", srv_now:"offline now", t_srv:"Losses 24h", srv_tip:"Subscriptions lost and sessions closed, read in the Matter Server log",
     t_serial:"Serial number", t_fw:"Firmware", t_uid:"Unique id", t_hw:"Hardware address", t_may_change:"The device may change this value at a factory reset",
     tech:"Technical details", t_id:"Id", t_rloc:"RLOC16", t_nb:"Neighbors", t_weak:"Weak links", t_det:"Detaches 24h", t_pch:"Parent changes 24h",
     t_partch:"Partition changes 24h", t_out:"Outages 24h · 7d", t_down:"Downtime 7d", t_reb:"Reboots total · 24h", t_boot:"Last boot reason", t_up:"Uptime",
     t_src:"Last contact source", t_gap:"Longest silence", copy:"Copy", copied:"Copied", download:"Download", report_tip:"Anonymized report (no names, areas or addresses) to paste in an issue",
-    pc_t:"Pairing code", pc_tip:"Kept by the add-on: the device can be paired again after a reset without reaching its label",
+    pc_tip:"Kept by the add-on: the device can be paired again after a reset without reaching its label",
     nm_title:"New device paired", nm_name:"Name", nm_area:"Area", nm_later:"Later", nm_saved:"Name and area saved in Home Assistant",
     sc_btn:"Scan the QR code", sc_title:"Pairing code", sc_desc:"Aim at the QR code on the label of the device", sc_skip:"Pair without scanning", sc_close:"Close",
     sc_wrong:"This is not a Matter QR code", sc_waiting:"Scanned code, waiting for its device", pc_e_typed:"Only a QR code can be kept before its device is paired",
     pa_btn:"Pair", pa_tip:"Pair a new or reset device, next to it. In the Home Assistant app: scan its label (the code is kept for the new node), then the pairing of the phone starts",
     pa_code:"Pair with this code", pa_started:"Pairing started on this phone", pa_started_code:"Code copied: paste it in the pairing screen instead of scanning the label", pa_started_show:"Pairing started. Its code, to type in the pairing screen: {c}",
     pa_screen:"Opening the pairing screen of Home Assistant…", pa_screen_code:"Code copied. Opening the pairing screen of Home Assistant…", pa_screen_show:"Code to type: {c}. Opening the pairing screen of Home Assistant…", sc_none:"The QR code reader of the app did not answer: take a photo of the label instead", pa_none:"Open Settings → Devices → Add a Matter device in Home Assistant",
-    pc_cam:"Take a photo of the QR code", pc_new_what:"New node", pc_new:"Its pairing code is not kept yet: photograph its label now, while you are in front of it.",
-    sec_tools:"Tools", sec_pair:"Pairing", sec_signal:"Signal and response", sub_hist:"History", none_f:"none",
+    pc_cam:"Take a photo of the QR code", pc_new_what:"New node", pc_new:"Its pairing code is not kept yet: photograph its label now, in front of the device.",
+    sec_pair:"Pairing", sec_signal:"Signal and response", sub_hist:"History", none_f:"none",
     more:"{n} older", pc_delete_code:"Delete the code", t_added:"Paired on", sub_ident:"Identity", sub_thread:"Thread", sub_life:"Running", sub_contact:"Contact",
-    pc_drop:"A photo of the label can also be dropped or pasted on this panel.", pc_pick:"Choose a photo", pc_ph:"or type the code: 1234-567-8901 or MT:…",
+    pc_drop:"A photo of the label can also be dropped or pasted on this panel.", pc_ph:"or type the code: 1234-567-8901 or MT:…",
     pc_auto:"Attached by itself after the reset: it was the only code of this product waiting. Replace it if this is another device.",
     pc_none_qr:"Typed code: no QR code to show (the digits do not hold everything a QR code needs)", pc_replace:"Replace", pc_delete:"Delete", pc_delete_confirm:"Delete this pairing code?",
     pc_saved:"Pairing code saved", pc_deleted:"Pairing code deleted", pc_reading:"Reading the photo…", pc_noqr:"No QR code found in this photo",
@@ -401,24 +402,24 @@ const T = {
     roles:{leader:"Leader router", router:"Router", reed:"End", end_device:"End", sleepy_end_device:"Sleepy end", unassigned:"unassigned", unspecified:"unspecified", detached:"detached", child:"End device", offline:"offline"},
     boot:{unspecified:"unspecified", power_on:"power on", brown_out:"brown-out", software_watchdog:"software watchdog", hardware_watchdog:"hardware watchdog", software_update:"software update", software_reset:"software reset"},
     csrc:{report:"report", event:"event", read:"read", ping:"ping", passive:"packet"}},
-  fr: {todo_info:"À savoir ({n})", np_before:"Avant : {p}, {r} dBm", a_parent_noanswer:"{n} : pas de réponse (endormie ?)", a_parent_new:"{n} : nouveau parent {l}", a_failed:"{n} : action impossible", check_bat:"Vérifier les piles", check_power:"Vérifier l'alimentation", flap_power:"Répond par intermittence. Couper son alimentation 10 s", flap_bat:"Répond par intermittence. Retirer la pile 10 s", down_since:"Depuis {t}.", down_do_bat:"Depuis {t}. Vérifier les piles.", more_n:"+{n}", refresh:"Actualiser", reading:"Relecture des nodes… {d}/{n}", reading0:"Relecture des nodes…", report:"Rapport", classic:"Vue classique", loading:"chargement…", error:"erreur", live:"en direct", polling:"lien direct coupé : valeurs lues à la demande", updated:"mis à jour à {t}", connecting:"connexion au Matter Server…", updating:"lecture des nodes…", updating_n:"lecture des nodes… {d}/{n}",
+  fr: {np_before:"Avant : {p}, {r} dBm", a_parent_noanswer:"{n} : pas de réponse (endormie ?)", a_parent_new:"{n} : nouveau parent {l}", a_failed:"{n} : action impossible", check_bat:"Vérifier les piles", check_power:"Vérifier l'alimentation", flap_power:"Répond par intermittence. Couper son alimentation 10 s", flap_bat:"Répond par intermittence. Retirer la pile 10 s", down_since:"Depuis {t}.", more_n:"+{n}", refresh:"Actualiser", reading:"Relecture des nodes… {d}/{n}", reading0:"Relecture des nodes…", report:"Rapport", loading:"chargement…", error:"erreur", live:"en direct", polling:"lien direct coupé : valeurs lues à la demande", updated:"mis à jour à {t}", connecting:"connexion au Matter Server…", updating:"lecture des nodes…", updating_n:"lecture des nodes… {d}/{n}",
     silent:"silencieuse", w_silent:"Silencieuse", n_silent:"{n} node silencieuse", n_silent_pl:"{n} nodes silencieuses", silent_sub:"{name} : probablement sans courant.",
     silent_tip:"Aucun signe de vie depuis {t} (d'habitude toutes les {u}) : probablement sans courant.",
     t_rhythm:"Signe de vie", rhythm_v:"toutes les {u} au plus · silence signalé après {l}", rhythm_wait:"mesure en cours",
     all_ok:"Tout va bien", all_ok_sub:"Toutes les nodes sont disponibles.", n_down:"{n} node indisponible", n_down_pl:"{n} nodes indisponibles", n_act:"{n} action conseillée", n_act_pl:"{n} actions conseillées",
     down_sub:"{name}, depuis {t}.", down_sub_pl:"{names}.", act_sub:"Voir les conseils ci-dessous.",
     f_avail:"Nodes disponibles", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Récupération auto.", on:"activée", off:"désactivée",
-    quality:"Qualité du réseau · dernières {n} min", q_lab:["mauvais", "à surveiller", "bon", "excellent"], q_trend:"{d} par rapport à 24 h", q_24h:"24 h : {v} %", part_tip:"Actuel {v} % · 24 h {v24} % · poids {n} %", q_scale:"≥ 95 excellent · 90–95 bon · 80–90 à surveiller",
+    quality:"Qualité du réseau · dernières {n} min", q_lab:["mauvais", "à surveiller", "bon", "excellent"], q_24h:"24 h : {v} %", part_tip:"Actuel {v} % · 24 h {v24} % · poids {n} %", q_scale:"≥ 95 excellent · 90–95 bon · 80–90 à surveiller",
     q_capped:"plafonnée : réseau partitionné", q_wait:"La note démarre après quelques minutes.", q_parts:{availability:"Disponibilité", radio:"Radio", outages:"Coupures", backbone:"Ossature", partition:"Partition"}, weight:"Poids {n} %",
     todo:"À savoir ({n})", new:"nouveau", todo_none:"Rien à signaler", w_down:"Indisponible", w_warn:"Action conseillée", w_info:"À savoir", seen:"Vu", seen_tip:"Masquer cette note (elle revient si elle change)", w_net:"Réseau",
-    down_do:"Depuis {t}. Vérifier l'alimentation.",
+    
     storm:"Tempête Thread : pings espacés, balayage suspendu.",
     br_open:"Détails de ce border router", br_state:"État", br_online:"en ligne", br_offline_since:"hors ligne depuis {t}", br_primary_l:"Primaire", yes:"oui", no:"non",
-    br_net:"Réseau Thread", br_prefix:"Préfixe", br_last:"Dernier contact", br_subnet:"Même sous-réseau que Home Assistant", br_det:"Décrochages (24 h)", br_det_last:"Dernier décrochage", br_detaches:"Décrochages des 7 derniers jours",
+    br_net:"Réseau Thread", br_prefix:"Préfixe", br_last:"Dernier contact", br_subnet:"Même sous-réseau que Home Assistant", br_det:"Décrochages (24 h)", br_detaches:"Décrochages des 7 derniers jours",
     br_through:"Nodes qui passent par lui ({n})", br_children:"Nodes rattachées à lui ({n})", br_model:"Modèle", br_id:"Identifiant", br_ext:"Adresse étendue", br_xpan:"Extended PAN ID", br_part:"Partition", br_addr:"Adresses", br_if:"Interface Thread",
     br_src:{mdns:"annonce", thread:"entendu en Thread"}, br_remove:"Retirer", br_remove_tip:"Retirer ce border router de la liste. Il revient tout seul s'il est de nouveau entendu.", br_remove_online:"Seul un border router hors ligne peut être retiré",
     br_remove_confirm:"{n} : retirer ce border router de la liste ? Il revient tout seul s'il est de nouveau entendu.", br_removed:"{n} retiré de la liste", br_offline_adv:"Vérifier son alimentation et son réseau, ou le retirer de la liste s'il a été enlevé exprès.",
-    brs:"Border routers", br_seen:"vu {t}", br_never:"jamais vu", br_primary:"primaire", offline:"hors ligne", detached24:"décroché {n}× en 24 h", other_subnet:"autre sous-réseau que Home Assistant",
+    brs:"Border routers", br_seen:"vu {t}", br_never:"jamais vu", br_primary:"primaire", offline:"hors ligne", other_subnet:"autre sous-réseau que Home Assistant",
     nodes:"Nodes", search:"Filtrer : nom, pièce, modèle…", c_all:"Toutes", c_issues:"À traiter", c_bat:"Sur pile",
     h_node:"Node", h_status:"Statut · rôle", h_link:"Rattachement · signal", h_resp:"Réponse", h_bat:"Alimentation", h_last:"Dernier contact", h_adv:"Conseil",
     available:"disponible", unavailable:"indisponible", unav_since:"indisponible depuis {t}", no_answer:"pas de réponse", avg:"moy. {v}", contact:"Contact ",
@@ -428,43 +429,43 @@ const T = {
     a_ping:"Ping", a_parent:"Recherche nouveau lien", a_interview:"Interviewer", a_remove:"Supprimer", a_remove_tip:"Supprimer",
     a_remove_confirm:"{n} : supprimer cette node ? Il faudra l'appairer à nouveau.", a_remove_confirm_nocode:"{n} : supprimer cette node ? Son code d'appairage n'est pas conservé : sur la plupart des appareils, seule son étiquette permettra de l'appairer à nouveau.", a_remove_ok:"{n} supprimée",
     a_ping_tip:"Ping", a_parent_tip:"Recherche nouveau lien",
-    a_interview_tip:"Reinterview", a_parent_router:"Réservé aux nodes Thread", a_parent_confirm_leader:"{n} est le LEADER du réseau Thread : son Thread va redémarrer (essai). Tout le réseau élit un nouveau leader : pendant 2 minutes environ, des nodes peuvent devenir indisponibles et le réseau peut se couper en plusieurs partitions. Ses nodes finales décrochent aussi. Continuer ?",
+    a_interview_tip:"Interviewer à nouveau : relire tout ce que décrit la node", a_parent_router:"Réservé aux nodes Thread", a_parent_confirm_leader:"{n} est le LEADER du réseau Thread : son Thread va redémarrer (essai). Tout le réseau élit un nouveau leader : pendant 2 minutes environ, des nodes peuvent devenir indisponibles et le réseau peut se couper en plusieurs partitions. Ses nodes finales décrochent aussi. Continuer ?",
     a_parent_confirm:"{n} : rechercher un nouveau parent ? Le nouveau peut être moins bon.", a_parent_confirm_router:"{n} est un routeur : son Thread va redémarrer (essai). Ses nodes finales décrochent et se rattachent ailleurs, et il peut rester injoignable 2 minutes. Un routeur choisit seul ses routes : un meilleur lien n'est pas attendu. Continuer ?", a_interview_confirm:"{n} : ré-interviewer la node ? Ça peut prendre une minute.",
     a_ping_ok:"{n} : répond au ping", a_ping_ko:"{n} : pas de réponse au ping", a_interview_ok:"{n} ré-interviewée ({s} s)",
     a_parent_same:"{n} : même parent {l}", a_parent_unknown:"{n} : en attente de la node…",
     a_parent_unsupported:"{n} : recherche de parent non prise en charge", a_parent_failed:"{n} : recherche de parent refusée",
-    a_parent_busy:"Une recherche de parent est déjà en cours",
+    a_parent_busy:"Une recherche de parent est déjà en cours", a_parent_router_res:"{n} : pas un appareil final, pas de parent à chercher",
     a_recover:"Tentative de récupération", a_recover_tip:"Tentative de récupération : relancer sa connexion Thread",
     a_recover_confirm:"{n} : tenter de la récupérer ? Sa connexion Thread est relancée si la commande lui parvient.",
     a_recover_pending:"{n} : tentative de récupération lancée, résultat dans quelques minutes",
     a_recover_unsupported:"{n} : tentative de récupération impossible (son réseau Thread n'est pas connu)",
     a_recover_busy:"Une tentative de récupération ou une recherche de parent est déjà en cours", ap_ph:"Nom de ce point d'accès", save:"Enregistrer", saved:"Enregistré", ap:"Point d'accès", ap_unknown:"Point d'accès sans nom : à nommer dans la fiche",
     to_ha:"Chemin vers Home Assistant", r_direct:"{br} en direct", r_via:"{br} via {via}", r_parent:"parent {p}, puis ", r_cost:"coût {c}",
-    r_cost_tip:"Coût du chemin : 1 par bon saut, jusqu'à 4 pour un lien faible. Le border router le plus proche est celui de plus bas coût.", r_unknown:"inconnu pour l'instant", no_parent:"Parent inconnu (probablement un border router)",
-    sig:["très faible", "faible", "correct", "bon"], sig_tip:"Sens le plus faible du lien", new_parent:"nouveau parent", none_match:"Aucune node ne correspond.", columns:"Colonnes", cols_reset:"Colonnes par défaut", t_out24:"Coupures 24 h", t_out7:"Coupures 7 j", sort_tip:"Cliquer pour trier, recliquer pour inverser", sort_reset:"Ordre par défaut (problèmes d'abord)",
+    r_cost_tip:"Coût du chemin : 1 par bon saut, jusqu'à 4 pour un lien faible. Le border router le plus proche est celui de plus bas coût.", r_unknown:"inconnu pour l'instant", 
+    sig:["très faible", "faible", "correct", "bon"], sig_tip:"Sens le plus faible du lien", new_parent:"nouveau parent", none_match:"Aucune node ne correspond.", columns:"Colonnes", cols_reset:"Colonnes par défaut", sort_tip:"Cliquer pour trier, recliquer pour inverser", sort_reset:"Ordre par défaut (problèmes d'abord)",
     ago_s:"il y a {n} s", ago_m:"il y a {n} min", ago_h:"il y a {n} h", ago_d:"il y a {n} j", never:"jamais",
     old_tip:"Valeur ancienne : donnée par la node {t}, elle a pu changer", old_unknown:"Valeur ancienne : on ne sait pas quand la node l'a donnée (cache du Matter Server)", old_short:"lu {t}", old_short_unknown:"âge inconnu", measured:"Mesuré {t}",
     d_net:"Réseau", d_role:"Rôle", d_parent:"Parent", d_best:"Transmet par", d_signal:"Signal", d_lqi:"Qualité du lien (0–3)", d_resp:"Réponse · moyenne",
-    d_power:"Alimentation", mains:"secteur", battery:"pile", bat_level:["ok", "faible", "critique"], d_last:"Dernier contact",
+    mains:"secteur", battery:"pile", bat_level:["ok", "faible", "critique"], d_last:"Dernier contact",
     sig7:"Signal · 7 derniers jours", resp7:"Réponse · 7 derniers jours", outages:"Coupures", pchanges:"Changements de parent", none:"aucun", ongoing:"en cours",
-    hist_wait:"Historique disponible dans 15 min au plus.", now:"maintenant", d7:"il y a 7 j", average:"moyenne", threshold:"seuil faible", off_scale:"hors échelle",
+    hist_wait:"Historique disponible dans 15 min au plus.", now:"maintenant", average:"moyenne", threshold:"seuil faible", off_scale:"hors échelle",
     srv_t:"Matter Server · 24 h", srv_sub:"Abonnements perdus", srv_session:"Sessions fermées", srv_off:"Hors ligne pour le Matter Server", srv_unreach:"Adresse injoignable", srv_ping:"Pings sans réponse", srv_addr:"Adresse utilisée",
     srv_cover:"Compté depuis {t}", srv_missed:"journal non lu pendant {d}", srv_none:"Le journal du Matter Server n'est pas lu : rien n'est compté.", srv_now:"hors ligne maintenant", t_srv:"Pertes 24 h", srv_tip:"Abonnements perdus et sessions fermées, lus dans le journal du Matter Server",
     t_serial:"Numéro de série", t_fw:"Firmware", t_uid:"Unique ID", t_hw:"Adresse matérielle", t_may_change:"L'appareil peut changer cette valeur à une réinitialisation d'usine",
     tech:"Détails techniques", t_id:"Id", t_rloc:"RLOC16", t_nb:"Voisins", t_weak:"Liens faibles", t_det:"Décrochages 24 h", t_pch:"Chgt de parent 24 h",
     t_partch:"Chgt de partition 24 h", t_out:"Coupures 24 h · 7 j", t_down:"Indisponibilité 7 j", t_reb:"Redémarrages total · 24 h", t_boot:"Raison du dernier démarrage", t_up:"En marche depuis",
     t_src:"Source du dernier contact", t_gap:"Plus long silence", copy:"Copier", copied:"Copié", download:"Télécharger", report_tip:"Rapport anonymisé (sans noms, pièces ni adresses) à coller dans une issue",
-    pc_t:"Code d'appairage", pc_tip:"Conservé par l'add-on : l'appareil peut être appairé à nouveau après une réinitialisation sans accéder à son étiquette",
+    pc_tip:"Conservé par l'add-on : l'appareil peut être appairé à nouveau après une réinitialisation sans accéder à son étiquette",
     nm_title:"Nouvel appareil appairé", nm_name:"Nom", nm_area:"Pièce", nm_later:"Plus tard", nm_saved:"Nom et pièce enregistrés dans Home Assistant",
     sc_btn:"Scanner le QR code", sc_title:"Code d'appairage", sc_desc:"Viser le QR code de l'étiquette de l'appareil", sc_skip:"Appairer sans scanner", sc_close:"Fermer",
     sc_wrong:"Ce n'est pas un QR code Matter", sc_waiting:"Code scanné, en attente de son appareil", pc_e_typed:"Seul un QR code peut être conservé avant l'appairage de son appareil",
     pa_btn:"Appairer", pa_tip:"Appairer un appareil neuf ou réinitialisé, à côté de lui. Dans l'application Home Assistant : scanner son étiquette (le code est conservé pour la nouvelle node), puis l'appairage du téléphone se lance",
     pa_code:"Appairer avec ce code", pa_started:"Appairage lancé sur ce téléphone", pa_started_code:"Code copié : le coller dans l'écran d'appairage au lieu de scanner l'étiquette", pa_started_show:"Appairage lancé. Son code, à saisir dans l'écran d'appairage : {c}",
     pa_screen:"Ouverture de l'écran d'appairage de Home Assistant…", pa_screen_code:"Code copié. Ouverture de l'écran d'appairage de Home Assistant…", pa_screen_show:"Code à saisir : {c}. Ouverture de l'écran d'appairage de Home Assistant…", sc_none:"Le lecteur de QR code de l'application n'a pas répondu : photographier l'étiquette à la place", pa_none:"Ouvrir Paramètres → Appareils → Ajouter un appareil Matter dans Home Assistant",
-    pc_cam:"Photographier le QR code", pc_new_what:"Nouvelle node", pc_new:"Son code d'appairage n'est pas encore conservé : photographier son étiquette maintenant, tant que tu es devant elle.",
-    sec_tools:"Outils", sec_pair:"Appairage", sec_signal:"Signal et réponse", sub_hist:"Historique", none_f:"aucune",
+    pc_cam:"Photographier le QR code", pc_new_what:"Nouvelle node", pc_new:"Son code d'appairage n'est pas encore conservé : photographier son étiquette maintenant, devant l'appareil.",
+    sec_pair:"Appairage", sec_signal:"Signal et réponse", sub_hist:"Historique", none_f:"aucune",
     more:"{n} plus anciens", pc_delete_code:"Supprimer le code", t_added:"Appairée le", sub_ident:"Identité", sub_thread:"Thread", sub_life:"Fonctionnement", sub_contact:"Contact",
-    pc_drop:"Une photo de l'étiquette peut aussi être déposée ou collée sur cette fiche.", pc_pick:"Choisir une photo", pc_ph:"ou saisir le code : 1234-567-8901 ou MT:…",
+    pc_drop:"Une photo de l'étiquette peut aussi être déposée ou collée sur cette fiche.", pc_ph:"ou saisir le code : 1234-567-8901 ou MT:…",
     pc_auto:"Rattaché tout seul après la réinitialisation : c'était le seul code de ce produit en attente. À remplacer si c'est un autre appareil.",
     pc_none_qr:"Code saisi : pas de QR code à afficher (les chiffres ne contiennent pas tout ce qu'il faut à un QR code)", pc_replace:"Remplacer", pc_delete:"Supprimer", pc_delete_confirm:"Supprimer ce code d'appairage ?",
     pc_saved:"Code d'appairage enregistré", pc_deleted:"Code d'appairage supprimé", pc_reading:"Lecture de la photo…", pc_noqr:"Aucun QR code trouvé dans cette photo",
@@ -476,7 +477,7 @@ const T = {
     rs_title:"Réinitialiser {n} ?", rs_text:"Elle sera retirée de : {f}. Elle oublie son réseau et devra être appairée à nouveau, à portée Bluetooth, avec son code {c} (conservé dans « Codes d'appairage »). C'est irréversible.",
     rs_router:"C'est un routeur Thread : les nodes qui passent par elle en choisissent un autre, ce qui prend quelques minutes. Attendre 2 à 3 minutes avant de l'appairer à nouveau, sinon l'appairage peut échouer.",
     rs_check:"J'ai compris que cette node devra être appairée à nouveau", rs_go:"Réinitialiser définitivement", rs_cancel:"Annuler", rs_close:"Fermer",
-    rs_nocode:"Enregistre d'abord son code d'appairage : sans lui, l'étiquette de l'appareil serait le seul moyen de l'appairer à nouveau.", rs_noanswer:"{n} ne répond pas : rien n'a été envoyé",
+    rs_nocode:"Enregistrer d'abord son code d'appairage : sans lui, l'étiquette de l'appareil serait le seul moyen de l'appairer à nouveau.", rs_noanswer:"{n} ne répond pas : rien n'a été envoyé",
     rs_r_reset:"{n} réinitialisée (retirée de : {f}). Son code est ci-dessous, pour l'appairer à nouveau.",
     rs_r_unsure:"{n} : retirée de {f}. Elle n'a pas confirmé quitter Home Assistant mais ne répond plus : vérifier qu'elle clignote, prête à être appairée.",
     rs_listed:"Elle reste dans la liste du Matter Server : la supprimer du tableau.", rs_r_partial:"{n} : retirée de {f}, mais toujours dans Home Assistant. Réessayer.",
@@ -968,7 +969,7 @@ async function runAction(btn) {
     try { kept = !!(await (await fetch("api/pairing?id=" + encodeURIComponent(id), {cache: "no-store"})).json()).code; } catch (e) { /* asked as usual */ }
     if (!confirm(F(kept ? "a_remove_confirm" : "a_remove_confirm_nocode", {n: r.name}))) return;
   }
-  document.querySelectorAll(`[data-act="${a}"][data-node="${id}"]`).forEach(b => { b.disabled = true; b.classList.add("busy"); });
+  document.querySelectorAll(`[data-act="${a}"][data-node="${CSS.escape(id)}"]`).forEach(b => { b.disabled = true; b.classList.add("busy"); });
   let msg;
   try {
     const res = await (await fetch("api/action", {method: "POST", headers: {"Content-Type": "application/json"},
@@ -985,12 +986,15 @@ async function runAction(btn) {
       if (res.result === "restarted") followSearch(id);   // router (provisional trial)
       // the parent (new or same) and its link now, as the table shows them
       const lk = [res.parent, res.lqi != null ? "LQI " + res.lqi : null, res.rssi != null ? res.rssi + " dBm" : null].filter(Boolean).join(" · ");
-      msg = res.result === "restarted" ? res.text : F("a_parent_" + (res.parent ? k : k === "new" || k === "same" ? "unknown" : k), {n: r.name, l: lk});
+      const key = "a_parent_" + (res.parent ? k : k === "new" || k === "same" ? "unknown" : k);
+      // a result the page has no text for (a newer add-on, "router"): said as a failure, not as an error of the page
+      msg = res.result === "restarted" ? res.text : k === "router" ? F("a_parent_router_res", {n: r.name})
+        : L(key) !== undefined ? F(key, {n: r.name, l: lk}) : F("a_failed", {n: r.name});
       if (res.result === "unknown") followSearch(id);   // the add-on keeps reading the node: its result comes later
     }
   } catch (e) { msg = F("a_failed", {n: r.name}); }
   toast(msg);
-  document.querySelectorAll(`[data-act="${a}"][data-node="${id}"]`).forEach(b => { b.disabled = false; b.classList.remove("busy"); });
+  document.querySelectorAll(`[data-act="${a}"][data-node="${CSS.escape(id)}"]`).forEach(b => { b.disabled = false; b.classList.remove("busy"); });
   await load(true);
   refreshNode(id);   // the panel shows the new values
 }
@@ -1077,14 +1081,22 @@ const hist = (title, items, none) => !items.length ? `<p class="histnone">${titl
     ? `<details class="more"><summary>${esc(F("more", {n: items.length - 5}))}</summary><ul>${items.slice(5).join("")}</ul></details>` : "");
 // a section of a panel is open unless the user folded it (kept in this browser)
 const secOpen = (key, open) => P.sec && key in P.sec ? !!P.sec[key] : open;
+let sheetFrom = null;   // what had the focus before the panel opened: it gets it back when the panel closes
 function openSheet(html) {
+  if (!$("#sheet").classList.contains("on")) sheetFrom = document.activeElement;
   $("#sheet").innerHTML = html; $("#sheet").classList.add("on"); $("#scrim").classList.add("on");
+  const h = $("#sheet h3"); $("#sheet").setAttribute("aria-label", h ? h.textContent : L("h_node"));
   $("#sheet").scrollTop = 0;
   const x = $("#sheet .x"); if (x) x.focus({preventScroll: true});
 }
-const closeSheet = () => { $("#sheet").classList.remove("on"); $("#scrim").classList.remove("on"); };
+const closeSheet = () => {
+  const was = $("#sheet").classList.contains("on");
+  $("#sheet").classList.remove("on"); $("#scrim").classList.remove("on");
+  if (was && sheetFrom && document.contains(sheetFrom)) { try { sheetFrom.focus({preventScroll: true}); } catch (e) { /* gone */ } }
+  sheetFrom = null;
+};
 const head = (title, sub, extra) => `<header><div><h3>${title}</h3>${sub ? `<span class="mut">${sub}</span>` : ""}${extra || ""}</div>
-  <button class="x" aria-label="✕">✕</button></header>`;
+  <button class="x" aria-label="${esc(L("rs_close"))}" title="${esc(L("rs_close"))}">✕</button></header>`;
 
 let openId = null;
 // again: the same panel shown once more with new values: no placeholder, same scroll
@@ -1662,7 +1674,7 @@ document.addEventListener("paste", e => {
   if (f) { e.preventDefault(); pairPhoto(f); }
 });
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape") closeSheet();
+  if (e.key === "Escape") { if ($("#colmenu").classList.contains("on")) toggleColMenu(false); else closeSheet(); }
   if ((e.key === "Enter" || e.key === " ") && e.target.classList && (e.target.classList.contains("row") || e.target.matches(".issue[data-id],.br[data-br]"))) { e.preventDefault(); if (e.target.dataset.br) openBr(e.target.dataset.br); else openNode(e.target.dataset.id); }
 });
 $("#q").value = P.q;

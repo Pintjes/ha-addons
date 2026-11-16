@@ -220,20 +220,20 @@ def advise(rows, brs, ctx):
                     if not failed:
                         past = None if cand else _past_parent(r, ctx["history"](r["id"]), usable, now)
                         if cand:
-                            short = t("Find a new parent: {name}, {signal} now", name=cand[0], signal=_signal(cand[1], cand[2]))
+                            short = t("Find a new link: {name}, {signal} now", name=cand[0], signal=_signal(cand[1], cand[2]))
                             detail = t("it hears {name} better than its parent", name=cand[0])
                         elif past:
-                            short = t("Find a new parent: {name}, {signal} {ago}", name=past[0],
+                            short = t("Find a new link: {name}, {signal} {ago}", name=past[0],
                                       signal=_signal(past[1], past[2]), ago=ago(now - past[3]))
                             detail = t("it had a good link with {name} {ago}", name=past[0], ago=ago(now - past[3]))
                         elif room:
-                            short = tn("Find a new parent ({n} router in the room)", "Find a new parent ({n} routers in the room)", room)
+                            short = tn("Find a new link ({n} router in the room)", "Find a new link ({n} routers in the room)", room)
                             detail = t("routers of {area} it could attach to", area=area)
                         elif floor:
-                            short = tn("Find a new parent ({n} router on the floor)", "Find a new parent ({n} routers on the floor)", floor)
+                            short = tn("Find a new link ({n} router on the floor)", "Find a new link ({n} routers on the floor)", floor)
                             detail = t("routers of the same floor it could attach to")
                         else:
-                            short, detail = t("Find a new parent"), t("it attaches again and picks the best parent it hears")
+                            short, detail = t("Find a new link"), t("it attaches again and picks the best parent it hears")
                     else:
                         when = time.strftime("%d/%m %H:%M", time.localtime(tried[0]))
                         if room:
@@ -245,8 +245,8 @@ def advise(rows, brs, ctx):
                     out.append((short, detail, "high"))
                 elif shaky and not (done and now - tried[0] < SETTLE_S):
                     kind, cnt = shaky
-                    key = ("{parent} restarts ({n}× in 24h): finding a new parent could improve the situation" if kind == "reboots"
-                           else "{parent} detaches ({n}× in 24h): finding a new parent could improve the situation")
+                    key = ("{parent} restarts ({n}× in 24h): finding a new link could improve the situation" if kind == "reboots"
+                           else "{parent} detaches ({n}× in 24h): finding a new link could improve the situation")
                     out.append((t(key, parent=r["parent"], n=cnt), t("this node loses its parent each time"), "low"))
             # the node itself, when others depend on it or when it restarts
             kids = len(children.get(name, []))

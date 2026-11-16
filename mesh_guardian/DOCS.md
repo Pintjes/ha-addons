@@ -14,6 +14,7 @@ do about them.
 - [Events](#events)
 - [Radio advice](#radio-advice)
 - [Names Home Assistant → Matter](#names-home-assistant--matter)
+- [Find better parents](#find-better-parents)
 - [Node table](#node-table)
 - [Wi-Fi and Ethernet nodes](#wi-fi-and-ethernet-nodes)
 - [Network quality](#network-quality)
@@ -74,7 +75,7 @@ border routers of other networks (e.g. a neighbor's) are ignored.
 3. Pick your **language** in the *Configuration* tab and restart the add-on.
 4. Enable **Start on boot** and **Watchdog**.
 
-After about 2½ minutes the log shows `Monitoring ready`, and a **Thread
+After about 2½ minutes the log shows `Monitoring ready`, and a **Mesh
 Guardian** device with its entities appears in the MQTT integration.
 
 **Requirements:** Home Assistant OS or Supervised, the Matter integration with
@@ -93,7 +94,7 @@ the Matter Server add-on, the Mosquitto broker add-on and the MQTT integration.
 | `rebuild_history` | `true` | On first start or after a reinstall, rebuild 7 days of per-node outage statistics from the Home Assistant history. Turn off to start from zero. |
 | `all_thread_networks` | `false` | Also follow Thread networks not used by your Matter nodes. |
 | `log_events_to_file` | `true` | Also write events to `/share/mesh_guardian/events.jsonl` (rotated at 5 MB). |
-| `advice` | `true` | Give advice for the available nodes (*Find a new parent*, *Add a router*…): cards, *Advice* column, log and `advice` events. Off: none of them. An unavailable node keeps what to do about it, and the notes about the network stay. |
+| `advice` | `true` | Give advice for the available nodes (*Find a new link*, *Add a router*…): cards, *Advice* column, log and `advice` events. Off: none of them. An unavailable node keeps what to do about it, and the notes about the network stay. |
 | `passive_contact` | `false` | Count every IPv6 packet sent by a node and seen on the host as a contact (*Last contact*), including the reports the Matter Server does not forward because their value did not change, and the answers to pings sent by Home Assistant. Only the source address of the packets is read. Uses the `NET_RAW` privilege. |
 | `matter_fabric` | *(empty)* | Advanced: compressed fabric id of Home Assistant. Detected automatically when empty. |
 | `matter_server_url` | *(empty)* | Advanced: WebSocket address of the Matter Server (e.g. `ws://192.168.1.10:5580/ws`) when it does not run as the Matter Server add-on (Docker container, other machine). Defaults to the Matter Server add-on. |
@@ -187,7 +188,7 @@ Every event is written to the add-on log, published on the MQTT topic
 | `ping_all`, `ping_all_done` | ping of every node requested with the button |
 | `radio_survey`, `radio_advice`, `parent_change` | radio quality and advice (also shown in the node table) |
 | `names`, `name_synced` | names Home Assistant → Matter (Rename nodes button) |
-| `reattach`, `reattach_node`, `reattach_result`, `reattach_done` | parent search (Find better parents button): start, node asked to attach again, its link before and after (`result`: `better`, `worse`, `similar`, `same`, `unknown`, then `noanswer` if the node never answered), summary |
+| `reattach`, `reattach_node`, `reattach_result`, `reattach_done` | parent search (Find better parents button): start, node asked to attach again, its link before and after (`result`: `better`, `worse`, `similar`, `same`, `unknown`, then `noanswer` if the node never answered; `unsupported` or `failed` when the node refuses; `restarted` for the Thread restart of a router, a trial), summary |
 | `recover_node`, `recover_result` | recovery attempt on an unavailable node (button of the node table): start, then `result`: `back`, `noanswer` (command sent, node still unavailable), `unreachable` (nothing got through), `failed` (refused by the node) |
 | `node_reset` | a node was reset from a distance (Reset button of the node panel), with the fabrics it left and `result` (`reset`, or `unsure` when it did not confirm leaving Home Assistant) |
 | `node_removed` | a node was removed from Home Assistant (Remove button) |
@@ -223,9 +224,9 @@ cause before the symptom, and the room and the floor of Home Assistant as hints
 **End device with a weak link** (link quality 1 or 0):
 
 1. a better parent is known — a router it hears better, or a parent it had a
-   good link with in the last 7 days: *Find a new parent: X, LQI 3, 36 min ago*;
-2. other routers are in its room, or on its floor: *Find a new parent (4 routers
-   in the room)*; none known: *Find a new parent*;
+   good link with in the last 7 days: *Find a new link: X, LQI 3, 36 min ago*;
+2. other routers are in its room, or on its floor: *Find a new link (4 routers
+   in the room)*; none known: *Find a new link*;
 3. a search made since the link is weak found nothing better, and routers are in
    the room: *Move the node: none of the 4 routers of the room hears it well*;
 4. same, without any router in the room: *Add a router in <room>*.
@@ -237,7 +238,7 @@ link advice is shown while a search is under way.
 between <room> and <room of the other end>*.
 
 **Unstable parent** (ℹ️, a risk rather than a problem now): the node loses its
-parent each time it restarts or detaches: *Find a new parent*. A parent is
+parent each time it restarts or detaches: *Find a new link*. A parent is
 unstable when it crashed at least twice in 24h or detached at least 3 times
 (detaches shared by many nodes in one survey interval are a network episode and
 are not counted). The advice is hidden for 24h after a search.
@@ -309,8 +310,10 @@ What to know:
   better, sometimes the same parent is kept (no better router in range), and
   it can be weaker. There is no way back to the previous parent. This is why
   nodes with a good link are never touched.
-- Routers are never touched: a router has no parent. A mains-powered device
-  attached as a child (*End* in the table) has one and can be moved.
+- This button never touches a router: a router has no parent. A mains-powered
+  device attached as a child (*End* in the table) has one and can be moved.
+  (*Find a new link* in the node table can restart the Thread interface of a
+  router, as a trial: see *Actions on one node*.)
 - When the result is not known right away (a sleepy node answers at its next
   wake-up), the node and its parent are read again every 30 s for 5 minutes;
   the page shows the result as soon as it is known.
@@ -371,7 +374,8 @@ Ethernet, on battery; a search box (name, area, model, id). Default columns:
 - *Power* — mains, or the battery with its charge (green > 50 %, orange
   20–50 %, red < 20 %);
 - *Last contact*, *Advice*;
-- *Actions* — ping, find a better parent (end devices), interview again.
+- *Actions* — ping, find a new link (recovery attempt when the node is
+  unavailable), interview again, remove.
 
 More columns with the button next to the filters (neighbors, weak links,
 detaches, parent changes, outages, downtime, reboots, uptime, RLOC16, id…).
@@ -388,11 +392,26 @@ answers). Three nodes at a time, mains nodes first, at most once every
 (also after a start of the add-on, see Radio survey); the lines update as the
 answers come in.
 
-**Node panel** — click a node: status and advice, attachment explained, border
-router and cost of the path, response, power, the three actions, the signal and
-response curves of the last 7 days (centered on their average, the weak
-threshold drawn when it is in range), outages, parent changes, and the
-technical details (full path, RLOC16, neighbors, counters, sign of life…).
+**Node panel** — click a node. On top, always shown: its name, area and model,
+its state, network, role and power, the advice, six facts (signal, response,
+parent or first hop, border router and hops, last contact, outages over 24 hours
+and 7 days) and the everyday actions (ping, find a new link or recovery attempt,
+interview). Then sections that fold with their arrow; what you open or fold is
+remembered by your browser:
+
+- *Signal and response* — the curves of the last 7 days (centered on their
+  average, the weak threshold drawn when it is in range);
+- *Pairing* — the pairing code with its QR code (see *Pairing codes*), and the
+  two actions that cannot be undone: **Reset** and **Remove**;
+- *History* — outages and parent changes (the five latest, older ones unfold);
+- *Technical details* (folded at first) — identity (id, firmware, serial number,
+  pairing date, unique id, hardware address), Thread (full path, RLOC16,
+  neighbors, counters), running (uptime, reboots, last boot reason, downtime),
+  contact (sign of life, source, longest silence) and what the Matter Server log
+  says of the node over 24 hours.
+
+After an action the panel shows the new values without moving, and waits while
+you are typing in it or answering a question.
 
 **Report** — an anonymized Markdown report (models, roles, signals, counters; no
 names, areas, addresses or prefixes) to copy or download and paste in an issue.
@@ -420,6 +439,10 @@ names, areas, addresses or prefixes) to copy or download and paste in an issue.
   to an unavailable node, and the result is then "out of reach".
 - **Interview** — the Matter Server reads again everything the node describes
   (endpoints, clusters, attributes); useful after a firmware update.
+- **Remove** — the node leaves Home Assistant (the Matter Server removes it). On
+  most devices, leaving their last ecosystem is a factory reset: the
+  confirmation warns when the pairing code of the node is not kept. Event
+  `node_removed`.
 
 ### Pairing codes
 
@@ -668,9 +691,10 @@ Recovery pings only target unavailable nodes; the periodic sweep never pings
 battery-powered nodes.
 
 **Can I turn off a feature?**
-Yes: `auto_ping` (or the switch), `ping_all_interval: 0`. Node names are only
+Yes: the **Automatic recovery** switch, `ping_all_interval: 0` for the sweep, `advice: false` for the advice. Node names are only
 written when you press **Rename nodes**, and nodes are only asked to attach
-again when you press **Find better parents**.
+again when you press **Find better parents**, **Find a new link** or
+**Recovery attempt**.
 
 **A border router shows offline although it works.**
 Some border routers do not always answer mDNS queries. A border router is only

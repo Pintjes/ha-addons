@@ -53,8 +53,16 @@ END_DEVICE_ROLES = (2, 3, 4)   # sleepy end device, end device, REED (a full end
 CONNECT_NETWORK = 6   # Network Commissioning command id
 # PROVISIONAL (2.12.0, trial asked by the user): the same command on a router. A router has no
 # parent and picks its routes by itself, so no better link is expected; the trial is to see what
-# it does on a router that answers badly. To go back: remove ROUTER_ROLES, ROUTER_SETTLE_S, _row,
-# _router and _follow_router, the call in run_node, and in the page canParent / the router confirm.
+# it does on a router that answers badly. To go back, remove:
+# - here: ROUTER_ROLES, ROUTER_SETTLE_S, ROUTER_POLL_S, _row, _first_link, _link_text, _router,
+#   _follow_router and the "if row is None" block of run_node;
+# - i18n.py: the FR texts "{node}: Thread restart of a router (trial)…", "…of the leader (trial)…",
+#   "{node}: Thread restarted, waiting for the result…", "…router again…", "…still an end device…";
+# - web/index.html: canParent back to `net(r) === "thread" && !isRouter(r) && r.role !== "leader"`,
+#   the "restarted" branches of runAction, the texts a_parent_confirm_router, a_parent_confirm_leader
+#   (EN and FR) and their use in runAction;
+# - DOCS.md: the trial in "Actions on one node" and in "Find better parents"; README: "on a router
+#   it restarts its Thread interface, a trial"; CHANGELOG: an entry saying it was removed.
 ROUTER_ROLES = (5, 6)  # Thread routing roles "router" and "leader" (the leader too, asked by the user: the page warns)
 ROUTER_SETTLE_S = 180  # s: a router attaches as a child first and becomes a router again within 2 minutes
 ROUTER_POLL_S = 20     # s: its role is read this often meanwhile, the result is given as soon as it is a router again

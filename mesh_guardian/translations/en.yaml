@@ -32,7 +32,7 @@ configuration:
     description: "Count every IPv6 packet of a node as a contact (NET_RAW privilege)."
   advice:
     name: "Advice"
-    description: "Give advice for the available nodes (find a new parent, add a router…)."
+    description: "Give advice for the available nodes (find a new link, add a router…)."
   matter_fabric:
     name: "Matter fabric"
     description: "Leave empty: detected automatically."

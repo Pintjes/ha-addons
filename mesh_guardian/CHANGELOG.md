@@ -4,6 +4,31 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## Highlights of 2.9 to 2.25 (16 November 2026)
+
+- **Act on a node from its panel**: recovery attempt on an unavailable node, reset from a distance, pairing codes kept by the add-on (photo or scan of the label), pairing and naming a new device without leaving the page.
+- **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
+- **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
+
+## [2.25.0] - 2026-11-16
+
+### Changed
+
+- The advice names the button as it is called: "Find a new link" (FR "Rechercher un nouveau lien").
+- Node panel: the close button and the panel are named for screen readers, the focus goes back where it was when the panel closes, Escape closes the column menu first, action buttons are larger on a phone, cards no longer overflow on a very narrow screen.
+- French texts: the infinitive everywhere (no more "tu"), the tooltip of "Interviewer" in French, the old parent and its verdict back in the "new parent" log line.
+- Documentation brought up to date: the node panel and its sections, the actions of the table (Remove included), the events, the trial on routers, the options; the recipe to remove the router trial is complete.
+- The image takes every module of the add-on (`COPY *.py`): a new file can no longer be forgotten.
+
+### Removed
+
+- 32 French texts and 15 page texts no longer used, and a style no longer used.
+
+### Fixed
+
+- A parent search whose result the page has no text for no longer shows an error of the page.
+- English log: "leader router" instead of the French "routeur leader".
+
 ## [2.24.0] - 2026-11-16
 
 ### Fixed
@@ -729,10 +754,6 @@ Texts audit: short and to the point.
 - A node announced as a child whose fresh neighbor table has no link with that
   parent but links with several routers is shown as a router (its role and
   address were out of date).
-
-## [1.7.1] - 2026-11-14
-
-### Fixed
 
 - Weak-link advice disappears as soon as the link is above the weak threshold
   again, without waiting for the next radio survey.
