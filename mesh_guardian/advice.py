@@ -179,6 +179,11 @@ def advise(rows, brs, ctx):
             elif r["id"] in ctx["gave_up"]:
                 out.append((t("Remove the battery for 10s") if r.get("battery") else t("Unplug it for 10s"),
                             t("it did not come back after the recovery pings"), "high"))
+            elif r.get("ping_ok") is True or (r.get("server") or {}).get("opened_1h", 0) >= 2:
+                # it answered a recovery ping, or the Matter Server opened several sessions within the hour:
+                # it has power, "check its power" would be wrong
+                out.append((t("Answers now and then: remove the battery for 10s") if r.get("battery")
+                            else t("Answers now and then: unplug it for 10s"), "", "high"))
             else:
                 out.append((t("Check its batteries") if r.get("battery") else t("Check its power"), "", "high"))
         elif r.get("network") != "thread":
