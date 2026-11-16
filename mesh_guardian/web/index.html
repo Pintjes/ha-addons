@@ -211,10 +211,29 @@
   .apf input { flex: 1; min-width: 0; min-height: 36px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); padding: 0 8px; }
   .apf .btn { min-height: 36px; padding: 0 10px; }
   .kv div:has(.apf) { grid-column: 1 / -1; }
-  .pcdrop { margin-top: 10px; border: 2px dashed var(--line); border-radius: 10px; padding: 14px; text-align: center; color: var(--mut); }
+  .pcdrop { border: 2px dashed transparent; border-radius: 10px; margin: 0 -8px; padding: 0 6px 6px; }
   .pcdrop.over { border-color: var(--acc); background: var(--acc-soft); }
-  .pcdrop .btn { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px; cursor: pointer; }
-  .pcdrop .pccam { min-height: 40px; margin-bottom: 10px; color: var(--txt); }
+  .pcline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+  .pcline .btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 10px; cursor: pointer; color: var(--txt); }
+  .pcline .btn.quiet { border-color: transparent; background: none; color: var(--mut); padding: 0 6px; }
+  .pcline .btn.quiet:hover { color: var(--txt); }
+  .pcline.pcsub { margin-top: 2px; gap: 2px 14px; }
+  .pcline.pcsub .btn { min-height: 28px; padding: 0; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
+  .pcline .pccode { margin: 0 4px 0 0; }
+  .qrbox.big { width: 168px; height: 168px; margin-top: 10px; }
+  .qrbox.big .qr { width: 100%; height: 100%; display: block; border-radius: 6px; }
+  #pair > small { display: block; margin-top: 6px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+  .ftag { font-size: 12.5px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--mut); white-space: nowrap; }
+  .kv .wide { grid-column: 1 / -1; }
+  .kv.kv3 { grid-template-columns: repeat(3, 1fr); }
+  .sheet .sub { margin: 18px 0 -6px; font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--mut); }
+  .sheet summary + .sub { margin-top: 8px; }
+  .histnone { margin: 22px 2px 0; color: var(--mut); }
+  .histnone span { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; margin-right: 10px; }
+  .sheet-acts.danger { margin-top: 12px; }
+  .sheet-acts.danger .act { color: var(--mut); }
+  .sheet-acts.danger .act:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); }
   .pcf, .pca { display: flex; gap: 6px; margin-top: 8px; }
   .pcf input, .pca select { flex: 1; min-width: 0; min-height: 36px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--txt); padding: 0 8px; }
   .pcf .btn, .pca .btn, .pcbtns .btn, .pccard .btn { min-height: 36px; padding: 0 10px; }
@@ -348,7 +367,8 @@ const T = {
     pa_code:"Pair with this code", pa_started:"Pairing started on this phone", pa_started_code:"Code copied: paste it in the pairing screen instead of scanning the label",
     pa_screen:"Opening the pairing screen of Home Assistant…", pa_screen_code:"Code copied. Opening the pairing screen of Home Assistant…", pa_none:"Open Settings → Devices → Add a Matter device in Home Assistant",
     pc_cam:"Take a photo of the QR code", pc_new_what:"New node", pc_new:"Its pairing code is not kept yet: photograph its label now, while you are in front of it.",
-    pc_drop:"Drop a photo of the QR code here, or", pc_pick:"choose a photo", pc_ph:"or type the code: 1234-567-8901 or MT:…",
+    pc_delete_code:"Delete the code", pc_qr:"QR code", t_added:"Paired on", sub_ident:"Identity", sub_thread:"Thread", sub_life:"Running", sub_contact:"Contact",
+    pc_drop:"A photo of the label can also be dropped or pasted on this panel.", pc_pick:"Choose a photo", pc_ph:"or type the code: 1234-567-8901 or MT:…",
     pc_auto:"Attached by itself after the reset: it was the only code of this product waiting. Replace it if this is another device.",
     pc_none_qr:"Typed code: no QR code to show (the digits do not hold everything a QR code needs)", pc_replace:"Replace", pc_delete:"Delete", pc_delete_confirm:"Delete this pairing code?",
     pc_saved:"Pairing code saved", pc_deleted:"Pairing code deleted", pc_reading:"Reading the photo…", pc_noqr:"No QR code found in this photo",
@@ -428,7 +448,8 @@ const T = {
     pa_code:"Appairer avec ce code", pa_started:"Appairage lancé sur ce téléphone", pa_started_code:"Code copié : le coller dans l'écran d'appairage au lieu de scanner l'étiquette",
     pa_screen:"Ouverture de l'écran d'appairage de Home Assistant…", pa_screen_code:"Code copié. Ouverture de l'écran d'appairage de Home Assistant…", pa_none:"Ouvrir Paramètres → Appareils → Ajouter un appareil Matter dans Home Assistant",
     pc_cam:"Photographier le QR code", pc_new_what:"Nouvelle node", pc_new:"Son code d'appairage n'est pas encore conservé : photographier son étiquette maintenant, tant que tu es devant elle.",
-    pc_drop:"Déposer ici une photo du QR code, ou", pc_pick:"choisir une photo", pc_ph:"ou saisir le code : 1234-567-8901 ou MT:…",
+    pc_delete_code:"Supprimer le code", pc_qr:"QR code", t_added:"Appairée le", sub_ident:"Identité", sub_thread:"Thread", sub_life:"Fonctionnement", sub_contact:"Contact",
+    pc_drop:"Une photo de l'étiquette peut aussi être déposée ou collée sur cette fiche.", pc_pick:"Choisir une photo", pc_ph:"ou saisir le code : 1234-567-8901 ou MT:…",
     pc_auto:"Rattaché tout seul après la réinitialisation : c'était le seul code de ce produit en attente. À remplacer si c'est un autre appareil.",
     pc_none_qr:"Code saisi : pas de QR code à afficher (les chiffres ne contiennent pas tout ce qu'il faut à un QR code)", pc_replace:"Remplacer", pc_delete:"Supprimer", pc_delete_confirm:"Supprimer ce code d'appairage ?",
     pc_saved:"Code d'appairage enregistré", pc_deleted:"Code d'appairage supprimé", pc_reading:"Lecture de la photo…", pc_noqr:"Aucun QR code trouvé dans cette photo",
@@ -1004,7 +1025,10 @@ function chart(pts, unit, color, warn) {
     <circle cx="${X(v[v.length - 1][0])}" cy="${Y(cur)}" r="3.5" fill="${color}"/>
     <text x="${L0}" y="${H - 2}">${dt(t0)}</text><text x="${W - 6}" y="${H - 2}" text-anchor="end">${dt(t1)}</text></svg></div>`;
 }
-const grid = a => `<div class="kv">${a.map(([k, v]) => `<div><span>${k}</span>${v}</div>`).join("")}</div>`;
+// items: [label, value] or [label, value, "wide"] (the whole width); cls: "kv3" for three columns of short figures
+const grid = (a, cls = "") => `<div class="kv ${cls}">${a.map(([k, v, w]) => `<div${w ? ' class="wide"' : ""}><span>${k}</span>${v}</div>`).join("")}</div>`;
+// a list of the history; an empty one takes one line, not a title and a paragraph
+const hist = (title, items) => items ? `<h2>${title}</h2><ul>${items}</ul>` : `<p class="histnone"><span>${title}</span>${L("none")}</p>`;
 function openSheet(html) {
   $("#sheet").innerHTML = html; $("#sheet").classList.add("on"); $("#scrim").classList.add("on");
   const x = $("#sheet .x"); if (x) x.focus();
@@ -1021,35 +1045,47 @@ async function openNode(id) {
   const adv = r.available && r.silent_s ? `<div class="advice warn">${IC.warn}<div><b>${L("w_silent")}</b><br>${esc(silentTip(r))}</div></div>`
     : !r.available ? `<div class="advice bad">${IC.bad}<div><b>${esc(F("unav_since", {t: since(r)}).replace(/^./, c => c.toUpperCase()))}</b><br>${esc(r.advice ? r.advice + (r.advice_detail && r.advice_detail !== r.advice ? " — " + r.advice_detail : "") : downDo(r))}</div></div>`
     : r.advice ? `<div class="advice ${lvl(r)}">${lvl(r) === "warn" ? IC.bulb : IC.info}<div><b>${esc(r.advice)}</b>${r.advice_detail && r.advice_detail !== r.advice ? "<br>" + esc(r.advice_detail) : ""}</div></div>` : "";
-  const best = !r.parent && isRouter(r);
+  const best = !r.parent && isRouter(r), thread = net(r) === "thread";
   const power = r.battery ? L("battery") + (r.battery_pct != null ? " " + r.battery_pct + " %" : r.battery_level != null ? " · " + L("bat_level")[r.battery_level] : "") : L("mains");
-  const kv = [[L("d_net"), NETS[net(r)]], [L("d_role"), r.role ? esc(L("roles")[r.role] || r.role) : "—"],
-    [best ? L("d_best") : L("d_parent"), `<span${r.link_old && linkName(r) ? ' class="old"' : ""} title="${esc(net(r) === "thread" ? (best ? L("best_tip") : L("parent_tip")) : "")}">${esc(linkName(r) || "—")}</span>${r.link_old && linkName(r) ? ` <small class="mut">(${esc(oldShort(r.link_t))})</small>` : ""}`], [L("d_signal"), signal(r)],
-    ...(net(r) === "wifi" ? [[L("ap"), `<form class="apf" data-bssid="${esc(r.bssid || "")}"><input name="n" value="${esc(r.access_point || "")}" placeholder="${esc(L("ap_ph"))}" maxlength="40"><button class="btn">${L("save")}</button></form><small class="mut">BSSID ${esc(r.bssid || "?")}</small>`]] : []),
-    ...(net(r) === "thread" ? [[L("h_br"), r.route ? `${aged(r.link_old, r.link_t, esc(r.route.br))}<br><small class="mut" title="${esc(L("r_cost_tip"))}">${esc(hopsTxt(r.route) + " · " + F("r_cost", {c: r.route.cost}))}</small>` : esc(L("r_unknown"))]] : []), [L("d_resp"), `${r.rtt_fail ? L("no_answer") : aged(r.rtt_old, r.rtt_t, ms(r.rtt_ms))} · ${ms(r.rtt_avg_ms)}${!r.rtt_fail && r.rtt_t ? ` <small class="mut">(${esc(F("measured", {t: ago(r.rtt_t)}).toLowerCase())})</small>` : ""}`],
-    [L("d_power"), esc(power)], [L("d_last"), r.last_report ? ago(r.last_report) + (r.contact_src ? ` <small class="mut">(${esc(L("csrc")[r.contact_src] || r.contact_src)})</small>` : "") : L("never")]];
   const c = v => v == null ? "—" : v;
-  const idv = (v, tip) => v ? `<span${tip ? ` title="${esc(L("t_may_change"))}"` : ""} style="overflow-wrap:anywhere;user-select:all">${esc(v)}</span>` : "—";
-  const tech = [...(r.route ? [[L("t_path"), esc(fullPath(r))]] : []), [L("t_id"), esc(r.id)],
-    [L("t_serial"), idv(r.serial)], [L("t_fw"), idv(r.firmware)], [L("t_uid"), idv(r.unique_id, true)], [L("t_hw"), idv(r.hw_address, true)], [L("t_rloc"), esc(r.rloc16 || "—")], [L("t_nb"), c(r.neighbors)], [L("t_weak"), c(r.weak)],
-    [L("t_det"), aged(r.counters_old && r.detaches_24h != null, r.counters_t, c(r.detaches_24h))], [L("t_pch"), aged(r.counters_old && r.parent_changes_24h != null, r.counters_t, c(r.parent_changes_24h))], [L("t_partch"), aged(r.counters_old && r.partition_changes_24h != null, r.counters_t, c(r.partition_changes_24h))],
-    [L("t_out"), `${c(r.outages_24h)} · ${c(r.outages_7d)}`], [L("t_down"), dur(r.downtime_7d_min)], [L("t_reb"), `${c(r.reboots)} · ${c(r.reboots_24h)}`],
-    [L("t_boot"), r.boot_reason == null ? "—" : esc(L("boot")[r.boot_reason] || r.boot_reason)], [L("t_up"), r.uptime_h == null ? "—" : aged(r.uptime_old, r.uptime_t, dur(Math.round(r.uptime_h * 60)))],
-    [L("t_rhythm"), r.rhythm_s == null ? esc(L("rhythm_wait")) : esc(F("rhythm_v", {u: dur1(r.rhythm_s), l: dur1(r.silent_limit_s)}))],
-    [L("t_src"), r.contact_src ? esc(L("csrc")[r.contact_src] || r.contact_src) : "—"], [L("t_gap"), r.active_gap_max_s == null ? "—" : dur(Math.round(r.active_gap_max_s / 60))]];
-  const top = head(esc(r.name), [r.area, r.model].filter(Boolean).map(esc).join(" · "), `<div style="margin-top:8px">${status(r)}</div>`) + adv + grid(kv) +
-    `<div class="sheet-acts">${nodeActs(r).map(([a, ok]) =>
-      `<button class="btn act" data-act="${a}" data-node="${esc(r.id)}" ${ok ? "" : "disabled"} title="${esc(ok ? L("a_" + a + "_tip") : L("a_parent_router"))}">${ACT_ICON[a]}<span>${L("a_" + a)}</span></button>`).join("")}
-      <button class="btn act" data-reset="${esc(r.id)}" ${r.available ? "" : "disabled"} title="${esc(L(r.available ? "rs_tip" : "rs_down"))}">${ACT_ICON.reset}<span>${L("rs_btn")}</span></button></div><div id="resetbox"></div>` +
-    `<h2 title="${esc(L("pc_tip"))}">${L("pc_t")}</h2><div id="pair"></div>`;
+  // Order of the panel: what the node is (header), how it is doing (six facts, the link first),
+  // what can be done, its history, then what is rarely needed (Matter Server figures, pairing
+  // and the actions that cannot be undone, technical details).
+  const tags = `<div class="tags">${status(r)}<span class="ftag">${esc(NETS[net(r)])}${r.role ? " · " + esc(L("roles")[r.role] || r.role) : ""}</span><span class="ftag">${esc(power)}</span></div>`;
+  const kv = [[L("d_signal"), signal(r)],
+    [L("d_resp"), `${r.rtt_fail ? L("no_answer") : aged(r.rtt_old, r.rtt_t, ms(r.rtt_ms))} · ${ms(r.rtt_avg_ms)}${!r.rtt_fail && r.rtt_t ? ` <small class="mut">(${esc(F("measured", {t: ago(r.rtt_t)}).toLowerCase())})</small>` : ""}`],
+    [!thread ? L("d_net") : best ? L("d_best") : L("d_parent"), `<span${r.link_old && linkName(r) ? ' class="old"' : ""} title="${esc(thread ? (best ? L("best_tip") : L("parent_tip")) : "")}">${esc(linkName(r) || "—")}</span>${r.link_old && linkName(r) ? ` <small class="mut">(${esc(oldShort(r.link_t))})</small>` : ""}`],
+    ...(thread ? [[L("h_br"), r.route ? `${aged(r.link_old, r.link_t, esc(r.route.br))}<br><small class="mut" title="${esc(L("r_cost_tip"))}">${esc(hopsTxt(r.route) + " · " + F("r_cost", {c: r.route.cost}))}</small>` : esc(L("r_unknown"))]] : []),
+    [L("d_last"), r.last_report ? ago(r.last_report) + (r.contact_src ? ` <small class="mut">(${esc(L("csrc")[r.contact_src] || r.contact_src)})</small>` : "") : L("never")],
+    [L("t_out"), `${c(r.outages_24h)} · ${c(r.outages_7d)}`],
+    ...(net(r) === "wifi" ? [[L("ap"), `<form class="apf" data-bssid="${esc(r.bssid || "")}"><input name="n" value="${esc(r.access_point || "")}" placeholder="${esc(L("ap_ph"))}" maxlength="40"><button class="btn">${L("save")}</button></form><small class="mut">BSSID ${esc(r.bssid || "?")}</small>`, "wide"]] : [])];
+  const actBtn = ([a, ok]) => `<button class="btn act" data-act="${a}" data-node="${esc(r.id)}" ${ok ? "" : "disabled"} title="${esc(ok ? L("a_" + a + "_tip") : L("a_parent_router"))}">${ACT_ICON[a]}<span>${L("a_" + a)}</span></button>`;
+  const top = head(esc(r.name), [r.area, r.model].filter(Boolean).map(esc).join(" · "), tags) + adv + grid(kv) +
+    `<div class="sheet-acts">${nodeActs(r).filter(x => x[0] !== "remove" && (thread || x[0] !== "parent")).map(actBtn).join("")}</div>`;
   // what the Matter Server log says of the node over 24h (subscriptions lost, sessions closed…)
   const sv = r.server;
   const cover = sv ? [D.time - sv.since < 86000 ? F("srv_cover", {t: dt(sv.since)}) : "", sv.missed_s > 60 ? F("srv_missed", {d: dur1(sv.missed_s)}) : ""].filter(Boolean).join(" · ") : "";
-  const srvBlock = `<h2>${L("srv_t")}</h2>` + (!sv ? `<p class="mut">${L("srv_none")}</p>` : grid([[L("srv_sub"), sv.sub], [L("srv_session"), sv.session],
-    [L("srv_off"), sv.offline ? `${sv.offline}× · ${dur1(sv.offline_s)}` + (sv.offline_since ? ` <small class="mut">(${esc(L("srv_now"))})</small>` : "") : "0"],
-    [L("srv_unreach"), sv.unreachable], [L("srv_ping"), sv.ping], [L("srv_addr"), sv.address ? `<small>${esc(sv.address)}</small>` : "—"]]) +
+  const srvBlock = `<h2>${L("srv_t")}</h2>` + (!sv ? `<p class="mut">${L("srv_none")}</p>` : grid([[L("srv_sub"), sv.sub], [L("srv_session"), sv.session], [L("srv_unreach"), sv.unreachable],
+    [L("srv_ping"), sv.ping], [L("srv_off"), sv.offline ? `${sv.offline}× · ${dur1(sv.offline_s)}` + (sv.offline_since ? ` <small class="mut">(${esc(L("srv_now"))})</small>` : "") : "0"],
+    ...(sv.address ? [[L("srv_addr"), `<small style="overflow-wrap:anywhere">${esc(sv.address)}</small>`, "wide"]] : [])], "kv3") +
     (cover ? `<p class="mut"><small>${esc(cover)}</small></p>` : ""));
-  const techBlock = srvBlock + `<details><summary>${L("tech")}</summary>${grid(tech)}</details>`;
+  // pairing: its code, and the two actions that end with the node paired again
+  const pairBlock = `<h2 title="${esc(L("pc_tip"))}">${L("pc_t")}</h2><div id="pair"></div>
+    <div class="sheet-acts danger">
+      <button class="btn act" data-reset="${esc(r.id)}" ${r.available ? "" : "disabled"} title="${esc(L(r.available ? "rs_tip" : "rs_down"))}">${ACT_ICON.reset}<span>${L("rs_btn")}</span></button>
+      ${actBtn(["remove", true])}</div><div id="resetbox"></div>`;
+  const idv = (v, tip) => v ? `<span${tip ? ` title="${esc(L("t_may_change"))}"` : ""} style="overflow-wrap:anywhere;user-select:all">${esc(v)}</span>` : "—";
+  const added = r.added && !isNaN(new Date(r.added)) ? new Date(r.added).toLocaleDateString(LANG === "fr" ? "fr-BE" : "en-GB", {day: "numeric", month: "short", year: "numeric"}) : "—";
+  const sub = (title, items) => `<h4 class="sub">${title}</h4>${grid(items)}`;
+  const tech = sub(L("sub_ident"), [[L("t_id"), esc(r.id)], [L("t_fw"), idv(r.firmware)], [L("t_serial"), idv(r.serial)], [L("t_added"), esc(added)],
+      [L("t_uid"), idv(r.unique_id, true)], [L("t_hw"), idv(r.hw_address, true)]]) +
+    (thread ? sub(L("sub_thread"), [...(r.route ? [[L("t_path"), esc(fullPath(r)), "wide"]] : []), [L("t_rloc"), esc(r.rloc16 || "—")], [L("t_nb"), c(r.neighbors)], [L("t_weak"), c(r.weak)],
+      [L("t_det"), aged(r.counters_old && r.detaches_24h != null, r.counters_t, c(r.detaches_24h))], [L("t_pch"), aged(r.counters_old && r.parent_changes_24h != null, r.counters_t, c(r.parent_changes_24h))], [L("t_partch"), aged(r.counters_old && r.partition_changes_24h != null, r.counters_t, c(r.partition_changes_24h))]]) : "") +
+    sub(L("sub_life"), [[L("t_up"), r.uptime_h == null ? "—" : aged(r.uptime_old, r.uptime_t, dur(Math.round(r.uptime_h * 60)))], [L("t_reb"), `${c(r.reboots)} · ${c(r.reboots_24h)}`],
+      [L("t_boot"), r.boot_reason == null ? "—" : esc(L("boot")[r.boot_reason] || r.boot_reason)], [L("t_down"), dur(r.downtime_7d_min)]]) +
+    sub(L("sub_contact"), [[L("t_rhythm"), r.rhythm_s == null ? esc(L("rhythm_wait")) : esc(F("rhythm_v", {u: dur1(r.rhythm_s), l: dur1(r.silent_limit_s)})), "wide"],
+      [L("t_src"), r.contact_src ? esc(L("csrc")[r.contact_src] || r.contact_src) : "—"], [L("t_gap"), r.active_gap_max_s == null ? "—" : dur(Math.round(r.active_gap_max_s / 60))]]);
+  const techBlock = srvBlock + pairBlock + `<details><summary>${L("tech")}</summary>${tech}</details>`;
   openSheet(top + `<p class="mut">${L("loading")}</p>` + techBlock);
   loadPair(id);
   try {
@@ -1064,8 +1100,7 @@ async function openNode(id) {
     const signalChart = net(r) === "ethernet" ? "" : `<h2>${L("sig7")}</h2>${chart(s.map(x => [x[0], x[3]]), "dBm", "var(--acc)", net(r) === "thread" ? TH.rssi_bad : null)}`;
     $("#sheet").innerHTML = top + (s.length < 2 ? `<p class="mut">${L("hist_wait")}</p>` : "") + signalChart +
       `<h2>${L("resp7")}</h2>${chart(s.map(x => [x[0], x[4]]), "ms", "var(--warn)")}` +
-      `<h2>${L("outages")}</h2>${out ? `<ul>${out}</ul>` : `<p class="mut">${L("none")}</p>`}` +
-      (net(r) === "thread" ? `<h2>${L("pchanges")}</h2>${pc ? `<ul>${pc}</ul>` : `<p class="mut">${L("none")}</p>`}` : "") + techBlock;
+      hist(L("outages"), out) + (net(r) === "thread" ? hist(L("pchanges"), pc) : "") + techBlock;
   } catch (e) {
     $("#sheet").innerHTML = top + `<p class="mut">${L("error")}</p>` + techBlock;
   }
@@ -1140,10 +1175,16 @@ let pair = {id: null, data: null, edit: false};
 function renderPair() {
   const el = $("#pair"); if (!el || !pair.data || pair.id !== openId) return;
   const c = pair.data.code, free = pair.data.free || [];
+  // kept: one line (the code, Copy, the QR code on request); the code is needed a few times in
+  // the life of a device, it does not take the place of what is read every day
   el.innerHTML = c && !pair.edit
-    ? codeCard(c) + (c.auto ? `<small class="mut">${L("pc_auto")}</small>` : "") + `<p class="pcbtns"><button class="btn" data-pc="replace">${L("pc_replace")}</button><button class="btn" data-pc="delete" data-key="${esc(c.key)}">${L("pc_delete")}</button></p>`
-    : `<div class="pcdrop">${canScan() ? `<button class="btn pccam" data-pc="scan">${IC_CAM}${L("sc_btn")}</button><br>` : ""}<label class="btn pccam">${IC_CAM}${L("pc_cam")}<input type="file" accept="image/*" capture="environment" hidden></label>
-         <div>${L("pc_drop")} <label class="btn">${L("pc_pick")}<input type="file" accept="image/*" hidden></label></div></div>
+    ? `<div class="pcline"><span class="pccode">${esc(manualFmt(c.manual))}</span><button class="btn" data-copy="${esc(c.manual)}">${L("copy")}</button>
+         ${c.qr ? `<button class="btn" data-pc="qr" aria-expanded="${pair.qr ? "true" : "false"}">${L("pc_qr")}</button>` : ""}</div>` +
+      (c.qr && pair.qr ? `<div class="qrbox big" data-qr="${esc(c.qr)}"></div>` : "") +
+      `<div class="pcline pcsub"><button class="btn quiet" data-pc="replace">${L("pc_replace")}</button><button class="btn quiet" data-pc="delete" data-key="${esc(c.key)}">${L("pc_delete_code")}</button></div>` +
+      (c.qr ? "" : `<small class="mut">${L("pc_none_qr")}</small>`) + (c.auto ? `<small class="mut">${L("pc_auto")}</small>` : "")
+    : `<div class="pcdrop"><div class="pcline">${canScan() ? `<button class="btn" data-pc="scan">${IC_CAM}${L("sc_btn")}</button>` : ""}<label class="btn">${IC_CAM}${L("pc_cam")}<input type="file" accept="image/*" capture="environment" hidden></label>
+         <label class="btn">${L("pc_pick")}<input type="file" accept="image/*" hidden></label></div><small class="mut">${L("pc_drop")}</small></div>
        <form class="pcf"><input name="c" placeholder="${esc(L("pc_ph"))}" autocomplete="off" spellcheck="false" maxlength="80"><button class="btn">${L("save")}</button></form>` +
       (free.length ? `<form class="pca"><select name="k" aria-label="${esc(L("pc_attach"))}">${free.map(f =>
         `<option value="${esc(f.key)}">${esc([f.name || (f.scanned ? L("sc_waiting") : "?"), f.area, manualFmt(f.manual)].filter(Boolean).join(" · "))}</option>`).join("")}</select><button class="btn">${L("pc_attach_btn")}</button></form>
@@ -1327,6 +1368,7 @@ async function openCodes() {   // codes of the devices that left the table: what
 }
 async function pairClick(b) {
   if (b.dataset.pc === "replace") { pair.edit = true; return renderPair(); }
+  if (b.dataset.pc === "qr") { pair.qr = !pair.qr; return renderPair(); }
   if (b.dataset.pc === "scan") {   // the label of a node of the table, read by the app
     const id = pair.id, r = await scanQr(L("sc_close"));
     if (r.text && id) await pairPost({id, code: r.text}, "pc_saved");

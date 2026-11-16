@@ -4,6 +4,14 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.21.0] - 2026-11-16
+
+### Changed
+
+- Node panel put in order, from what is read every day to what is rarely needed: state, network, role and power in the header; six facts (signal, response, parent, border router, last contact, outages); the actions that change nothing for good; the curves and the history; then the Matter Server figures, the pairing code with Reset and Remove, and the technical details.
+- The pairing code takes one line (code, Copy, QR code on request) instead of a large QR code above the curves. Reset and Remove sit with it, away from Ping.
+- Technical details are grouped (identity, Thread, running, contact) and show the date the node was paired. An empty history takes one line. A Wi-Fi or Ethernet node no longer shows the Thread-only action.
+
 ## [2.20.0] - 2026-11-16
 
 ### Added
