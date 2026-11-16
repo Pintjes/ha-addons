@@ -474,6 +474,9 @@ the phone does the pairing, next to the device:
   the "Add Matter device" screen of Home Assistant. The page asks the app
   through the Home Assistant page it is shown in, and hands over the Thread
   network Home Assistant prefers, exactly as that screen does;
+- once the device is in Home Assistant, the page asks its name and its area
+  and saves them in Home Assistant (that step belongs to the "Add Matter
+  device" screen, which is not open here). "Later" leaves them as they are;
 - in a browser, the "Add Matter device" screen of Home Assistant opens.
 
 Under **Pairing codes**, "Pair with this code" does the same after copying

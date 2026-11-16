@@ -223,6 +223,10 @@
   .pccard .qr { width: 100%; height: 100%; display: block; border-radius: 6px; }
   .pccode { font: 600 19px ui-monospace, monospace; user-select: all; display: inline-block; margin: 2px 0 6px; }
   .pcbtns { display: flex; gap: 8px; margin: 10px 0 0; }
+  .nmf label { display: block; margin-top: 14px; font-size: 12px; color: var(--mut); }
+  .nmf input, .nmf select { display: block; width: 100%; box-sizing: border-box; min-height: 40px; margin-top: 4px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--txt); padding: 0 8px; font-size: 15px; }
+  .nmf .btn.x { width: auto; height: auto; min-height: 36px; border: 1px solid var(--line); border-radius: 10px; font-size: inherit; margin: 0; }
   .sheet-acts .act[data-reset]:hover:not(:disabled), .btn.danger:not(:disabled) { color: var(--bad); border-color: var(--bad); }
   .rsok { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; cursor: pointer; }
   .acts { display: inline-grid; grid-template-columns: repeat(2, 28px); gap: 4px; }
@@ -336,6 +340,7 @@ const T = {
     t_partch:"Partition changes 24h", t_out:"Outages 24h · 7d", t_down:"Downtime 7d", t_reb:"Reboots total · 24h", t_boot:"Last boot reason", t_up:"Uptime",
     t_src:"Last contact source", t_gap:"Longest silence", copy:"Copy", copied:"Copied", download:"Download", report_tip:"Anonymized report (no names, areas or addresses) to paste in an issue",
     pc_t:"Pairing code", pc_tip:"Kept by the add-on: the device can be paired again after a reset without reaching its label",
+    nm_title:"New device paired", nm_name:"Name", nm_area:"Area", nm_later:"Later", nm_saved:"Name and area saved in Home Assistant",
     sc_btn:"Scan the QR code", sc_title:"Pairing code", sc_desc:"Aim at the QR code on the label of the device", sc_skip:"Pair without scanning", sc_close:"Close",
     sc_wrong:"This is not a Matter QR code", sc_waiting:"Scanned code, waiting for its device", pc_e_typed:"Only a QR code can be kept before its device is paired",
     pa_btn:"Pair", pa_tip:"Pair a new or reset device, next to it. In the Home Assistant app: scan its label (the code is kept for the new node), then the pairing of the phone starts",
@@ -414,6 +419,7 @@ const T = {
     t_partch:"Chgt de partition 24 h", t_out:"Coupures 24 h · 7 j", t_down:"Indisponibilité 7 j", t_reb:"Redémarrages total · 24 h", t_boot:"Raison du dernier démarrage", t_up:"En marche depuis",
     t_src:"Source du dernier contact", t_gap:"Plus long silence", copy:"Copier", copied:"Copié", download:"Télécharger", report_tip:"Rapport anonymisé (sans noms, pièces ni adresses) à coller dans une issue",
     pc_t:"Code d'appairage", pc_tip:"Conservé par l'add-on : l'appareil peut être appairé à nouveau après une réinitialisation sans accéder à son étiquette",
+    nm_title:"Nouvel appareil appairé", nm_name:"Nom", nm_area:"Pièce", nm_later:"Plus tard", nm_saved:"Nom et pièce enregistrés dans Home Assistant",
     sc_btn:"Scanner le QR code", sc_title:"Code d'appairage", sc_desc:"Viser le QR code de l'étiquette de l'appareil", sc_skip:"Appairer sans scanner", sc_close:"Fermer",
     sc_wrong:"Ce n'est pas un QR code Matter", sc_waiting:"Code scanné, en attente de son appareil", pc_e_typed:"Seul un QR code peut être conservé avant l'appairage de son appareil",
     pa_btn:"Appairer", pa_tip:"Appairer un appareil neuf ou réinitialisé, à côté de lui. Dans l'application Home Assistant : scanner son étiquette (le code est conservé pour la nouvelle node), puis l'appairage du téléphone se lance",
@@ -1229,6 +1235,47 @@ function scanQr(alt) {
     setTimeout(() => end({aborted: "timeout"}), 180000);
   });
 }
+// Name and area of the device a pairing started here brought. Home Assistant asks them in its
+// own "Add Matter device" screen, which is not open: the device is watched for in its device
+// registry (through the Home Assistant page, as the signed-in user) and asked here instead.
+async function matterDevices(hass) {
+  try { return (await hass.callWS({type: "config/device_registry/list"})).filter(d => (d.identifiers || []).some(i => i[0] === "matter")); }
+  catch (e) { return null; }
+}
+let naming = null, watching = 0;
+async function watchNewDevice(hass, known) {
+  const run = ++watching;   // a new pairing replaces the watch of the previous one
+  let suggested = null;     // the name typed in the pairing screen of the phone, when it gives one
+  const onFinish = ev => { if (ev.detail && ev.detail.name) suggested = ev.detail.name; };
+  try { window.parent.addEventListener("matter-commission-finish", onFinish); } catch (e) { /* no suggestion */ }
+  const end = Date.now() + 10 * 60e3;
+  let dev = null;
+  while (!dev && Date.now() < end && run === watching) {
+    await new Promise(r => setTimeout(r, 4000));
+    dev = ((await matterDevices(hass)) || []).find(d => !known.has(d.id));
+  }
+  try { window.parent.removeEventListener("matter-commission-finish", onFinish); } catch (e) { /* nothing to remove */ }
+  if (!dev || run !== watching) return;
+  naming = {hass, dev};
+  const areas = Object.values(hass.areas || {}).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  openId = null; pair = {id: null, data: null, edit: false};
+  openSheet(head(L("nm_title"), esc([dev.manufacturer, dev.model].filter(Boolean).join(" · "))) +
+    `<form class="nmf"><label>${L("nm_name")}<input name="n" value="${esc(suggested || dev.name_by_user || dev.name || "")}" maxlength="80" autocomplete="off"></label>
+      <label>${L("nm_area")}<select name="a"><option value="">—</option>${areas.map(a =>
+        `<option value="${esc(a.area_id)}"${a.area_id === dev.area_id ? " selected" : ""}>${esc(a.name)}</option>`).join("")}</select></label>
+      <p class="pcbtns"><button class="btn">${L("save")}</button><button class="btn x" type="button">${L("nm_later")}</button></p></form>`);
+  load(true);
+}
+async function nameSave(f) {
+  if (!naming) return;
+  const b = f.querySelector("button"); b.disabled = true;
+  try {
+    await naming.hass.callWS({type: "config/device_registry/update", device_id: naming.dev.id,
+      name_by_user: f.n.value.trim() || null, area_id: f.a.value || null});
+    toast(L("nm_saved")); naming = null; closeSheet();
+    setTimeout(() => load(true), 3000);   // the table takes the name from Home Assistant
+  } catch (e) { toast(L("error")); b.disabled = false; }
+}
 async function pairStart(code) {
   if (!code && canScan()) {   // the label first: its code is kept for the node this pairing brings
     const r = await scanQr(L("sc_skip"));
@@ -1250,8 +1297,10 @@ async function pairStart(code) {
         border_agent_id: ds.preferred_border_agent_id, mac_extended_address: ds.preferred_extended_address, extended_pan_id: ds.extended_pan_id};
     } catch (e) { /* the phone then uses the Thread network it knows */ }
     try {
+      const before = await matterDevices(hass);
       ext.fireMessage(payload ? {type: "matter/commission", payload} : {type: "matter/commission"});
       toast(L(code ? "pa_started_code" : "pa_started"));
+      if (before) watchNewDevice(hass, new Set(before.map(d => d.id)));   // then its name and area are asked here
       for (const s of [30, 60, 120, 180, 300]) setTimeout(() => load(true), s * 1000);   // the new node shows up by itself
       return;
     } catch (e) { /* the screen of Home Assistant below */ }
@@ -1450,6 +1499,8 @@ $("#sheet").addEventListener("submit", async e => {   // name of a Wi-Fi access 
   finally { b.disabled = false; }
 });
 $("#sheet").addEventListener("submit", e => {   // pairing code typed, or a kept code given to this node
+  const nm = e.target.closest(".nmf");
+  if (nm) { e.preventDefault(); return nameSave(nm); }
   const f = e.target.closest(".pcf,.pca"); if (!f || !pair.id) return;
   e.preventDefault();
   if (f.classList.contains("pca")) pairPost({id: pair.id, attach: f.k.value}, "pc_saved");

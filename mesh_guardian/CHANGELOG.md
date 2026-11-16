@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.19.0] - 2026-11-16
+
+### Added
+
+- After a pairing started with "Pair", the page asks the name and the area of the new device and saves them in Home Assistant (the step the "Add Matter device" screen of Home Assistant does).
+
 ## [2.18.0] - 2026-11-16
 
 ### Added
