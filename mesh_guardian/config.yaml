@@ -1,5 +1,5 @@
 name: Mesh Guardian
-version: "2.10.1"
+version: "2.10.2"
 slug: mesh_guardian
 url: https://github.com/Pintjes/ha-addons
 description: >-
@@ -36,6 +36,7 @@ options:
   all_thread_networks: false
   log_events_to_file: true
   passive_contact: false
+  advice: true
   matter_fabric: ""
   matter_server_url: ""
 schema:
@@ -49,5 +50,6 @@ schema:
   all_thread_networks: bool
   log_events_to_file: bool
   passive_contact: bool
+  advice: bool
   matter_fabric: str?
   matter_server_url: str?

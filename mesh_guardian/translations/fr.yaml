@@ -30,6 +30,9 @@ configuration:
   passive_contact:
     name: "Contact passif"
     description: "Compter chaque paquet IPv6 d'une node comme un contact (droit NET_RAW)."
+  advice:
+    name: "Conseils"
+    description: "Donner des conseils pour les nodes disponibles (rechercher un nouveau parent, ajouter un routeur…)."
   matter_fabric:
     name: "Fabric Matter"
     description: "Laisser vide : détection automatique."

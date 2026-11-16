@@ -75,7 +75,7 @@ from storm import Storm  # noqa: E402
 from suplog import SupervisorLog  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.10.1"
+VERSION = "2.10.2"
 
 _MQ = _load_mqtt()
 MQTT_HOST = _MQ.get("host") or os.environ.get("MQTT_HOST", "core-mosquitto")
@@ -1487,6 +1487,7 @@ class Watch:
             else:
                 LOG.warning(t("Matter fabric not found: every node followed"))
         self.suplog = SupervisorLog(self)
+        self.advice_on = bool(OPTIONS.get("advice", True))   # option: advice for the available nodes
         client.reconnect_delay_set(1, 60)
         client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=60)
         client.loop_start()

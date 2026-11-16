@@ -93,6 +93,7 @@ the Matter Server add-on, the Mosquitto broker add-on and the MQTT integration.
 | `rebuild_history` | `true` | On first start or after a reinstall, rebuild 7 days of per-node outage statistics from the Home Assistant history. Turn off to start from zero. |
 | `all_thread_networks` | `false` | Also follow Thread networks not used by your Matter nodes. |
 | `log_events_to_file` | `true` | Also write events to `/share/mesh_guardian/events.jsonl` (rotated at 5 MB). |
+| `advice` | `true` | Give advice for the available nodes (*Find a new parent*, *Add a router*…): cards, *Advice* column, log and `advice` events. Off: none of them. An unavailable node keeps what to do about it, and the notes about the network stay. |
 | `passive_contact` | `false` | Count every IPv6 packet sent by a node and seen on the host as a contact (*Last contact*), including the reports the Matter Server does not forward because their value did not change, and the answers to pings sent by Home Assistant. Only the source address of the packets is read. Uses the `NET_RAW` privilege. |
 | `matter_fabric` | *(empty)* | Advanced: compressed fabric id of Home Assistant. Detected automatically when empty. |
 | `matter_server_url` | *(empty)* | Advanced: WebSocket address of the Matter Server (e.g. `ws://192.168.1.10:5580/ws`) when it does not run as the Matter Server add-on (Docker container, other machine). Defaults to the Matter Server add-on. |

@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.10.2] - 2026-11-16
+
+### Added
+
+- Option "Advice" (on by default): off, the add-on gives no advice for the available nodes (cards, column, log). An unavailable node keeps what to do about it, and the notes about the network stay.
+
 ## [2.10.1] - 2026-11-16
 
 ### Fixed

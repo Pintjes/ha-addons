@@ -836,6 +836,12 @@ class NodeTable:
                    "unstable": adv.unstable if adv else {}, "history": points, "gave_up": gave_up,
                    "ghosts": ["0x" + (k.lstrip("0") or "0") for k in getattr(self.w, "ghosts", [])]}
             notes = advise(rows, self.header()["border_routers"], ctx)
+            if not getattr(self.w, "advice_on", True):
+                # option "advice" off: nothing for the available nodes (an unavailable node keeps
+                # what to do about it, the notes about the network stay)
+                for r in rows:
+                    if r.get("available"):
+                        r["advice"] = r["advice_level"] = r["advice_detail"] = None
             return self._restart_note(rows, ctx["now"]) + notes
         except Exception as err:  # noqa: BLE001 - never break the table for the advice
             LOG.warning("advice: %s", err)
@@ -859,6 +865,7 @@ class NodeTable:
         out.update(self.header())
         out["network"]["notes"] = notes
         out.update({"time": time.time(), "lang": lang(), "thresholds": THRESHOLDS,
+                    "advice_on": getattr(self.w, "advice_on", True),
                     "live": self.live.connected, "live_since": self.live.since,
                     "reading": self.quality.reading() if getattr(self, "quality", None) else None})
         return out

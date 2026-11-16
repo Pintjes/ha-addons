@@ -703,7 +703,8 @@ function renderList() {
   $("#nodesTitle").textContent = L("nodes");
   $("#chips").innerHTML = fl.map(([k, lab, f]) => `<button class="chip" data-f="${k}" aria-pressed="${k === P.filter}">${lab}<span class="n num">${rows.filter(f).length}</span></button>`).join("");
   const narrow = document.body.classList.contains("narrow");
-  const cols = narrow ? COLS.filter(c => !c.x && c.k !== "br") : shown();
+  // option "advice" off: no advice column
+  const cols = (narrow ? COLS.filter(c => !c.x && c.k !== "br") : shown()).filter(c => c.k !== "adv" || D.advice_on !== false);
   const card = $(".list");
   card.style.setProperty("--gt", cols.map(c => c.w).join(" "));
   // minimum width of the grid: wider than the card -> horizontal scroll instead of overflow
