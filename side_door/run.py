@@ -223,8 +223,14 @@ SHELL = """\
   nav svg { width: 18px; height: 18px; fill: currentColor; vertical-align: -3px; }
   nav button.eye { padding: .5rem .6rem; margin-left: auto; }
   nav button.eye.on { border-bottom-color: transparent; color: #1f6feb; }
-  nav button .vis { display: none; margin-left: .4rem; }
-  body.editing nav .tabs button .vis { display: inline; }
+  nav button .vis, nav button .link { display: none; margin-left: .4rem; }
+  body.editing nav .tabs button .vis, body.editing nav .tabs button .link { display: inline; }
+  nav button .link:hover { color: #1f6feb; }
+  .toast { position: fixed; left: 50%%; bottom: 1rem; transform: translateX(-50%%); max-width: 90vw; z-index: 9;
+           padding: .6rem .9rem; border-radius: 8px; background: #1c2733; color: #e3e8ee;
+           box-shadow: 0 2px 10px rgba(0, 0, 0, .35); font-size: .9rem; }
+  .toast input { font: inherit; width: 34rem; max-width: 70vw; margin-left: .4rem; padding: .2rem .4rem;
+                 border: 1px solid #2b3947; border-radius: 4px; background: #111a22; color: inherit; }
   body.editing nav .tabs button.off { opacity: .45; text-decoration: line-through; }
   main { flex: 1; position: relative; }
   iframe { position: absolute; inset: 0; width: 100%%; height: 100%%; border: 0; background: #fff; }
@@ -263,6 +269,50 @@ SHELL = """\
     + "C13.55,19.5 15.03,19.2 16.38,18.66L16.81,19.08L19.73,22L21,20.73L3.27,3M12,7A5,5 0 0,1 17,12C17,12.64 16.87,13.26 "
     + "16.64,13.82L19.57,16.75C21.07,15.5 22.27,13.86 23,12C21.27,7.61 17,4.5 12,4.5C10.6,4.5 9.26,4.75 8,5.2L10.17,7.35"
     + "C10.74,7.13 11.35,7 12,7Z";
+  const LINK = "M10.59,13.41C11,13.8 11,14.44 10.59,14.83C10.2,15.22 9.56,15.22 9.17,14.83C7.22,12.88 7.22,9.71 "
+    + "9.17,7.76L12.71,4.22C14.66,2.27 17.83,2.27 19.78,4.22C21.73,6.17 21.73,9.34 19.78,11.29L18.29,12.78C18.3,11.96 "
+    + "18.17,11.14 17.89,10.36L18.36,9.88C19.54,8.71 19.54,6.81 18.36,5.64C17.19,4.46 15.29,4.46 14.12,5.64L10.59,9.17"
+    + "C9.41,10.34 9.41,12.24 10.59,13.41M13.41,9.17C13.8,8.78 14.44,8.78 14.83,9.17C16.78,11.12 16.78,14.29 14.83,16.24"
+    + "L11.29,19.78C9.34,21.73 6.17,21.73 4.22,19.78C2.27,17.83 2.27,14.66 4.22,12.71L5.71,11.22C5.7,12.04 5.83,12.86 "
+    + "6.11,13.65L5.64,14.12C4.46,15.29 4.46,17.19 5.64,18.36C6.81,19.54 8.71,19.54 9.88,18.36L13.41,14.83C14.59,13.66 "
+    + "14.59,11.76 13.41,10.59C13,10.2 13,9.56 13.41,9.17Z";
+  // The path a dashboard button needs to open an app ("Navigate" action):
+  // the address of this panel in Home Assistant, then "?app=" and the app
+  function linkOf(id) {
+    let panel = "/";
+    try { panel = window.parent.location.pathname.replace(/[/]+$/, ""); } catch (error) { /* not the same site */ }
+    return panel + "?app=" + id;
+  }
+  let toastTimer = null;
+  function toast(text, link) {
+    let box = document.querySelector(".toast");
+    if (!box) { box = document.createElement("div"); box.className = "toast"; document.body.appendChild(box); }
+    box.textContent = text;
+    if (link) {
+      const field = document.createElement("input");
+      field.readOnly = true;
+      field.value = link;
+      box.append(field);
+      field.select();
+    }
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => box.remove(), link ? 15000 : 4000);
+  }
+  // Copied when the browser lets it (on plain HTTP it may not): the path is
+  // shown in any case, selected, ready to be copied by hand
+  function copyLink(tab) {
+    const link = linkOf(tab.dataset.app);
+    const field = document.createElement("textarea");
+    field.value = link;
+    field.style.cssText = "position:fixed;left:-9999px";
+    document.body.appendChild(field);
+    field.select();
+    let copied = false;
+    try { copied = document.execCommand("copy"); } catch (error) { /* not allowed */ }
+    field.remove();
+    if (copied) toast("Link copied / Lien copié : " + link);
+    else toast("Copy this link / Copiez ce lien :", link);
+  }
   function icon(path) {
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + path + '"/></svg>';
   }
@@ -357,6 +407,12 @@ SHELL = """\
       mark.className = "vis";
       mark.innerHTML = icon(off ? EYE_OFF : EYE);
       t.append(mark);
+      const link = document.createElement("span");
+      link.className = "link";
+      link.title = "Copy the link for a dashboard button / Copier le lien pour un bouton de tableau de bord";
+      link.innerHTML = icon(LINK);
+      link.addEventListener("click", (event) => { event.stopPropagation(); copyLink(t); });
+      t.append(link);
     });
   }
   // A hidden app is not loaded: its frame goes away

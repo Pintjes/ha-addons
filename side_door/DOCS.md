@@ -108,8 +108,13 @@ With a single entry, the app fills the panel, without tabs.
 
 ### Open a given app from a dashboard
 
-Add `?app=` and the name of the app to the address of the panel. On a
-button card:
+The simplest: click the eye at the end of the row of tabs, then the link icon
+next to the app. The path to give the button is copied (or shown, ready to be
+copied, when the browser does not allow copying). Then, on the button card,
+choose the action *Navigate* and paste it as the path.
+
+The path is the address of the panel followed by `?app=` and the name of
+the app. On a button card:
 
 ```yaml
 type: button
