@@ -211,8 +211,18 @@
   .apf input { flex: 1; min-width: 0; min-height: 36px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); padding: 0 8px; }
   .apf .btn { min-height: 36px; padding: 0 10px; }
   .kv div:has(.apf) { grid-column: 1 / -1; }
-  .pcdrop { border: 2px dashed transparent; border-radius: 10px; margin: 0 -8px; padding: 0 6px 6px; }
-  .pcdrop.over { border-color: var(--acc); background: var(--acc-soft); }
+  .pczone { display: flex; align-items: center; justify-content: center; height: 64px; margin-top: 8px; border: 2px dashed var(--line);
+    border-radius: 10px; color: var(--mut); cursor: pointer; }
+  .pczone svg { width: 30px; height: 30px; }
+  .pczone:hover, .pcdrop.over .pczone { border-color: var(--acc); background: var(--acc-soft); color: var(--acc-txt); }
+  /* sections of a panel: they fold with their arrow; the groups of the technical details too */
+  .sheet details.sec { margin-top: 14px; padding-top: 8px; }
+  .sheet details.sec > summary { font-size: 14px; }
+  .sheet details.sec > :nth-child(2) { margin-top: 4px; }
+  .sheet details.subsec { margin: 4px 0 0; border: 0; padding: 0; }
+  .sheet details.subsec > summary { font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--mut); min-height: 30px; }
+  .sheet details.subsec > .kv { margin-top: 2px; margin-bottom: 8px; }
+  .sheet details.sec .sheet-acts { margin-top: 6px; }
   .pcline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
   .pcline .btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 10px; cursor: pointer; color: var(--txt); }
   .pcline .btn.quiet { border-color: transparent; background: none; color: var(--mut); padding: 0 6px; }
@@ -230,10 +240,9 @@
   .ftag { font-size: 12.5px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--mut); white-space: nowrap; }
   .kv .wide { grid-column: 1 / -1; }
   .kv.kv3 { grid-template-columns: repeat(3, 1fr); }
-  .sheet .sub { margin: 18px 0 -6px; font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--mut); }
-  .sheet summary + .sub { margin-top: 8px; }
-  .histnone { margin: 22px 2px 0; color: var(--mut); }
-  .histnone span { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; margin-right: 10px; }
+  .sheet .sub { margin: 14px 0 4px; font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--mut); }
+  .sheet summary + .sub { margin-top: 6px; }
+  .histnone { margin: 6px 0 8px; color: var(--mut); }
   .sheet-acts.danger { margin-top: 12px; }
   .sheet-acts.danger .act { color: var(--mut); }
   .sheet-acts.danger .act:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); }
@@ -370,6 +379,7 @@ const T = {
     pa_code:"Pair with this code", pa_started:"Pairing started on this phone", pa_started_code:"Code copied: paste it in the pairing screen instead of scanning the label",
     pa_screen:"Opening the pairing screen of Home Assistant…", pa_screen_code:"Code copied. Opening the pairing screen of Home Assistant…", pa_none:"Open Settings → Devices → Add a Matter device in Home Assistant",
     pc_cam:"Take a photo of the QR code", pc_new_what:"New node", pc_new:"Its pairing code is not kept yet: photograph its label now, while you are in front of it.",
+    sec_tools:"Tools", sec_pair:"Pairing", sec_signal:"Signal and response", sub_hist:"History", none_f:"none",
     more:"{n} older", pc_delete_code:"Delete the code", t_added:"Paired on", sub_ident:"Identity", sub_thread:"Thread", sub_life:"Running", sub_contact:"Contact",
     pc_drop:"A photo of the label can also be dropped or pasted on this panel.", pc_pick:"Choose a photo", pc_ph:"or type the code: 1234-567-8901 or MT:…",
     pc_auto:"Attached by itself after the reset: it was the only code of this product waiting. Replace it if this is another device.",
@@ -414,9 +424,9 @@ const T = {
     best_tip:"Routeur : le voisin par lequel il transmet vers le border router", link_tip:"Appareil final : son parent. Routeur : le voisin par lequel il transmet",
     parent_tip:"Le routeur par lequel cet appareil final fait passer tout son trafic", h_br:"Border router", hop1:"1 saut", hops:"{n} sauts", hops_min:"au moins", t_path:"Chemin complet",
     drag_tip:"Glisser pour déplacer la colonne", h_act:"Actions",
-    a_ping:"Ping", a_parent:"Recherche d'un nouveau lien", a_interview:"Ré-interviewer", a_remove:"Supprimer", a_remove_tip:"Supprimer",
+    a_ping:"Ping", a_parent:"Recherche nouveau lien", a_interview:"Interviewer", a_remove:"Supprimer", a_remove_tip:"Supprimer",
     a_remove_confirm:"{n} : supprimer cette node ? Il faudra l'appairer à nouveau.", a_remove_ok:"{n} supprimée",
-    a_ping_tip:"Ping", a_parent_tip:"Recherche d'un nouveau lien",
+    a_ping_tip:"Ping", a_parent_tip:"Recherche nouveau lien",
     a_interview_tip:"Reinterview", a_parent_router:"Réservé aux nodes Thread", a_parent_confirm_leader:"{n} est le LEADER du réseau Thread : son Thread va redémarrer (essai). Tout le réseau élit un nouveau leader : pendant 2 minutes environ, des nodes peuvent devenir indisponibles et le réseau peut se couper en plusieurs partitions. Ses nodes finales décrochent aussi. Continuer ?",
     a_parent_confirm:"{n} : rechercher un nouveau parent ? Le nouveau peut être moins bon.", a_parent_confirm_router:"{n} est un routeur : son Thread va redémarrer (essai). Ses nodes finales décrochent et se rattachent ailleurs, et il peut rester injoignable 2 minutes. Un routeur choisit seul ses routes : un meilleur lien n'est pas attendu. Continuer ?", a_interview_confirm:"{n} : ré-interviewer la node ? Ça peut prendre une minute.",
     a_ping_ok:"{n} : répond au ping", a_ping_ko:"{n} : pas de réponse au ping", a_interview_ok:"{n} ré-interviewée ({s} s)",
@@ -451,6 +461,7 @@ const T = {
     pa_code:"Appairer avec ce code", pa_started:"Appairage lancé sur ce téléphone", pa_started_code:"Code copié : le coller dans l'écran d'appairage au lieu de scanner l'étiquette",
     pa_screen:"Ouverture de l'écran d'appairage de Home Assistant…", pa_screen_code:"Code copié. Ouverture de l'écran d'appairage de Home Assistant…", pa_none:"Ouvrir Paramètres → Appareils → Ajouter un appareil Matter dans Home Assistant",
     pc_cam:"Photographier le QR code", pc_new_what:"Nouvelle node", pc_new:"Son code d'appairage n'est pas encore conservé : photographier son étiquette maintenant, tant que tu es devant elle.",
+    sec_tools:"Outils", sec_pair:"Appairage", sec_signal:"Signal et réponse", sub_hist:"Historique", none_f:"aucune",
     more:"{n} plus anciens", pc_delete_code:"Supprimer le code", t_added:"Appairée le", sub_ident:"Identité", sub_thread:"Thread", sub_life:"Fonctionnement", sub_contact:"Contact",
     pc_drop:"Une photo de l'étiquette peut aussi être déposée ou collée sur cette fiche.", pc_pick:"Choisir une photo", pc_ph:"ou saisir le code : 1234-567-8901 ou MT:…",
     pc_auto:"Rattaché tout seul après la réinitialisation : c'était le seul code de ce produit en attente. À remplacer si c'est un autre appareil.",
@@ -1032,9 +1043,11 @@ function chart(pts, unit, color, warn) {
 const grid = (a, cls = "") => `<div class="kv ${cls}">${a.map(([k, v, w]) => `<div${w ? ' class="wide"' : ""}><span>${k}</span>${v}</div>`).join("")}</div>`;
 // a list of the history; an empty one takes one line, not a title and a paragraph
 // (items: the lines, newest first: the five newest are shown, the others unfold)
-const hist = (title, items) => !items.length ? `<p class="histnone"><span>${title}</span>${L("none")}</p>`
-  : `<h2>${title}</h2><ul>${items.slice(0, 5).join("")}</ul>` + (items.length > 5
+const hist = (title, items, none) => !items.length ? `<p class="histnone">${title} : ${none}</p>`
+  : `<h4 class="sub">${title}</h4><ul>${items.slice(0, 5).join("")}</ul>` + (items.length > 5
     ? `<details class="more"><summary>${esc(F("more", {n: items.length - 5}))}</summary><ul>${items.slice(5).join("")}</ul></details>` : "");
+// a section of a panel is open unless the user folded it (kept in this browser)
+const secOpen = (key, open) => P.sec && key in P.sec ? !!P.sec[key] : open;
 function openSheet(html) {
   $("#sheet").innerHTML = html; $("#sheet").classList.add("on"); $("#scrim").classList.add("on");
   const x = $("#sheet .x"); if (x) x.focus();
@@ -1066,51 +1079,58 @@ async function openNode(id) {
     [L("t_out"), `${c(r.outages_24h)} · ${c(r.outages_7d)}`],
     ...(net(r) === "wifi" ? [[L("ap"), `<form class="apf" data-bssid="${esc(r.bssid || "")}"><input name="n" value="${esc(r.access_point || "")}" placeholder="${esc(L("ap_ph"))}" maxlength="40"><button class="btn">${L("save")}</button></form><small class="mut">BSSID ${esc(r.bssid || "?")}</small>`, "wide"]] : [])];
   const actBtn = ([a, ok]) => `<button class="btn act" data-act="${a}" data-node="${esc(r.id)}" ${ok ? "" : "disabled"} title="${esc(ok ? L("a_" + a + "_tip") : L("a_parent_router"))}">${ACT_ICON[a]}<span>${L("a_" + a)}</span></button>`;
-  // pairing, right under the actions (asked by the user): its code, and the two actions that
-  // end with the node paired again
-  const pairBlock = `<h2 title="${esc(L("pc_tip"))}">${L("pc_t")}</h2><div id="pair"></div>
+  // The panel is cut in sections that fold with their arrow, like the technical details (what
+  // is open is kept in this browser): General always shown, then Tools, Pairing and Signal
+  // (open at first), then Technical details (closed at first), themselves cut in groups.
+  const sec = (key, title, body, open, tip) => `<details class="sec" data-sec="${key}"${secOpen(key, open) ? " open" : ""}><summary${tip ? ` title="${esc(tip)}"` : ""}>${title}</summary>${body}</details>`;
+  const subsec = (key, title, body) => `<details class="subsec" data-sec="${key}"${secOpen(key, true) ? " open" : ""}><summary>${title}</summary>${body}</details>`;
+  const general = head(esc(r.name), [r.area, r.model].filter(Boolean).map(esc).join(" · "), tags) + adv + grid(kv);
+  const tools = sec("tools", L("sec_tools"),
+    `<div class="sheet-acts">${nodeActs(r).filter(x => x[0] !== "remove" && (thread || x[0] !== "parent")).map(actBtn).join("")}</div>`, true);
+  // pairing: its code, and the two actions that end with the node paired again
+  const pairing = sec("pair", L("sec_pair"), `<div id="pair"></div>
     <div class="sheet-acts danger">
       <button class="btn act" data-reset="${esc(r.id)}" ${r.available ? "" : "disabled"} title="${esc(L(r.available ? "rs_tip" : "rs_down"))}">${ACT_ICON.reset}<span>${L("rs_btn")}</span></button>
-      ${actBtn(["remove", true])}</div><div id="resetbox"></div>`;
-  const top = head(esc(r.name), [r.area, r.model].filter(Boolean).map(esc).join(" · "), tags) + adv + grid(kv) +
-    `<div class="sheet-acts">${nodeActs(r).filter(x => x[0] !== "remove" && (thread || x[0] !== "parent")).map(actBtn).join("")}</div>` + pairBlock;
+      ${actBtn(["remove", true])}</div><div id="resetbox"></div>`, true, L("pc_tip"));
   // what the Matter Server log says of the node over 24h (subscriptions lost, sessions closed…)
   const sv = r.server;
   const cover = sv ? [D.time - sv.since < 86000 ? F("srv_cover", {t: dt(sv.since)}) : "", sv.missed_s > 60 ? F("srv_missed", {d: dur1(sv.missed_s)}) : ""].filter(Boolean).join(" · ") : "";
-  const srvBlock = `<h4 class="sub">${L("srv_t")}</h4>` + (!sv ? `<p class="mut">${L("srv_none")}</p>` : grid([[L("srv_sub"), sv.sub], [L("srv_session"), sv.session], [L("srv_unreach"), sv.unreachable],
+  const srvBody = !sv ? `<p class="mut">${L("srv_none")}</p>` : grid([[L("srv_sub"), sv.sub], [L("srv_session"), sv.session], [L("srv_unreach"), sv.unreachable],
     [L("srv_ping"), sv.ping], [L("srv_off"), sv.offline ? `${sv.offline}× · ${dur1(sv.offline_s)}` + (sv.offline_since ? ` <small class="mut">(${esc(L("srv_now"))})</small>` : "") : "0"],
     ...(sv.address ? [[L("srv_addr"), `<small style="overflow-wrap:anywhere">${esc(sv.address)}</small>`, "wide"]] : [])], "kv3") +
-    (cover ? `<p class="mut"><small>${esc(cover)}</small></p>` : ""));
+    (cover ? `<p class="mut"><small>${esc(cover)}</small></p>` : "");
   const idv = (v, tip) => v ? `<span${tip ? ` title="${esc(L("t_may_change"))}"` : ""} style="overflow-wrap:anywhere;user-select:all">${esc(v)}</span>` : "—";
   const added = r.added && !isNaN(new Date(r.added)) ? new Date(r.added).toLocaleDateString(LANG === "fr" ? "fr-BE" : "en-GB", {day: "numeric", month: "short", year: "numeric"}) : "—";
-  const sub = (title, items) => `<h4 class="sub">${title}</h4>${grid(items)}`;
-  const tech = sub(L("sub_ident"), [[L("t_id"), esc(r.id)], [L("t_fw"), idv(r.firmware)], [L("t_serial"), idv(r.serial)], [L("t_added"), esc(added)],
-      [L("t_uid"), idv(r.unique_id, true)], [L("t_hw"), idv(r.hw_address, true)]]) +
-    (thread ? sub(L("sub_thread"), [...(r.route ? [[L("t_path"), esc(fullPath(r)), "wide"]] : []), [L("t_rloc"), esc(r.rloc16 || "—")], [L("t_nb"), c(r.neighbors)], [L("t_weak"), c(r.weak)],
-      [L("t_det"), aged(r.counters_old && r.detaches_24h != null, r.counters_t, c(r.detaches_24h))], [L("t_pch"), aged(r.counters_old && r.parent_changes_24h != null, r.counters_t, c(r.parent_changes_24h))], [L("t_partch"), aged(r.counters_old && r.partition_changes_24h != null, r.counters_t, c(r.partition_changes_24h))]]) : "") +
-    sub(L("sub_life"), [[L("t_up"), r.uptime_h == null ? "—" : aged(r.uptime_old, r.uptime_t, dur(Math.round(r.uptime_h * 60)))], [L("t_reb"), `${c(r.reboots)} · ${c(r.reboots_24h)}`],
-      [L("t_boot"), r.boot_reason == null ? "—" : esc(L("boot")[r.boot_reason] || r.boot_reason)], [L("t_down"), dur(r.downtime_7d_min)]]) +
-    sub(L("sub_contact"), [[L("t_rhythm"), r.rhythm_s == null ? esc(L("rhythm_wait")) : esc(F("rhythm_v", {u: dur1(r.rhythm_s), l: dur1(r.silent_limit_s)})), "wide"],
-      [L("t_src"), r.contact_src ? esc(L("csrc")[r.contact_src] || r.contact_src) : "—"], [L("t_gap"), r.active_gap_max_s == null ? "—" : dur(Math.round(r.active_gap_max_s / 60))]]);
-  // the Matter Server figures are for a diagnosis, not for every day: with the technical details
-  const techBlock = `<details><summary>${L("tech")}</summary>${tech}${srvBlock}</details>`;
-  openSheet(top + `<p class="mut">${L("loading")}</p>` + techBlock);
+  const groups = [["t_ident", L("sub_ident"), grid([[L("t_id"), esc(r.id)], [L("t_fw"), idv(r.firmware)], [L("t_serial"), idv(r.serial)], [L("t_added"), esc(added)],
+      [L("t_uid"), idv(r.unique_id, true)], [L("t_hw"), idv(r.hw_address, true)]])],
+    ...(thread ? [["t_thread", L("sub_thread"), grid([...(r.route ? [[L("t_path"), esc(fullPath(r)), "wide"]] : []), [L("t_rloc"), esc(r.rloc16 || "—")], [L("t_nb"), c(r.neighbors)], [L("t_weak"), c(r.weak)],
+      [L("t_det"), aged(r.counters_old && r.detaches_24h != null, r.counters_t, c(r.detaches_24h))], [L("t_pch"), aged(r.counters_old && r.parent_changes_24h != null, r.counters_t, c(r.parent_changes_24h))], [L("t_partch"), aged(r.counters_old && r.partition_changes_24h != null, r.counters_t, c(r.partition_changes_24h))]])]] : []),
+    ["t_life", L("sub_life"), grid([[L("t_up"), r.uptime_h == null ? "—" : aged(r.uptime_old, r.uptime_t, dur(Math.round(r.uptime_h * 60)))], [L("t_reb"), `${c(r.reboots)} · ${c(r.reboots_24h)}`],
+      [L("t_boot"), r.boot_reason == null ? "—" : esc(L("boot")[r.boot_reason] || r.boot_reason)], [L("t_down"), dur(r.downtime_7d_min)]])],
+    ["t_contact", L("sub_contact"), grid([[L("t_rhythm"), r.rhythm_s == null ? esc(L("rhythm_wait")) : esc(F("rhythm_v", {u: dur1(r.rhythm_s), l: dur1(r.silent_limit_s)})), "wide"],
+      [L("t_src"), r.contact_src ? esc(L("csrc")[r.contact_src] || r.contact_src) : "—"], [L("t_gap"), r.active_gap_max_s == null ? "—" : dur(Math.round(r.active_gap_max_s / 60))]])]];
+  // signalBody: the curves; histBody: outages and parent changes. Both come with the history
+  // of the node, asked once the panel is open: "loading" stands in for them meanwhile
+  const draw = (signalBody, histBody) => general + tools + pairing + sec("signal", L("sec_signal"), signalBody, true) +
+    sec("tech", L("tech"), groups.map(g => subsec(...g)).join("") + subsec("t_hist", L("sub_hist"), histBody) + subsec("t_srv", L("srv_t"), srvBody), false);
+  const wait = `<p class="mut">${L("loading")}</p>`;
+  openSheet(draw(wait, wait));
   loadPair(id);
   try {
     const d = await (await fetch("api/node?id=" + encodeURIComponent(id), {cache: "no-store"})).json();
-    if (!$("#sheet").classList.contains("on")) return;
+    if (!$("#sheet").classList.contains("on") || openId !== id) return;
     const s = (d.series || []).slice();
     // the history has one point every 15 min: end the curves on the values shown in the table now
     const nowRssi = linkRssi(r), nowRtt = r.rtt_fail ? null : r.rtt_ms;
     if (nowRssi != null || nowRtt != null) s.push([Date.now() / 1000, r.available ? 1 : 0, linkName(r), nowRssi, nowRtt]);
     const out = (d.outages || []).slice(-15).reverse().map(o => `<li>${dt(o[0])} → ${o[1] ? dt(o[1]) : L("ongoing")}</li>`);
     const pc = (d.parent_changes || []).slice(-15).reverse().map(x => `<li>${dt(x[0])} : ${esc(x[1])} → ${esc(x[2])}</li>`);
-    const signalChart = net(r) === "ethernet" ? "" : `<h2>${L("sig7")}</h2>${chart(s.map(x => [x[0], x[3]]), "dBm", "var(--acc)", net(r) === "thread" ? TH.rssi_bad : null)}`;
-    $("#sheet").innerHTML = top + (s.length < 2 ? `<p class="mut">${L("hist_wait")}</p>` : "") + signalChart +
-      `<h2>${L("resp7")}</h2>${chart(s.map(x => [x[0], x[4]]), "ms", "var(--warn)")}` +
-      hist(L("outages"), out) + (net(r) === "thread" ? hist(L("pchanges"), pc) : "") + techBlock;
+    const signalChart = net(r) === "ethernet" ? "" : `<h4 class="sub">${L("sig7")}</h4>${chart(s.map(x => [x[0], x[3]]), "dBm", "var(--acc)", thread ? TH.rssi_bad : null)}`;
+    $("#sheet").innerHTML = draw((s.length < 2 ? `<p class="mut">${L("hist_wait")}</p>` : "") + signalChart +
+      `<h4 class="sub">${L("resp7")}</h4>${chart(s.map(x => [x[0], x[4]]), "ms", "var(--warn)")}`,
+      hist(L("outages"), out, L("none_f")) + (thread ? hist(L("pchanges"), pc, L("none")) : ""));
   } catch (e) {
-    $("#sheet").innerHTML = top + `<p class="mut">${L("error")}</p>` + techBlock;
+    $("#sheet").innerHTML = draw(`<p class="mut">${L("error")}</p>`, `<p class="mut">${L("error")}</p>`);
   }
   renderPair(); renderReset();   // the panel was drawn again: its pairing block and its reset question too
 }
@@ -1179,6 +1199,7 @@ async function fillQr() {   // draws the QR codes of the cards shown
   try { await needScript("qrcode.js"); boxes.forEach(b => { b.innerHTML = qrSvg(b.dataset.qr); }); } catch (e) { /* the typed code is shown anyway */ }
 }
 const IC_CAM = '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
+const IC_DROP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="10" width="18" height="11" rx="2"/><path d="M3 18.5l5-4 4 3 3-2.2 6 4.2"/><path d="M12 2v6.5m0 0L9.5 6M12 8.5L14.5 6"/></svg>';
 let pair = {id: null, data: null, edit: false};
 function renderPair() {
   const el = $("#pair"); if (!el || !pair.data || pair.id !== openId) return;
@@ -1191,7 +1212,7 @@ function renderPair() {
          <div class="pcline pcsub"><button class="btn quiet" data-pc="replace">${L("pc_replace")}</button><button class="btn quiet" data-pc="delete" data-key="${esc(c.key)}">${L("pc_delete_code")}</button></div>
          ${c.qr ? "" : `<small class="mut">${L("pc_none_qr")}</small>`}</div></div>` + (c.auto ? `<small class="mut">${L("pc_auto")}</small>` : "")
     : `<div class="pcdrop"><div class="pcline">${canScan() ? `<button class="btn" data-pc="scan">${IC_CAM}${L("sc_btn")}</button>` : ""}<label class="btn">${IC_CAM}${L("pc_cam")}<input type="file" accept="image/*" capture="environment" hidden></label>
-         <label class="btn">${L("pc_pick")}<input type="file" accept="image/*" hidden></label></div><small class="mut">${L("pc_drop")}</small></div>
+         </div><label class="pczone" title="${esc(L("pc_drop"))}" aria-label="${esc(L("pc_drop"))}">${IC_DROP}<input type="file" accept="image/*" hidden></label></div>
        <form class="pcf"><input name="c" placeholder="${esc(L("pc_ph"))}" autocomplete="off" spellcheck="false" maxlength="80"><button class="btn">${L("save")}</button></form>` +
       (free.length ? `<form class="pca"><select name="k" aria-label="${esc(L("pc_attach"))}">${free.map(f =>
         `<option value="${esc(f.key)}">${esc([f.name || (f.scanned ? L("sc_waiting") : "?"), f.area, manualFmt(f.manual)].filter(Boolean).join(" · "))}</option>`).join("")}</select><button class="btn">${L("pc_attach_btn")}</button></form>
@@ -1558,6 +1579,12 @@ $("#sheet").addEventListener("submit", e => {   // pairing code typed, or a kept
   if (f.classList.contains("pca")) pairPost({id: pair.id, attach: f.k.value}, "pc_saved");
   else if (f.c.value.trim()) pairPost({id: pair.id, code: f.c.value}, "pc_saved");
 });
+// a section folded or unfolded stays so, for every panel ("toggle" does not bubble: caught on its way down)
+$("#sheet").addEventListener("toggle", e => {
+  const key = e.target.dataset && e.target.dataset.sec;
+  if (!key || secOpen(key, null) === e.target.open) return;
+  P.sec = {...(P.sec || {}), [key]: e.target.open}; save();
+}, true);
 $("#sheet").addEventListener("change", e => {
   if (e.target.matches(".pcdrop input[type=file]")) pairPhoto(e.target.files[0]);
   if (e.target.id === "rsok") { const go = $('#sheet button[data-rs="go"]'); if (go) go.disabled = !e.target.checked; }

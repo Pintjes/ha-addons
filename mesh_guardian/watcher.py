@@ -76,7 +76,7 @@ from matterlog import MatterLog  # noqa: E402
 from suplog import SupervisorLog  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.21.1"
+VERSION = "2.22.0"
 
 _MQ = _load_mqtt()
 MQTT_HOST = _MQ.get("host") or os.environ.get("MQTT_HOST", "core-mosquitto")

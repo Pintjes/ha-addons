@@ -141,7 +141,7 @@ FR = {
     "{node}: {action}": "{node} : {action}",
     "Remove the battery 10s": "Retirer la pile 10 s",
     "Finding a new parent could improve the situation": "Rechercher un nouveau parent pourrait améliorer la situation",
-    "press Find a new parent on its line: it attaches again and picks the best parent it hears (if it refuses: remove the battery or unplug it for 10s)": "Bouton « Recherche d'un nouveau lien ». Si refus : couper son alimentation 10 s.",
+    "press Find a new parent on its line: it attaches again and picks the best parent it hears (if it refuses: remove the battery or unplug it for 10s)": "Bouton « Recherche nouveau lien ». Si refus : couper son alimentation 10 s.",
     "{parent} restarts ({n}× in 24h): finding a new parent could improve the situation":
         "{parent} redémarre ({n}× en 24 h) : rechercher un nouveau parent pourrait améliorer la situation",
     "{parent} detaches ({n}× in 24h): finding a new parent could improve the situation":

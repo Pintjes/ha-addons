@@ -4,6 +4,15 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.22.0] - 2026-11-16
+
+### Changed
+
+- Node panel cut in sections that fold with their arrow: General (always shown), Tools, Pairing, Signal and response (open at first), Technical details (closed at first, themselves cut in groups that fold). What is open or folded is kept in the browser.
+- Outages and parent changes move into the technical details (History).
+- Pairing without a code: a dashed zone with an icon takes the place of the sentence about dropping a photo; a click on it chooses a photo.
+- French labels: "Recherche nouveau lien", "Interviewer".
+
 ## [2.21.1] - 2026-11-16
 
 ### Changed
