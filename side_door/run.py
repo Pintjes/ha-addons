@@ -218,9 +218,18 @@ SHELL = """\
                padding: .6rem .9rem .45rem; cursor: pointer; white-space: nowrap; opacity: .7; }
   nav button:hover { opacity: 1; }
   nav button.on { opacity: 1; font-weight: 600; color: #1f6feb; border-bottom-color: #1f6feb; }
+  nav button[hidden] { display: none; }
+  nav .tabs { display: flex; gap: .25rem; flex: 1; }
+  nav svg { width: 18px; height: 18px; fill: currentColor; vertical-align: -3px; }
+  nav button.eye { padding: .5rem .6rem; margin-left: auto; }
+  nav button.eye.on { border-bottom-color: transparent; color: #1f6feb; }
+  nav button .vis { display: none; margin-left: .4rem; }
+  body.editing nav .tabs button .vis { display: inline; }
+  body.editing nav .tabs button.off { opacity: .45; text-decoration: line-through; }
   main { flex: 1; position: relative; }
   iframe { position: absolute; inset: 0; width: 100%%; height: 100%%; border: 0; background: #fff; }
   iframe[hidden] { display: none; }
+  .none { padding: 2rem; text-align: center; opacity: .8; }
   @media (prefers-color-scheme: dark) {
     body { background: #111a22; color: #e3e8ee; }
     nav { background: #1c2733; border-bottom-color: #2b3947; }
@@ -229,17 +238,41 @@ SHELL = """\
 </style>
 </head>
 <body>
-<nav>%(tabs)s</nav>
+<nav><div class="tabs">%(tabs)s</div><button type="button" class="eye"
+  title="Show or hide apps / Afficher ou masquer des applications"></button></nav>
 <main></main>
 <script>
   // One frame per app, created the first time its tab is opened: an app keeps
   // its page when you come back to it.
-  const tabs = [...document.querySelectorAll("nav button")];
+  const tabs = [...document.querySelectorAll("nav .tabs button")];
+  const eye = document.querySelector("nav button.eye");
   const main = document.querySelector("main");
   const frames = {};
+  tabs.forEach((t) => { t.dataset.name = t.textContent.trim(); });
   function find(key) {
     key = (key || "").trim().toLowerCase();
-    return tabs.find((t) => t.dataset.app === key || t.textContent.trim().toLowerCase() === key);
+    return tabs.find((t) => t.dataset.app === key || t.dataset.name.toLowerCase() === key);
+  }
+  // Apps hidden with the eye: a choice of this browser, kept in it
+  const EYE = "M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 "
+    + "12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 "
+    + "23,12C21.27,7.61 17,4.5 12,4.5Z";
+  const EYE_OFF = "M11.83,9L15,12.16C15,12.11 15,12.05 15,12A3,3 0 0,0 12,9C11.94,9 11.89,9 11.83,9M7.53,9.8L9.08,11.35"
+    + "C9.03,11.56 9,11.77 9,12A3,3 0 0,0 12,15C12.22,15 12.44,14.97 12.65,14.92L14.2,16.47C13.53,16.8 12.79,17 12,17"
+    + "A5,5 0 0,1 7,12C7,11.21 7.2,10.47 7.53,9.8M2,4.27L4.28,6.55L4.73,7C3.08,8.3 1.78,10 1,12C2.73,16.39 7,19.5 12,19.5"
+    + "C13.55,19.5 15.03,19.2 16.38,18.66L16.81,19.08L19.73,22L21,20.73L3.27,3M12,7A5,5 0 0,1 17,12C17,12.64 16.87,13.26 "
+    + "16.64,13.82L19.57,16.75C21.07,15.5 22.27,13.86 23,12C21.27,7.61 17,4.5 12,4.5C10.6,4.5 9.26,4.75 8,5.2L10.17,7.35"
+    + "C10.74,7.13 11.35,7 12,7Z";
+  function icon(path) {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + path + '"/></svg>';
+  }
+  let hiddenApps = [];
+  try { hiddenApps = JSON.parse(localStorage.getItem("side_door_hidden") || "[]"); } catch (error) { /* none */ }
+  let editing = false;
+  let current = null;
+  function isHidden(id) { return hiddenApps.includes(id); }
+  function saveHidden() {
+    try { localStorage.setItem("side_door_hidden", JSON.stringify(hiddenApps)); } catch (error) { /* private window */ }
   }
   // "?app=<name>" in the address of the panel: a dashboard button opens a given app
   function asked() {
@@ -279,13 +312,29 @@ SHELL = """\
       return "";
     }
   }
-  function show(key, page) {
-    const tab = find(key) || tabs[0];
+  // "force": an app asked by a dashboard button opens even when hidden here
+  function show(key, page, force) {
+    let tab = find(key);
+    if (!tab || (isHidden(tab.dataset.app) && !force)) tab = tabs.find((t) => !isHidden(t.dataset.app));
+    const empty = main.querySelector(".none");
+    if (empty) empty.remove();
+    if (!tab) {
+      current = null;
+      tabs.forEach((t) => t.classList.remove("on"));
+      for (const key in frames) frames[key].hidden = true;
+      const note = document.createElement("div");
+      note.className = "none";
+      note.textContent = "Every app is hidden: click the eye to show one. / Toutes les applications sont masquées : "
+        + "cliquez sur l'œil pour en afficher une.";
+      main.appendChild(note);
+      return;
+    }
     const id = tab.dataset.app;
+    current = id;
     tabs.forEach((t) => t.classList.toggle("on", t === tab));
     if (!frames[id]) {
       frames[id] = document.createElement("iframe");
-      frames[id].title = tab.textContent;
+      frames[id].title = tab.dataset.name;
       follow(frames[id]);
       frames[id].src = "app/" + id + "/" + (page || tab.dataset.start || "");
       main.appendChild(frames[id]);
@@ -293,15 +342,51 @@ SHELL = """\
     for (const key in frames) frames[key].hidden = key !== id;
     try { localStorage.setItem("side_door_app", id); } catch (error) { /* private window */ }
   }
-  // A single tab left (the others are hidden): no row, the app fills the panel
+  // The row as it must look: a hidden app has no tab, except while choosing
+  function draw() {
+    document.body.classList.toggle("editing", editing);
+    eye.classList.toggle("on", editing);
+    eye.innerHTML = icon(EYE);
+    tabs.forEach((t) => {
+      const off = isHidden(t.dataset.app);
+      t.hidden = off && !editing && t.dataset.app !== current;
+      t.classList.toggle("off", off);
+      t.innerHTML = "";
+      t.append(t.dataset.name);
+      const mark = document.createElement("span");
+      mark.className = "vis";
+      mark.innerHTML = icon(off ? EYE_OFF : EYE);
+      t.append(mark);
+    });
+  }
+  // A hidden app is not loaded: its frame goes away
+  function setHidden(id, off) {
+    hiddenApps = hiddenApps.filter((x) => x !== id);
+    if (off) {
+      hiddenApps.push(id);
+      if (frames[id]) { frames[id].remove(); delete frames[id]; }
+    }
+    saveHidden();
+    if (off && current === id) show(null);
+    else if (!off && current === null) show(id);
+    draw();
+  }
+  eye.addEventListener("click", () => { editing = !editing; draw(); });
+  tabs.forEach((t) => t.addEventListener("click", () => {
+    if (editing) setHidden(t.dataset.app, !isHidden(t.dataset.app));
+    else show(t.dataset.app);
+  }));
+  // A single app in the list: no row at all, the app fills the panel
   if (tabs.length < 2) document.querySelector("nav").style.display = "none";
-  tabs.forEach((t) => t.addEventListener("click", () => show(t.dataset.app)));
   let last = null;
   try { last = localStorage.getItem("side_door_app"); } catch (error) { /* private window */ }
   const first = find(asked()) ? asked() : null;
-  show(first || last, first ? comeback() : "");
+  show(first || last, first ? comeback() : "", !!first);
+  draw();
   try {
-    window.parent.addEventListener("location-changed", () => { if (find(asked())) show(asked()); });
+    window.parent.addEventListener("location-changed", () => {
+      if (find(asked())) { show(asked(), "", true); draw(); }
+    });
   } catch (error) { /* not the same site */ }
 </script>
 </body>

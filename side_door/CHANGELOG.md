@@ -4,6 +4,15 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.0] - 2026-11-16
+
+### Added
+
+- An eye at the end of the row of tabs: click it, then click the apps to hide
+  or show (struck through, with a crossed eye, when hidden). A hidden app has
+  no tab and is not loaded. The choice is kept by the browser; an app opened by
+  a dashboard button still opens.
+
 ## [1.7.0] - 2026-11-16
 
 ### Added
