@@ -94,6 +94,7 @@
   .issue.warn .ic, .issue.warn .what { color: var(--warn); }
   .issue.info .ic, .issue.info .what { color: var(--acc-txt); }
   .issue b { display: block; }
+  button.open { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: inherit; cursor: pointer; }
   .issue .what { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 
   .brs { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -313,13 +314,14 @@
 </div>
 <div class="scrim" id="scrim"></div>
 <aside class="sheet" id="sheet" role="dialog" aria-modal="true"></aside>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <script>
 "use strict";
 // ------------------------------------------------------------ texts
 const T = {
   en: {np_before:"Before: {p}, {r} dBm", a_parent_noanswer:"{n}: no answer (asleep?)", a_parent_new:"{n}: new parent {l}", a_failed:"{n}: action failed", check_bat:"Check its batteries", check_power:"Check its power", flap_power:"Answers now and then. Cut its power for 10 s", flap_bat:"Answers now and then. Remove its battery for 10 s", down_since:"Since {t}.", more_n:"+{n}", refresh:"Refresh", reading:"Reading the nodes again… {d}/{n}", reading0:"Reading the nodes again…", report:"Report", loading:"loading…", error:"error", live:"live", polling:"live link down: values read on demand", updated:"updated at {t}", connecting:"connecting to the Matter Server…", updating:"reading the nodes…", updating_n:"reading the nodes… {d}/{n}",
-    silent:"silent", w_silent:"Silent", n_silent:"{n} silent node", n_silent_pl:"{n} silent nodes", silent_sub:"{name}: probably without power.",
+    silent:"silent", w_silent:"Silent",
     silent_tip:"No sign of life for {t} (usually every {u}): probably without power.",
     t_rhythm:"Sign of life", rhythm_v:"every {u} at most · silence flagged after {l}", rhythm_wait:"being measured",
     all_ok:"All good", all_ok_sub:"All nodes are available.", n_down:"{n} node unavailable", n_down_pl:"{n} nodes unavailable", n_act:"{n} action advised", n_act_pl:"{n} actions advised",
@@ -403,7 +405,7 @@ const T = {
     boot:{unspecified:"unspecified", power_on:"power on", brown_out:"brown-out", software_watchdog:"software watchdog", hardware_watchdog:"hardware watchdog", software_update:"software update", software_reset:"software reset"},
     csrc:{report:"report", event:"event", read:"read", ping:"ping", passive:"packet"}},
   fr: {np_before:"Avant : {p}, {r} dBm", a_parent_noanswer:"{n} : pas de réponse (endormie ?)", a_parent_new:"{n} : nouveau parent {l}", a_failed:"{n} : action impossible", check_bat:"Vérifier les piles", check_power:"Vérifier l'alimentation", flap_power:"Répond par intermittence. Couper son alimentation 10 s", flap_bat:"Répond par intermittence. Retirer la pile 10 s", down_since:"Depuis {t}.", more_n:"+{n}", refresh:"Actualiser", reading:"Relecture des nodes… {d}/{n}", reading0:"Relecture des nodes…", report:"Rapport", loading:"chargement…", error:"erreur", live:"en direct", polling:"lien direct coupé : valeurs lues à la demande", updated:"mis à jour à {t}", connecting:"connexion au Matter Server…", updating:"lecture des nodes…", updating_n:"lecture des nodes… {d}/{n}",
-    silent:"silencieuse", w_silent:"Silencieuse", n_silent:"{n} node silencieuse", n_silent_pl:"{n} nodes silencieuses", silent_sub:"{name} : probablement sans courant.",
+    silent:"silencieuse", w_silent:"Silencieuse",
     silent_tip:"Aucun signe de vie depuis {t} (d'habitude toutes les {u}) : probablement sans courant.",
     t_rhythm:"Signe de vie", rhythm_v:"toutes les {u} au plus · silence signalé après {l}", rhythm_wait:"mesure en cours",
     all_ok:"Tout va bien", all_ok_sub:"Toutes les nodes sont disponibles.", n_down:"{n} node indisponible", n_down_pl:"{n} nodes indisponibles", n_act:"{n} action conseillée", n_act_pl:"{n} actions conseillées",
@@ -643,18 +645,16 @@ function bar(v, v24) {
 function renderHero() {
   const n = D.network || {}, rows = D.rows || [], q = D.quality;
   const down = rows.filter(r => !r.available), act = rows.filter(r => r.available && r.advice);
-  const quiet = [];
   const cls = down.length ? "bad" : act.length ? "info" : "ok";
   const parts = [];
   if (down.length) parts.push(P2("n_down", down.length));
-  if (quiet.length) parts.push(P2("n_silent", quiet.length));
   // as many actions as advice cards in "To handle" (identical advice is one card)
   const nAct = todoGroups(act).length;
   if (nAct) parts.push(P2("n_act", nAct));
   const title = parts.length ? parts.join(", ") : L("all_ok");
   const sub = down.length === 1 ? F("down_sub", {name: esc(down[0].name), t: since(down[0])})
     : down.length ? F("down_sub_pl", {names: down.slice(0, 3).map(x => esc(x.name)).join(", ") + (down.length > 3 ? " " + F("more_n", {n: down.length - 3}) : "")})
-    : quiet.length ? F("silent_sub", {name: esc(quiet[0].name)}) : act.length ? L("act_sub") : L("all_ok_sub");
+    : act.length ? L("act_sub") : L("all_ok_sub");
   const nets = Object.keys(NETS).filter(k => rows.some(r => net(r) === k));
   const brs = D.border_routers || [];
   const facts = [[L("f_avail"), `${rows.length - down.length} / ${rows.length}`],
@@ -703,10 +703,10 @@ function renderTodo() {
   const n = D.network || {};
   const issues = (D.rows || []).filter(r => sev(r) < 3 && !r.after_restart).sort((a, b) => sev(a) - sev(b) || a.name.localeCompare(b.name));
   const net = [];
-  if (n.storm) net.push(["warn", L("storm"), true]);
-  if (n.routing_problem) net.push(["bad", n.routing_problem, true]);
+  if (n.storm) net.push(["warn", L("storm")]);
+  if (n.routing_problem) net.push(["bad", n.routing_problem]);
   // notes about the network itself (border routers, unknown nodes); "info" is not something to handle
-  for (const [k, txt] of n.notes || []) net.push([k, txt, true]);
+  for (const [k, txt] of n.notes || []) net.push([k, txt]);
   // every card can be hidden with "Seen" (kept in this browser); it comes back when it changes:
   // another text, another advice, the node unavailable again
   const seenSet = new Set(P.seen || []);
@@ -721,26 +721,24 @@ function renderTodo() {
   $("#todoTitle").textContent = total ? F("todo", {n: total}) : L("todo_none");
   net.sort((a, b) => (a[0] === "info") - (b[0] === "info"));
   // notes can be hidden ("seen"), the orange ones too; a note that changes comes back
-  const seen = new Set(P.seen || []);
-  const infoCards = net.filter(x => x[0] === "info" && !seen.has(x[1])).map(([k, txt]) => `<div class="card issue info"><span class="ic">${IC.info}</span>
+  const infoCards = net.filter(x => x[0] === "info" && !seenSet.has(x[1])).map(([k, txt]) => `<div class="card issue info"><span class="ic">${IC.info}</span>
       <span style="flex:1"><span class="what" style="display:block">${L("w_info")}</span><span>${esc(txt)}</span></span>
-      <button class="seen" data-seen="${esc(txt)}" title="${esc(L("seen_tip"))}">${esc(L("seen"))}</button></div>`).join("");
-  $("#todo").innerHTML = fresh.map(x => `<div class="card issue info" data-id="${esc(x.id)}" role="button" tabindex="0"><span class="ic">${IC.info}</span>
-      <span style="flex:1"><span class="what">${L("pc_new_what")}</span><b>${esc(x.name)} <span class="mut" style="font-weight:400">${x.area ? "· " + esc(x.area) : ""}</span></b><span>${esc(L("pc_new"))}</span></span>${seenBtn("pcnew:" + x.id)}</div>`).join("") +
-    net.filter(x => x[0] !== "info" && !(x[2] && seen.has(x[1]))).map(([k, txt, note]) => `<div class="card issue ${k}"><span class="ic">${k === "bad" ? IC.bad : IC.warn}</span>
-      <span style="flex:1"><span class="what" style="display:block">${L("w_net")}</span><span>${esc(txt)}</span></span>${note
-      ? `<button class="seen" data-seen="${esc(txt)}" title="${esc(L("seen_tip"))}">${esc(L("seen"))}</button>` : ""}</div>`).join("") +
+      ${seenBtn(txt)}</div>`).join("");
+  $("#todo").innerHTML = fresh.map(x => `<div class="card issue info" data-id="${esc(x.id)}"><span class="ic">${IC.info}</span>
+      <span style="flex:1"><span class="what">${L("pc_new_what")}</span><b><button class="open" data-id="${esc(x.id)}">${esc(x.name)}</button> <span class="mut" style="font-weight:400">${x.area ? "· " + esc(x.area) : ""}</span></b><span>${esc(L("pc_new"))}</span></span>${seenBtn("pcnew:" + x.id)}</div>`).join("") +
+    net.filter(x => x[0] !== "info" && !seenSet.has(x[1])).map(([k, txt]) => `<div class="card issue ${k}"><span class="ic">${k === "bad" ? IC.bad : IC.warn}</span>
+      <span style="flex:1"><span class="what" style="display:block">${L("w_net")}</span><span>${esc(txt)}</span></span>${seenBtn(txt)}</div>`).join("") +
     groups.map(g => {
       const {rows} = g, r = rows[0];
-      if (rows.length > 1) return `<div class="card issue info" data-id="${esc(r.id)}" role="button" tabindex="0" title="${esc(r.advice_detail || "")}"><span class="ic">${IC.bulb}</span>
-        <span style="flex:1"><span class="what">${L("w_warn")}</span><b>${esc(r.advice)}</b><span class="mut">${rows.map(x => esc(x.name)).join(", ")}</span></span>${seenBtn(cardKey(g))}</div>`;
+      if (rows.length > 1) return `<div class="card issue info" data-id="${esc(r.id)}" title="${esc(r.advice_detail || "")}"><span class="ic">${IC.bulb}</span>
+        <span style="flex:1"><span class="what">${L("w_warn")}</span><b><button class="open" data-id="${esc(r.id)}">${esc(r.advice)}</button></b><span class="mut">${rows.map(x => esc(x.name)).join(", ")}</span></span>${seenBtn(cardKey(g))}</div>`;
       // every advice is an action: one kind, in blue (orange looked like a serious problem)
       const k = !r.available ? "bad" : "info";
       const what = !r.available ? L("w_down") : L("w_warn");
       const txt = !r.available ? esc(F("down_since", {t: since(r)}) + " " + (r.advice || downDo(r)) + ".")
         : r.silent_s ? esc(silentTip(r)) : esc(r.advice);
-      return `<div class="card issue ${k}" data-id="${esc(r.id)}" role="button" tabindex="0" title="${esc(r.advice_detail || "")}"><span class="ic">${k === "bad" ? IC.bad : IC.bulb}</span>
-        <span style="flex:1"><span class="what">${what}</span><b>${esc(r.name)} <span class="mut" style="font-weight:400">${r.area ? "· " + esc(r.area) : ""}</span></b><span>${txt}</span></span>${seenBtn(cardKey(g))}</div>`;
+      return `<div class="card issue ${k}" data-id="${esc(r.id)}" title="${esc(r.advice_detail || "")}"><span class="ic">${k === "bad" ? IC.bad : IC.bulb}</span>
+        <span style="flex:1"><span class="what">${what}</span><b><button class="open" data-id="${esc(r.id)}">${esc(r.name)}</button> <span class="mut" style="font-weight:400">${r.area ? "· " + esc(r.area) : ""}</span></b><span>${txt}</span></span>${seenBtn(cardKey(g))}</div>`;
     }).join("") + infoCards;
 }
 
@@ -868,7 +866,7 @@ function renderList() {
       : `<span class="num${r.rtt_old ? " old" : ""}" title="${esc(r.rtt_old ? oldTip(r.rtt_t) : r.rtt_t ? F("measured", {t: ago(r.rtt_t)}) : "")}">${ms(r.rtt_ms)}</span>`;
     const last = r.last_report ? `<span title="${esc(new Date(r.last_report * 1000).toLocaleString(LANG) + (r.contact_src ? " · " + (L("csrc")[r.contact_src] || r.contact_src) : ""))}">${ago(r.last_report)}</span>` : `<span class="mut">${L("never")}</span>`;
     const cell = {
-      node: `<span class="nm"><b>${esc(r.name)}${isNew(r) ? ` <span class="new">${L("new")}</span>` : ""}</b><small>${meta}</small></span>`,
+      node: `<span class="nm"><b><button class="open" data-id="${esc(r.id)}">${esc(r.name)}</button>${isNew(r) ? ` <span class="new">${L("new")}</span>` : ""}</b><small>${meta}</small></span>`,
       status: `<span>${status(r)}${r.role && !narrow ? `<span class="rl">${esc(L("roles")[r.role] || r.role)}</span>` : ""}</span>`,
       // unavailable: link, border router and response not known now, left empty
       link: r.available ? `<span class="lk">${link(r)}${signal(r)}</span>` : `<span class="lk"></span>`,
@@ -877,7 +875,7 @@ function renderList() {
       last: `<span class="lc"><span class="lab">${L("contact")}</span>${last}</span>`,
       adv,
     };
-    return `<div class="row ${r.available ? "" : "down"}" data-id="${esc(r.id)}" role="button" tabindex="0">${cols.map(c => cell[c.k] ??
+    return `<div class="row ${r.available ? "" : "down"}" data-id="${esc(r.id)}">${cols.map(c => cell[c.k] ??
       `<span class="x0 ${c.r ? "r" : ""}">${!r.available && (c.k === "br" || c.k === "route") ? "" : c.h(r)}</span>`).join("")}</div>`;
   }).join("") || `<p class="empty">${L("none_match")}</p>`;
 }
@@ -1035,11 +1033,20 @@ async function followLoop(id, minutes) {
     }
   }
 }
-function toast(text) {
-  let el = $("#toast");
-  if (!el) { el = document.createElement("div"); el.id = "toast"; el.setAttribute("role", "status"); document.body.appendChild(el); }
-  el.textContent = text; el.classList.add("on");   // stays until clicked
-  el.onclick = () => el.classList.remove("on");
+// a message goes away by itself, after a time that grows with its length (kept while the pointer
+// is over it); keep: until clicked, for a code to type on the phone. The box exists from the
+// start, so that a screen reader announces the first message too.
+let toastTimer = null;
+function toast(text, keep) {
+  const el = $("#toast");
+  el.textContent = text; el.classList.add("on");
+  clearTimeout(toastTimer); toastTimer = null;
+  const hide = () => el.classList.remove("on");
+  const later = () => { if (!keep) toastTimer = setTimeout(hide, Math.min(20000, 5000 + 60 * text.length)); };
+  el.onclick = hide;
+  el.onmouseenter = () => { clearTimeout(toastTimer); toastTimer = null; };
+  el.onmouseleave = later;
+  later();
 }
 
 // ------------------------------------------------------------ detail sheet
@@ -1081,9 +1088,39 @@ const hist = (title, items, none) => !items.length ? `<p class="histnone">${titl
     ? `<details class="more"><summary>${esc(F("more", {n: items.length - 5}))}</summary><ul>${items.slice(5).join("")}</ul></details>` : "");
 // a section of a panel is open unless the user folded it (kept in this browser)
 const secOpen = (key, open) => P.sec && key in P.sec ? !!P.sec[key] : open;
-let sheetFrom = null;   // what had the focus before the panel opened: it gets it back when the panel closes
+// the element that has the focus, described so that it is found again once the page is drawn
+// again (every 30 s): same tag, same data-* attributes, in the same box
+function focusKey(el) {
+  if (!el || el === document.body || !el.tagName) return null;
+  const box = el.closest("[id]");
+  const sel = el.tagName.toLowerCase() + [...el.attributes].filter(a => a.name.startsWith("data-"))
+    .map(a => `[${a.name}="${CSS.escape(a.value)}"]`).join("");
+  return box && sel.includes("[") ? {box: box.id, sel} : null;
+}
+function focusFind(k) {
+  const box = k && document.getElementById(k.box);
+  return box ? box.querySelector(k.sel) : null;
+}
+function keepFocus(draw) {
+  const el = document.activeElement, k = focusKey(el);
+  draw();
+  if (k && !document.contains(el)) { const n = focusFind(k); if (n) n.focus({preventScroll: true}); }
+}
+// Tab and Shift+Tab stay in the open panel (it covers the page)
+function trapTab(e) {
+  const s = $("#sheet");
+  if (!s.classList.contains("on")) return;
+  const f = [...s.querySelectorAll("button, [href], input, select, textarea, summary, [tabindex]:not([tabindex='-1'])")]
+    .filter(x => !x.disabled && x.offsetParent !== null);
+  if (!f.length) return;
+  const first = f[0], last = f[f.length - 1];
+  if (!s.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+  else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+}
+let sheetFrom = null, sheetKey = null;   // what had the focus before the panel opened: it gets it back when the panel closes
 function openSheet(html) {
-  if (!$("#sheet").classList.contains("on")) sheetFrom = document.activeElement;
+  if (!$("#sheet").classList.contains("on")) { sheetFrom = document.activeElement; sheetKey = focusKey(sheetFrom); }
   $("#sheet").innerHTML = html; $("#sheet").classList.add("on"); $("#scrim").classList.add("on");
   const h = $("#sheet h3"); $("#sheet").setAttribute("aria-label", h ? h.textContent : L("h_node"));
   $("#sheet").scrollTop = 0;
@@ -1092,8 +1129,10 @@ function openSheet(html) {
 const closeSheet = () => {
   const was = $("#sheet").classList.contains("on");
   $("#sheet").classList.remove("on"); $("#scrim").classList.remove("on");
-  if (was && sheetFrom && document.contains(sheetFrom)) { try { sheetFrom.focus({preventScroll: true}); } catch (e) { /* gone */ } }
-  sheetFrom = null;
+  // drawn again meanwhile: the same element in its new place
+  const back = was && sheetFrom && (document.contains(sheetFrom) ? sheetFrom : focusFind(sheetKey));
+  if (back) { try { back.focus({preventScroll: true}); } catch (e) { /* gone */ } }
+  sheetFrom = null; sheetKey = null;
 };
 const head = (title, sub, extra) => `<header><div><h3>${title}</h3>${sub ? `<span class="mut">${sub}</span>` : ""}${extra || ""}</div>
   <button class="x" aria-label="${esc(L("rs_close"))}" title="${esc(L("rs_close"))}">✕</button></header>`;
@@ -1128,7 +1167,7 @@ async function openNode(id, again) {
   // only add a line). Then Signal, Pairing and History (open at first), then Technical details
   // (closed at first), cut in groups by plain sub-titles.
   const sec = (key, title, body, open, tip) => `<details class="sec" data-sec="${key}"${secOpen(key, open) ? " open" : ""}><summary${tip ? ` title="${esc(tip)}"` : ""}>${title}</summary>${body}</details>`;
-  const subsec = (key, title, body) => `<h4 class="sub">${title}</h4>${body}`;
+  const subsec = (title, body) => `<h4 class="sub">${title}</h4>${body}`;
   const general = head(esc(r.name), [r.area, r.model].filter(Boolean).map(esc).join(" · "), tags) + adv + grid(kv);
   const tools = `<div class="sheet-acts">${nodeActs(r).filter(x => x[0] !== "remove" && (thread || x[0] !== "parent")).map(actBtn).join("")}</div>`;
   // pairing: its code, and the two actions that end with the node paired again
@@ -1145,19 +1184,19 @@ async function openNode(id, again) {
     (cover ? `<p class="mut"><small>${esc(cover)}</small></p>` : "");
   const idv = (v, tip) => v ? `<span${tip ? ` title="${esc(L("t_may_change"))}"` : ""} style="overflow-wrap:anywhere;user-select:all">${esc(v)}</span>` : "—";
   const added = r.added && !isNaN(new Date(r.added)) ? new Date(r.added).toLocaleDateString(LANG === "fr" ? "fr-BE" : "en-GB", {day: "numeric", month: "short", year: "numeric"}) : "—";
-  const groups = [["t_ident", L("sub_ident"), grid([[L("t_id"), esc(r.id)], [L("t_fw"), idv(r.firmware)], [L("t_serial"), idv(r.serial)], [L("t_added"), esc(added)],
+  const groups = [[L("sub_ident"), grid([[L("t_id"), esc(r.id)], [L("t_fw"), idv(r.firmware)], [L("t_serial"), idv(r.serial)], [L("t_added"), esc(added)],
       [L("t_uid"), idv(r.unique_id, true)], [L("t_hw"), idv(r.hw_address, true)]])],
-    ...(thread ? [["t_thread", L("sub_thread"), grid([...(r.route ? [[L("t_path"), esc(fullPath(r)), "wide"]] : []), [L("t_rloc"), esc(r.rloc16 || "—")], [L("t_nb"), c(r.neighbors)], [L("t_weak"), c(r.weak)],
+    ...(thread ? [[L("sub_thread"), grid([...(r.route ? [[L("t_path"), esc(fullPath(r)), "wide"]] : []), [L("t_rloc"), esc(r.rloc16 || "—")], [L("t_nb"), c(r.neighbors)], [L("t_weak"), c(r.weak)],
       [L("t_det"), aged(r.counters_old && r.detaches_24h != null, r.counters_t, c(r.detaches_24h))], [L("t_pch"), aged(r.counters_old && r.parent_changes_24h != null, r.counters_t, c(r.parent_changes_24h))], [L("t_partch"), aged(r.counters_old && r.partition_changes_24h != null, r.counters_t, c(r.partition_changes_24h))]])]] : []),
-    ["t_life", L("sub_life"), grid([[L("t_up"), r.uptime_h == null ? "—" : aged(r.uptime_old, r.uptime_t, dur(Math.round(r.uptime_h * 60)))], [L("t_reb"), `${c(r.reboots)} · ${c(r.reboots_24h)}`],
+    [L("sub_life"), grid([[L("t_up"), r.uptime_h == null ? "—" : aged(r.uptime_old, r.uptime_t, dur(Math.round(r.uptime_h * 60)))], [L("t_reb"), `${c(r.reboots)} · ${c(r.reboots_24h)}`],
       [L("t_boot"), r.boot_reason == null ? "—" : esc(L("boot")[r.boot_reason] || r.boot_reason)], [L("t_down"), dur(r.downtime_7d_min)]])],
-    ["t_contact", L("sub_contact"), grid([[L("t_rhythm"), r.rhythm_s == null ? esc(L("rhythm_wait")) : esc(F("rhythm_v", {u: dur1(r.rhythm_s), l: dur1(r.silent_limit_s)})), "wide"],
+    [L("sub_contact"), grid([[L("t_rhythm"), r.rhythm_s == null ? esc(L("rhythm_wait")) : esc(F("rhythm_v", {u: dur1(r.rhythm_s), l: dur1(r.silent_limit_s)})), "wide"],
       [L("t_src"), r.contact_src ? esc(L("csrc")[r.contact_src] || r.contact_src) : "—"], [L("t_gap"), r.active_gap_max_s == null ? "—" : dur(Math.round(r.active_gap_max_s / 60))]])]];
   // signalBody: the curves; histBody: outages and parent changes. Both come with the history
   // of the node, asked once the panel is open: "loading" stands in for them meanwhile
   const draw = (signalBody, histBody) => general + tools + sec("signal", L("sec_signal"), signalBody, true) + pairing +
     sec("hist", L("sub_hist"), histBody, true) +
-    sec("tech", L("tech"), groups.map(g => subsec(...g)).join("") + subsec("t_srv", L("srv_t"), srvBody), false);
+    sec("tech", L("tech"), groups.map(g => subsec(...g)).join("") + subsec(L("srv_t"), srvBody), false);
   const wait = `<p class="mut">${L("loading")}</p>`;
   const top0 = again ? $("#sheet").scrollTop : 0;
   if (!again) openSheet(draw(wait, wait));
@@ -1236,8 +1275,8 @@ function qrSvg(text) {
   for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (q.isDark(y, x)) d += `M${x + 4} ${y + 4}h1v1h-1z`;
   return `<svg class="qr" viewBox="0 0 ${n + 8} ${n + 8}" role="img" aria-label="QR code"><rect width="100%" height="100%" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
 }
-const codeCard = (c, who) => `<div class="pccard">${c.qr ? `<div class="qrbox" data-qr="${esc(c.qr)}"></div>` : ""}<div>
-  ${who ? `<b>${esc(c.name || (c.scanned ? L("sc_waiting") : "?"))}</b><br><small class="mut">${esc([c.area, c.model].filter(Boolean).join(" · "))}</small><br>` : ""}
+const codeCard = c => `<div class="pccard">${c.qr ? `<div class="qrbox" data-qr="${esc(c.qr)}"></div>` : ""}<div>
+  <b>${esc(c.name || (c.scanned ? L("sc_waiting") : "?"))}</b><br><small class="mut">${esc([c.area, c.model].filter(Boolean).join(" · "))}</small><br>
   <span class="pccode">${esc(manualFmt(c.manual))}</span><br>
   <button class="btn" data-copy="${esc(c.manual)}">${L("copy")}</button>${c.qr ? "" : `<br><small class="mut">${L("pc_none_qr")}</small>`}</div></div>`;
 async function fillQr() {   // draws the QR codes of the cards shown
@@ -1333,7 +1372,7 @@ const canScan = () => { const {ext} = appBus(); return !!(ext && ext.config && e
 let scanEnd = null;   // ends the scan running, if any: one at a time
 // the page is left during a scan (other page of Home Assistant, app sent to the background):
 // the handler of Home Assistant is given back, or its own next scan would not get its result
-window.addEventListener("pagehide", () => { if (scanEnd) scanEnd({aborted: "left"}); });
+window.addEventListener("pagehide", () => { if (scanEnd) scanEnd({aborted: "left"}); if (watching) watching.stop(); });
 function scanQr(alt) {
   const {ext} = appBus();
   if (scanEnd) return Promise.resolve({aborted: "busy"});
@@ -1369,20 +1408,33 @@ async function matterDevices(hass) {
   try { return (await hass.callWS({type: "config/device_registry/list"})).filter(d => (d.identifiers || []).some(i => i[0] === "matter")); }
   catch (e) { return null; }
 }
-let naming = null, watching = 0;
+let naming = null, watching = null;
 async function watchNewDevice(hass, known) {
-  const run = ++watching;   // a new pairing replaces the watch of the previous one
-  let suggested = null;     // the name typed in the pairing screen of the phone, when it gives one
-  const onFinish = ev => { if (ev.detail && ev.detail.name) suggested = ev.detail.name; };
+  if (watching) watching.stop();   // a new pairing replaces the watch of the previous one
+  // Home Assistant says when a device is added to its registry: the registry is read then (and
+  // once a minute in case a message was missed), not every few seconds for ten minutes
+  const w = watching = {over: false, kick: false, wake: null};
+  const poke = () => { if (w.wake) { const f = w.wake; w.wake = null; f(); } else w.kick = true; };
+  w.stop = () => { w.over = true; poke(); };
+  let suggested = null, unsub = null;   // suggested: the name typed in the pairing screen of the phone, when it gives one
+  const onFinish = ev => { if (ev.detail && ev.detail.name) suggested = ev.detail.name; poke(); };
   try { window.parent.addEventListener("matter-commission-finish", onFinish); } catch (e) { /* no suggestion */ }
+  try { unsub = await hass.connection.subscribeEvents(ev => { if ((ev.data || {}).action === "create") poke(); }, "device_registry_updated"); }
+  catch (e) { unsub = null; }   // not offered: the registry is read every 15 seconds
+  const nap = ms => new Promise(r => {
+    if (w.kick || w.over) { w.kick = false; return r(); }
+    w.wake = r; setTimeout(() => { if (w.wake === r) w.wake = null; r(); }, ms);
+  });
   const end = Date.now() + 10 * 60e3;
   let dev = null;
-  while (!dev && Date.now() < end && run === watching) {
-    await new Promise(r => setTimeout(r, 4000));
-    dev = ((await matterDevices(hass)) || []).find(d => !known.has(d.id));
+  while (!dev && !w.over && Date.now() < end) {
+    await nap(unsub ? 60000 : 15000);
+    if (!w.over) dev = ((await matterDevices(hass)) || []).find(d => !known.has(d.id));
   }
   try { window.parent.removeEventListener("matter-commission-finish", onFinish); } catch (e) { /* nothing to remove */ }
-  if (!dev || run !== watching) return;
+  if (unsub) { try { Promise.resolve(unsub()).catch(() => {}); } catch (e) { /* closed already */ } }
+  if (watching === w) watching = null;
+  if (!dev || w.over) return;
   for (let i = 0; i < 60 && panelBusy(); i++) await new Promise(r => setTimeout(r, 2000));   // not over what the user is typing
   naming = {hass, dev};
   const areas = Object.values(hass.areas || {}).sort((a, b) => String(a.name).localeCompare(String(b.name)));
@@ -1439,13 +1491,13 @@ async function pairRun(code) {
     try {
       const before = await matterDevices(hass);
       ext.fireMessage(payload ? {type: "matter/commission", payload} : {type: "matter/commission"});
-      toast(said("pa_started"));
+      toast(said("pa_started"), code && !copied);
       if (before) watchNewDevice(hass, new Set(before.map(d => d.id)));   // then its name and area are asked here
       for (const s of [30, 60, 120, 180, 300]) setTimeout(() => { if (!document.hidden) load(true); }, s * 1000);   // the new node shows up by itself
       return;
     } catch (e) { /* the screen of Home Assistant below */ }
   }
-  toast(said("pa_screen"));
+  toast(said("pa_screen"), code && !copied);
   setTimeout(() => { try { window.top.location.assign("/config/matter/add"); } catch (e) { toast(L("pa_none")); } }, code ? 1200 : 300);
 }
 async function openCodes() {   // codes of the devices that left the table: what is needed to pair them again
@@ -1454,7 +1506,7 @@ async function openCodes() {   // codes of the devices that left the table: what
   try {
     const d = await (await fetch("api/pairing", {cache: "no-store"})).json();
     $("#sheet").innerHTML = head(L("pc_list"), L("pc_list_tip")) +
-      ((d.free || []).length ? d.free.map(c => codeCard(c, true) +
+      ((d.free || []).length ? d.free.map(c => codeCard(c) +
         `<p class="pcbtns"><button class="btn" data-pair="${esc(c.manual)}">${L("pa_code")}</button><button class="btn" data-pc="delete" data-key="${esc(c.key)}">${L("pc_delete")}</button></p>`).join("")
         : `<p class="mut" style="margin-top:14px">${L("pc_list_none")}</p>`) +
       `<p class="mut" style="margin-top:18px"><small>${esc(F("pc_count", {n: d.count || 0}))}</small></p>`;
@@ -1545,7 +1597,7 @@ function texts() {
 }
 function renderAll() {
   if (!D) return;
-  renderHero(); renderTodo(); renderBrs(); renderList();
+  keepFocus(() => { renderHero(); renderTodo(); renderBrs(); renderList(); });
   $("#codes").style.display = D.pair_free ? "" : "none";   // only while a code waits for its device
   const rd = D.reading;
   $("#live").className = "live" + (D.live ? "" : " poll") + (rd && D.live ? " reading" : "");
@@ -1605,7 +1657,7 @@ document.addEventListener("click", e => {
   }
   const cp = e.target.closest("button[data-copy]");
   if (cp) {
-    navigator.clipboard.writeText(cp.dataset.copy).then(() => { cp.textContent = L("copied"); }, () => toast(cp.dataset.copy));
+    navigator.clipboard.writeText(cp.dataset.copy).then(() => { cp.textContent = L("copied"); }, () => toast(cp.dataset.copy, true));
     return;
   }
   const rm = e.target.closest("#brRemove");
@@ -1675,7 +1727,8 @@ document.addEventListener("paste", e => {
 });
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") { if ($("#colmenu").classList.contains("on")) toggleColMenu(false); else closeSheet(); }
-  if ((e.key === "Enter" || e.key === " ") && e.target.classList && (e.target.classList.contains("row") || e.target.matches(".issue[data-id],.br[data-br]"))) { e.preventDefault(); if (e.target.dataset.br) openBr(e.target.dataset.br); else openNode(e.target.dataset.id); }
+  if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches(".br[data-br]")) { e.preventDefault(); openBr(e.target.dataset.br); }
+  if (e.key === "Tab") trapTab(e);
 });
 $("#q").value = P.q;
 $("#q").addEventListener("input", () => { P.q = $("#q").value; save(); if (D) renderList(); });
@@ -1694,7 +1747,7 @@ layout(); theme(); texts();
 $("#loading").textContent = L("loading");
 reread().then(() => load(false));
 setInterval(() => { if (!document.hidden) load(false); }, 60000);
-setInterval(() => { if (D && !document.hidden) { renderHero(); renderTodo(); renderBrs(); renderList(); } }, 30000);
+setInterval(() => { if (D && !document.hidden) keepFocus(() => { renderHero(); renderTodo(); renderBrs(); renderList(); }); }, 30000);
 </script>
 </body>
 </html>

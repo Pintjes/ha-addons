@@ -77,7 +77,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.25.0"
+VERSION = "2.26.0"
 
 _MQ = _load_mqtt()
 MQTT_HOST = _MQ.get("host") or os.environ.get("MQTT_HOST", "core-mosquitto")
@@ -841,6 +841,9 @@ class Watch:
         if not ids:
             return
         n = self.healer.prune(ids) + live.prune(ids)
+        for part in (getattr(self, "quality", None), getattr(self, "matterlog", None)):
+            if part:
+                n += part.prune(ids)
         with self.lock:
             gone = [k for k in self.matter if _int16(k) not in ids and not self.matter[k].get("online")]
             for k in gone:

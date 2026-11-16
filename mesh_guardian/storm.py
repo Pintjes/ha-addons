@@ -12,6 +12,7 @@ A storm starts when, over a sliding window of 15 minutes, one threshold is
 exceeded; it ends after 15 minutes without any.
 """
 
+import threading
 import time
 from datetime import datetime
 
@@ -29,6 +30,11 @@ def iso(ts):
 class Storm:
     def __init__(self, watch):
         self.w = watch
+        # events come from several threads (live link, prober, healer) while the publisher checks:
+        # every list and set below is read and changed under this lock. Never held while taking the
+        # lock of the watcher or emitting an event (an event comes back here through observe).
+        self.lock = threading.RLock()
+        self.values = {}
         self.active = False
         self.splits = []        # times of partition splits
         self.downs = []         # [time, node name]
@@ -44,26 +50,37 @@ class Storm:
 
     def reset(self):
         """Forget past storms (a storm in progress keeps going)."""
-        self.count = 0
-        self.last = None
+        with self.lock:
+            self.count = 0
+            self.last = None
 
     # ---------------------------------------------------------- inputs
     def observe(self, kind, data):
         """Called for every event of the add-on."""
         now = time.time()
-        if kind == "partition_change" and len(data.get("after") or []) > max(1, len(data.get("before") or [])):
-            self.splits.append(now)
-        elif kind == "br_detach":   # a border router alone in its own partition for a few seconds
-            self.splits.append(now)
-        elif kind == "node_unavailable":
-            self.downs.append([now, data.get("name") or data.get("node")])
-        elif kind == "global_outage" and self.active:
-            # a mass drop is not counted (a restart of Home Assistant looks the same), only listed
-            self.nodes.update(data.get("nodes") or [])
+        with self.lock:
+            if kind == "partition_change" and len(data.get("after") or []) > max(1, len(data.get("before") or [])):
+                self.splits.append(now)
+            elif kind == "br_detach":   # a border router alone in its own partition for a few seconds
+                self.splits.append(now)
+            elif kind == "node_unavailable":
+                self.downs.append([now, data.get("name") or data.get("node")])
+            elif kind == "global_outage" and self.active:
+                # a mass drop is not counted (a restart of Home Assistant looks the same), only listed
+                self.nodes.update(data.get("nodes") or [])
 
     # ---------------------------------------------------------- check
     def check(self, summary):
         now = time.time()
+        with self.w.lock:   # read before taking our own lock (never both at once)
+            detached = {self.w.br_label(b) for b in self.w.br.values() if self.w.br_relevant(b) and b.get("role") == "detached"}
+        events = []
+        with self.lock:
+            self._check(now, summary, detached, events)
+        for kind, msg, data in events:
+            self.w.emit(kind, msg, **data)
+
+    def _check(self, now, summary, detached, events):
         self.splits = [x for x in self.splits if x >= now - WINDOW]
         self.downs = [d for d in self.downs if d[0] >= now - WINDOW]
         values = {"splits": len(self.splits), "omr_prefixes": len(summary.get("omr_list") or []),
@@ -74,10 +91,7 @@ class Storm:
                 self.peak[k] = max(self.peak[k], v)
             self.nodes.update(d[1] for d in self.downs)
             self.prefixes.update(summary.get("omr_list") or [])
-            with self.w.lock:
-                for b in self.w.br.values():
-                    if self.w.br_relevant(b) and b.get("role") == "detached":
-                        self.brs_detached.add(self.w.br_label(b))
+            self.brs_detached.update(detached)
         if hot and not self.active:
             # the storm started with the first event counted, not when the threshold was crossed
             first = [x for x in self.splits] + [d[0] for d in self.downs]
@@ -87,18 +101,18 @@ class Storm:
             self.nodes = {d[1] for d in self.downs}
             self.prefixes = set(summary.get("omr_list") or [])
             self.brs_detached = set()
-            self.w.emit("storm_start", t("Thread storm: {why}", why=", ".join(self._why(values, hot))),
-                        **values, reasons=hot)
+            events.append(("storm_start", t("Thread storm: {why}", why=", ".join(self._why(values, hot))),
+                           dict(values, reasons=hot)))
         elif self.active and not hot:
             self.calm_since = self.calm_since or now
             if now - self.calm_since >= CALM:
                 self.active, self.end = False, self.calm_since
-                self.last = self.attributes()
-                self.w.emit("storm_end", t("End of the Thread storm ({m}min, {n} nodes dropped)",
-                                           m=int((self.end - self.start) // 60), n=len(self.nodes), s=self.peak["splits"],
-                                           p=len(self.prefixes), brs=", ".join(sorted(self.brs_detached)) or t("none")),
-                            duration_min=int((self.end - self.start) // 60), nodes=sorted(self.nodes),
-                            border_routers_detached=sorted(self.brs_detached), prefixes=sorted(self.prefixes))
+                self.last = self._attributes()
+                events.append(("storm_end", t("End of the Thread storm ({m}min, {n} nodes dropped)",
+                                              m=int((self.end - self.start) // 60), n=len(self.nodes), s=self.peak["splits"],
+                                              p=len(self.prefixes), brs=", ".join(sorted(self.brs_detached)) or t("none")),
+                               {"duration_min": int((self.end - self.start) // 60), "nodes": sorted(self.nodes),
+                                "border_routers_detached": sorted(self.brs_detached), "prefixes": sorted(self.prefixes)}))
         elif self.active:
             self.calm_since = None
         self.values = values
@@ -111,6 +125,10 @@ class Storm:
 
     # ---------------------------------------------------------- MQTT
     def attributes(self):
+        with self.lock:
+            return self._attributes()
+
+    def _attributes(self):
         end = self.end or time.time()
         return {"start": iso(self.start), "end": iso(self.end) if not self.active else None,
                 "duration_min": int((end - self.start) // 60) if self.start else 0,
@@ -119,11 +137,11 @@ class Storm:
                 "peak": dict(self.peak)}
 
     def summary(self):
-        cur = getattr(self, "values", {})
-        out = {"state": "ON" if self.active else "OFF", "storms_since_start": self.count,
-               "now": cur, "thresholds": THRESHOLDS}
-        if self.active:
-            out.update(self.attributes())
-        else:
-            out["last_storm"] = self.last
-        return out
+        with self.lock:
+            out = {"state": "ON" if self.active else "OFF", "storms_since_start": self.count,
+                   "now": dict(self.values), "thresholds": THRESHOLDS}
+            if self.active:
+                out.update(self._attributes())
+            else:
+                out["last_storm"] = self.last
+            return out

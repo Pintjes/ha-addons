@@ -55,3 +55,15 @@ def load_json(path, default=None):
             bad = path
         LOG.warning(t("Cannot read {file} ({err}): kept as {bad}, starting without it", file=path, err=err, bad=bad))
         return default
+
+
+def gone_keys(keys, ids):
+    """Keys (node ids in hex) of nodes not in ids (set of int node ids); a key that is not an id stays."""
+    out = []
+    for k in keys:
+        try:
+            if int(k, 16) not in ids:
+                out.append(k)
+        except (TypeError, ValueError):
+            pass
+    return out

@@ -4,12 +4,28 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## Highlights of 2.9 to 2.25 (16 November 2026)
+## Highlights of 2.9 to 2.26 (16 November 2026)
 
 - **Act on a node from its panel**: recovery attempt on an unavailable node, reset from a distance, pairing codes kept by the add-on (photo or scan of the label), pairing and naming a new device without leaving the page.
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.26.0] - 2026-11-16
+
+### Changed
+
+- Messages of the page go away by themselves (longer for a longer text, kept while the pointer is over them); a code to type on the phone stays until clicked. The first message is announced by screen readers too.
+- After a pairing started from the page, the new device is found when Home Assistant adds it to its registry, instead of reading the registry every 4 seconds for 10 minutes; the watch stops when you leave the page.
+- Keyboard: the focus stays on the same element when the page is drawn again (every 30 seconds), Tab stays in the open node panel, and the name of a node is the button that opens it (a card or a row holding other buttons is no longer a button itself).
+- The nodes removed from the Matter Server are also forgotten in the response times, the contact sources and what the Matter Server log said of them.
+
+### Fixed
+
+- Counters of the automatic recovery and storm detection are changed under a lock (they are fed from several threads): no count lost, no list changed while it is read.
+
+### Removed
+
+- Page code no longer used (silent nodes in the summary, a second list of hidden cards, unused parameters).
 ## [2.25.0] - 2026-11-16
 
 ### Changed

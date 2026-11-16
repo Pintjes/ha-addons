@@ -23,7 +23,7 @@ import websocket  # websocket-client
 
 from i18n import t
 from nodetable import ext_of
-from store import load_json, save_json
+from store import gone_keys, load_json, save_json
 
 LOG = logging.getLogger("mg.live")
 CONTACTS_FILE = "/data/last_contact.json"
@@ -114,14 +114,19 @@ class MatterLive:
             self._save_sources()
 
     def prune(self, ids):
-        """Forget the contacts of nodes that no longer exist (ids: set of int node ids)."""
+        """Forget the contacts and sources of nodes that no longer exist (ids: set of int node ids)."""
         with self.lock:
-            gone = [k for k in self.contacts if int(k, 16) not in ids]
+            gone = gone_keys(list(self.contacts), ids)
             for k in gone:
                 del self.contacts[k]
+            src = gone_keys(list(self.sources), ids)
+            for k in src:
+                del self.sources[k]
             if gone:
                 self._save_contacts()
-        return len(gone)
+            if src:
+                self._save_sources()
+        return len(gone) + len(src)
 
     def node_ids(self):
         with self.lock:

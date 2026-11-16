@@ -24,7 +24,7 @@ import urllib.error
 import urllib.request
 
 from i18n import t
-from store import load_json, save_json
+from store import gone_keys, load_json, save_json
 
 LOG = logging.getLogger("mg")
 
@@ -93,6 +93,18 @@ class MatterLog:
         except (OSError, TypeError, ValueError, RuntimeError) as err:
             LOG.warning(t("Cannot write {file}: {err}", file=STATE_FILE, err=err))
         self._saved = time.time()
+
+    def prune(self, ids):
+        """Forget what the log said of nodes that no longer exist (ids: set of int node ids)."""
+        n = 0
+        with self.lock:
+            for d in (self.down, self.addr, self.opened, *self.hours.values()):
+                for k in gone_keys(list(d), ids):
+                    del d[k]
+                    n += 1
+        if n:
+            self.save()
+        return n
 
     # ------------------------------------------------------------ reading
     def _add(self, nid, field, n=1, now=None):

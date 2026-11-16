@@ -25,7 +25,7 @@ from collections import deque
 
 from advice import weak_link
 from i18n import t
-from store import load_json, save_json
+from store import gone_keys, load_json, save_json
 
 LOG = logging.getLogger("mg.quality")
 STATE_FILE = "/data/quality.json"
@@ -88,6 +88,16 @@ class Quality:
             save_json(STATE_FILE, data)
         except (OSError, TypeError, ValueError, RuntimeError) as err:
             LOG.warning(t("Cannot write {file}: {err}", file=STATE_FILE, err=err))
+
+    def prune(self, ids):
+        """Forget the responses of nodes that no longer exist (ids: set of int node ids)."""
+        with self.lock:
+            gone = gone_keys(list(self.rtt), ids)
+            for k in gone:
+                del self.rtt[k]
+        if gone:
+            self._save()
+        return len(gone)
 
     def reset(self):
         with self.lock:

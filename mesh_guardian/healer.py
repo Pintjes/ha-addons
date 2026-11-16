@@ -254,25 +254,33 @@ class Healer:
         return len(gone)
 
     def tally(self, kind, n=1):
-        """Count an outcome since the start and over a sliding 24h."""
+        """Count an outcome since the start and over a sliding 24h (under the lock: the sweep, the
+        recovery and the actions of the page count from their own threads)."""
         now = time.time()
-        self.session[kind] = self.session.get(kind, 0) + n
-        if n > 0:
-            self.recent.extend([[now, kind]] * n)
-        else:
-            for _ in range(-n):   # cancel the latest ones (global return)
-                for i in range(len(self.recent) - 1, -1, -1):
-                    if self.recent[i][1] == kind:
-                        del self.recent[i]
-                        break
-        self.recent = [r for r in self.recent if r[0] >= now - 86400]
+        with self.lock:
+            self.session[kind] = self.session.get(kind, 0) + n
+            if n > 0:
+                self.recent.extend([[now, kind]] * n)
+            else:
+                for _ in range(-n):   # cancel the latest ones (global return)
+                    for i in range(len(self.recent) - 1, -1, -1):
+                        if self.recent[i][1] == kind:
+                            del self.recent[i]
+                            break
+            self.recent = [r for r in self.recent if r[0] >= now - 86400]
+
+    def _ping_counted(self):
+        with self.lock:
+            self.pings_sent += 1
+            self.tally("pings_sent")
 
     def last_24h(self):
         now = time.time()
-        out = {k: 0 for k in self.session}
-        for ts, kind in self.recent:
-            if ts >= now - 86400:
-                out[kind] = out.get(kind, 0) + 1
+        with self.lock:
+            out = {k: 0 for k in self.session}
+            for ts, kind in self.recent:
+                if ts >= now - 86400:
+                    out[kind] = out.get(kind, 0) + 1
         return out
 
     def node_outages(self, node):
@@ -323,8 +331,7 @@ class Healer:
                     if isinstance(err, ConnectionError):
                         LOG.warning(t("Ping of all nodes interrupted: {err}", err=err))
                         return
-                self.pings_sent += 1
-                self.tally("pings_sent")
+                self._ping_counted()
                 if any((res or {}).values()):
                     ok += 1
                     if not n.get("available", True):
@@ -383,8 +390,7 @@ class Healer:
             except Exception as err:  # noqa: BLE001 - this node only: it counts as not answering
                 LOG.debug("sweep, %s: %s", node, err)
                 res = None
-            self.pings_sent += 1
-            self.tally("pings_sent")
+            self._ping_counted()
             if any((res or {}).values()):
                 ok += 1
             else:
@@ -525,11 +531,11 @@ class Healer:
         raise ConnectionError(t("Matter Server unreachable ({err})", err=last_err))
 
     def ping(self, node_hex):
-        n = self.nodes[node_hex]
-        n["pings"] += 1
-        n["last_ping"] = time.time()
-        self.pings_sent += 1
-        self.tally("pings_sent")
+        with self.lock:
+            n = self.nodes[node_hex]
+            n["pings"] += 1
+            n["last_ping"] = time.time()
+        self._ping_counted()
         try:
             result = self.matter_command("ping_node", {"node_id": int(node_hex, 16)}, timeout=90)
             self._answered(node_hex, result)

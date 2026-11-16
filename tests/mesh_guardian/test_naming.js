@@ -14,7 +14,7 @@ const ctx = {window: {parent: {addEventListener: (n, f) => { listeners[n] = f; }
   L: k => k, esc: v => String(v ?? ""), head: (t, s) => `[${t}|${s}]`, openSheet: h => { sheet = h; }, closeSheet: () => { closed++; },
   toast: t => toasts.push(t), load: () => { loads++; }, openId: "x", pair: null, panelBusy: () => false};
 vm.createContext(ctx);
-vm.runInContext(src + "\nthis.matterDevices = matterDevices; this.watchNewDevice = watchNewDevice; this.nameSave = nameSave;", ctx);
+vm.runInContext(src + "\nthis.matterDevices = matterDevices; this.watchNewDevice = watchNewDevice; this.nameSave = nameSave; Object.defineProperty(this, 'watching', {get: () => watching});", ctx);
 (async () => {
   const before = await ctx.matterDevices(hass);
   assert(before.length === 1 && before[0].id === "a", "seuls les appareils Matter");
@@ -32,5 +32,32 @@ vm.runInContext(src + "\nthis.matterDevices = matterDevices; this.watchNewDevice
   const up = calls.find(c => c.type === "config/device_registry/update");
   assert(up && up.device_id === "n" && up.name_by_user === "Prise TV Louise" && up.area_id === "s", "mise a jour envoyee");
   assert(toasts.includes("nm_saved") && closed === 1, "message et fermeture");
+
+  // Home Assistant annonce l'ajout dans son registre : lu à ce moment-là, sans sondage
+  let onEvent = null, unsubs = 0, lists = 0;
+  const hass2 = {areas: {}, connection: {subscribeEvents: async (cb, type) => { assert(type === "device_registry_updated", "type d'evenement"); onEvent = cb; return async () => { unsubs++; }; }},
+    callWS: async m => { if (m.type === "config/device_registry/list") lists++; return m.type === "config/device_registry/list" ? devices : {}; }};
+  const known = new Set(devices.map(d => d.id));
+  const p2 = ctx.watchNewDevice(hass2, known);
+  await new Promise(r => setImmediate(r));
+  assert(onEvent && lists === 0, "abonne, registre pas encore lu");
+  onEvent({data: {action: "update", device_id: "a"}});   // une mise à jour ne réveille pas
+  await new Promise(r => setImmediate(r));
+  assert(lists === 0, "update ignore");
+  devices = devices.concat([{id: "m", identifiers: [["matter", "v"]], name: "Capteur"}]);
+  onEvent({data: {action: "create", device_id: "m"}});
+  await p2;
+  assert(lists === 1 && sheet.includes('value="Capteur"') && unsubs === 1, "trouve des l'annonce, abonnement ferme");
+
+  // un nouvel appairage remplace la veille du précédent (et la page quittée l'arrête)
+  const p3 = ctx.watchNewDevice(hass2, new Set(devices.map(d => d.id)));
+  await new Promise(r => setImmediate(r));
+  const p4 = ctx.watchNewDevice(hass2, new Set(devices.map(d => d.id)));
+  await p3;
+  assert(unsubs === 2, "premiere veille arretee");
+  await new Promise(r => setImmediate(r));
+  ctx.watching.stop();
+  await p4;
+  assert(unsubs === 3 && ctx.watching === null, "seconde veille arretee");
   console.log("OK");
 })();
