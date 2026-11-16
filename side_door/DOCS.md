@@ -156,7 +156,9 @@ Behind the ingress, the app is not at `/` but under a path such as
 (`/static/style.css`, `/login`), which would leave the ingress. With
 `rewrite` on (the default), the add-on:
 
-- rewrites redirections (`Location`) and the path of cookies;
+- rewrites redirections (`Location`) and the path of cookies, and drops the
+  `Domain` of cookies (it names the app, not Home Assistant: the browser
+  would refuse them);
 - rewrites, in HTML, CSS, JavaScript and JSON answers, a path starting with
   `/` found right after `href="`, `src="`, `action="`, `poster="`,
   `srcset="`, `url(`, `fetch("`, `;url=`, and the `import` of JavaScript
@@ -187,7 +189,11 @@ app stays blank or leaves the panel. With `inject_script` on (the default), the 
 
 - loads a small script before the app. It moves under the ingress path the
   requests of the app (`fetch`, `XMLHttpRequest`, WebSocket), its internal
-  navigation and the addresses it puts on the elements it creates;
+  navigation, the addresses it puts on the elements it creates and the cookies
+  it writes itself;
+- gives the app its own part of the storage of the browser (`localStorage`,
+  `sessionStorage`): it only sees what it wrote, and an app that empties it at
+  log out no longer logs you out of Home Assistant;
 - replaces `window.location` and `document.location` in the scripts of the
   app by an object that shows the app an address without the ingress path, and
   keeps its redirections inside the panel.
@@ -260,5 +266,6 @@ certificate may not be valid (self-signed, expired, another name). The Log tab
 says `certificate verify failed`. Set `verify_tls: off` for that app if you
 trust the network in between.
 
-**The add-on does not start** — a host name that cannot be resolved stops
-nginx. Use an IP address.
+**"The app does not answer" for an app given by a name** — the name may not
+resolve (Internet not ready, typing error). It is looked up again at each
+visit: the other apps are not affected.

@@ -4,6 +4,22 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.2.0] - 2026-11-17
+
+### Fixed
+
+- A host name that did not resolve when the add-on started (Internet not
+  ready yet) stopped the whole add-on. Names are now looked up at each use: such
+  an app only has its own tab unavailable, and a name whose addresses change
+  is followed.
+- A cookie with `Domain=` was refused by the browser (login that loops): the
+  domain is dropped. A cookie an app writes in JavaScript stays under the path
+  of the app.
+- An app that emptied the storage of the browser at log out logged you out of
+  Home Assistant and cleared the eye. Each app now has its own part of that
+  storage (when `inject_script` is on, the default). What an app kept there
+  before is no longer seen: it may ask for a login or its settings once.
+
 ## [2.1.0] - 2026-11-17
 
 ### Changed

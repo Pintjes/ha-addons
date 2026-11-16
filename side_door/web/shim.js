@@ -180,6 +180,80 @@
       enumerable: found.enumerable
     });
   });
+  // The storage of the browser (localStorage, sessionStorage) is the one of
+  // Home Assistant: an app that empties it at log out would log you out of
+  // Home Assistant too. Each app gets its own part of it instead: it only
+  // sees, changes and empties what it wrote itself.
+  var part = "side_door/" + (tab ? tab[1] : "app") + "/";
+  function ownPart(real) {
+    function keys() {
+      var found = [];
+      for (var i = 0; i < real.length; i++) {
+        var key = real.key(i);
+        if (key !== null && key.indexOf(part) === 0) found.push(key.slice(part.length));
+      }
+      return found;
+    }
+    var methods = {
+      getItem: function (key) { return real.getItem(part + String(key)); },
+      setItem: function (key, value) { real.setItem(part + String(key), String(value)); },
+      removeItem: function (key) { real.removeItem(part + String(key)); },
+      clear: function () { keys().forEach(function (key) { real.removeItem(part + key); }); },
+      key: function (index) { var all = keys(); return index >= 0 && index < all.length ? all[index] : null; }
+    };
+    return new Proxy({}, {
+      get: function (target, name) {
+        if (name === "length") return keys().length;
+        if (Object.prototype.hasOwnProperty.call(methods, name)) return methods[name];
+        if (typeof name === "symbol") return undefined;
+        return methods.getItem(name) === null ? undefined : methods.getItem(name);
+      },
+      set: function (target, name, value) {
+        if (typeof name !== "symbol") methods.setItem(name, value);
+        return true;
+      },
+      has: function (target, name) {
+        return name === "length" || Object.prototype.hasOwnProperty.call(methods, name) ||
+          (typeof name !== "symbol" && methods.getItem(name) !== null);
+      },
+      deleteProperty: function (target, name) {
+        if (typeof name !== "symbol") methods.removeItem(name);
+        return true;
+      },
+      ownKeys: function () { return keys(); },
+      getOwnPropertyDescriptor: function (target, name) {
+        var value = typeof name === "symbol" ? null : methods.getItem(name);
+        return value === null ? undefined : { value: value, writable: true, enumerable: true, configurable: true };
+      }
+    });
+  }
+  ["localStorage", "sessionStorage"].forEach(function (name) {
+    try {
+      var real = window[name];
+      if (real) Object.defineProperty(window, name, { value: ownPart(real), configurable: true });
+    } catch (error) { /* storage not available: left as it is */ }
+  });
+
+  // Cookies the app writes in JavaScript. A path the app gives ("path=/")
+  // is moved under the path of the app, as for the cookies of its answers;
+  // a domain it gives is dropped (it is not the one of Home Assistant).
+  var cookieProperty = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
+  if (cookieProperty && cookieProperty.set) {
+    Object.defineProperty(document, "cookie", {
+      get: function () { return cookieProperty.get.call(document); },
+      set: function (value) {
+        value = String(value)
+          .replace(/;\s*domain=[^;]*/ig, "")
+          .replace(/(;\s*path=)([^;]*)/i, function (all, start, path) {
+            path = path.trim();
+            return start + (path.charAt(0) === "/" && !under(path) ? base + path.slice(1) : path);
+          });
+        cookieProperty.set.call(document, value);
+      },
+      configurable: true
+    });
+  }
+
   var originalSetAttribute = Element.prototype.setAttribute;
   Element.prototype.setAttribute = function (name, value) {
     var lower = String(name).toLowerCase();

@@ -53,7 +53,7 @@ class App(BaseHTTPRequestHandler):
             self.answer(301, headers=[("Location", "/x"), ("Cache-Control", "max-age=31536000")])
         elif path == "/cookie":
             self.answer(200, b"ok", [("Content-Type", "text/plain"),
-                                     ("Set-Cookie", "S=1; Path=/; Secure; HttpOnly; SameSite=None; Partitioned")])
+                                     ("Set-Cookie", "S=1; Path=/; Domain=127.0.0.1; Secure; HttpOnly; SameSite=None; Partitioned")])
         elif path == "/graphql":
             # Its own address, plain and with the slashes escaped as JSON allows
             body = '{"u": "' + OWN + 'a", "v": "' + OWN.replace("/", "\\/") + 'b"}'

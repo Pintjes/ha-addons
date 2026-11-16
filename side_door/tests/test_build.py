@@ -18,11 +18,11 @@ A = {"name": "Immo", "url": "http://192.168.0.12:8000"}
 B = {"name": "Plex", "url": "http://192.168.0.64:32400", "start": "web/index.html"}
 
 
-def build(options, resolve=lambda origin: None):
+def build(options, dns=()):
     """(configuration, apps of the script, tabs page, message, log)."""
     said = io.StringIO()
     with contextlib.redirect_stdout(said):
-        conf, apps, shell, message = run.build(options, "sdtest", resolve)
+        conf, apps, shell, message = run.build(options, "sdtest", list(dns))
     return conf, apps, shell, message, said.getvalue()
 
 
@@ -156,22 +156,39 @@ class Build(unittest.TestCase):
         self.assertNotIn("proxy_ssl_verify", self.location(conf, "plain"))
         self.assertIn(checked, self.location(conf, "odd"))
 
-    def test_certificate_of_a_name_reached_over_ipv4(self):
-        conf = build({"apps": [A, {"name": "R", "url": "https://remote.example"}]},
-                     lambda origin: ["104.21.1.1:443"] if "remote" in origin else None)[0]
+    def test_certificate_of_a_name_looked_up_at_each_use(self):
+        conf = build({"apps": [A, {"name": "R", "url": "https://remote.example"}]}, ["172.30.32.3"])[0]
         block = self.location(conf, "r")
         self.assertIn("proxy_ssl_verify on;", block)
         self.assertEqual(block.count("proxy_ssl_name remote.example;"), 1)
 
-    def test_host_name_is_reached_over_ipv4(self):
-        conf = build({"apps": [A, {"name": "R", "url": "https://remote.example/x"}]},
-                     lambda origin: ["104.21.1.1:443", "172.67.2.2:443"] if "remote" in origin else None)[0]
-        self.assertIn("    upstream sd_app_2 {\n        server 104.21.1.1:443;\n        server 172.67.2.2:443;\n    }\n", conf)
-        self.assertIn("proxy_pass https://sd_app_2/x/;", conf)
-        self.assertIn("proxy_ssl_name remote.example;", conf)
-        self.assertIn("proxy_set_header Host remote.example;", conf)
-        self.assertNotIn("upstream sd_app_1", conf)
-        self.assertIsNone(run.ipv4_servers("http://192.168.0.12:8000"))
+    def test_host_name_is_looked_up_at_each_use(self):
+        conf = build({"apps": [A, {"name": "R", "url": "https://remote.example/x"}]}, ["172.30.32.3", "[fd00::1]"])[0]
+        self.assertIn("    resolver 172.30.32.3 [fd00::1] ipv6=off valid=30s;", conf)
+        block = self.location(conf, "r")
+        self.assertIn("set $sd_target_2 https://remote.example;", block)
+        self.assertIn("rewrite ^/app/r/(.*)$ /x/$1 break;", block)
+        self.assertIn("proxy_pass $sd_target_2;", block)
+        self.assertIn("proxy_pass http://192.168.0.12:8000/;", self.location(conf, "immo"))
+
+    def test_without_dns_server_a_name_is_looked_up_at_the_start(self):
+        conf, _, _, _, said = build({"apps": [A, {"name": "R", "url": "https://remote.example/x"}]})
+        self.assertNotIn("resolver", conf)
+        self.assertIn("proxy_pass https://remote.example/x/;", conf)
+        self.assertIn("no DNS server found", said)
+
+    def test_no_resolver_when_every_app_is_given_by_address(self):
+        self.assertNotIn("resolver", build({"apps": [A, B]}, ["172.30.32.3"])[0])
+
+    def test_name_servers_of_the_system(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False) as handle:
+            handle.write("# comment\nnameserver 172.30.32.3\nnameserver fe80::1%eth0\nnameserver bad\noptions ndots:0\n")
+        try:
+            self.assertEqual(run.name_servers(handle.name), ["172.30.32.3", "[fe80::1]"])
+        finally:
+            pathlib.Path(handle.name).unlink()
+        self.assertEqual(run.name_servers("/does/not/exist"), [])
 
     def test_log_of_nginx_loses_the_parameters_of_addresses(self):
         line = '[error] connect() failed, request: "GET /app/p/hubs?type=2&X-Plex-Token=SECRET HTTP/1.1", ' \

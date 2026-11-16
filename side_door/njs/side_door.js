@@ -110,22 +110,29 @@ function rewrite(r, a, type, text) {
     return text;
 }
 
-// Cookies when Home Assistant is opened in plain HTTP. A browser refuses, on
-// a plain HTTP page, a cookie marked "Secure", and one marked "Partitioned"
-// or "SameSite=None" without "Secure": nobody could log in to an app that
-// marks its session cookie that way. Over HTTPS the cookies are left alone.
-function plainCookies(r) {
-    var cookies = r.headersOut['Set-Cookie'];
-    if (!cookies) {
+// The cookies of an app, made acceptable for the browser:
+// - "Domain=": the domain the app names (its own) is not the one of Home
+//   Assistant, and the browser would refuse the cookie. Without it, the cookie
+//   belongs to the address of Home Assistant, which is the one in use.
+// - Home Assistant opened in plain HTTP: a browser refuses, on a plain HTTP
+//   page, a cookie marked "Secure", and one marked "Partitioned" or
+//   "SameSite=None" without "Secure". Over HTTPS these marks are left alone.
+function cookies(r, plain) {
+    var list = r.headersOut['Set-Cookie'];
+    if (!list) {
         return;
     }
-    if (!Array.isArray(cookies)) {
-        cookies = [cookies];
+    if (!Array.isArray(list)) {
+        list = [list];
     }
-    r.headersOut['Set-Cookie'] = cookies.map(function (cookie) {
-        return cookie
-            .replace(/;\s*(secure|partitioned)(?=\s*(;|$))/ig, '')
-            .replace(/;\s*samesite=none/ig, '; SameSite=Lax');
+    r.headersOut['Set-Cookie'] = list.map(function (cookie) {
+        cookie = cookie.replace(/;\s*domain=[^;]*/ig, '');
+        if (plain) {
+            cookie = cookie
+                .replace(/;\s*(secure|partitioned)(?=\s*(;|$))/ig, '')
+                .replace(/;\s*samesite=none/ig, '; SameSite=Lax');
+        }
+        return cookie;
     });
 }
 
@@ -160,9 +167,7 @@ function headers(r) {
     try {
         var a = app(r);
         framePolicy(r);
-        if (r.variables.sd_plain === '1') {
-            plainCookies(r);
-        }
+        cookies(r, r.variables.sd_plain === '1');
         // A permanent redirection is never kept by the browser: it would
         // still be followed after the address of the app has been corrected
         if (r.status === 301 || r.status === 308) {

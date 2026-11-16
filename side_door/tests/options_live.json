@@ -2,7 +2,8 @@
   "target_url": "",
   "apps": [
     {"name": "One", "url": "http://127.0.0.1:8000", "headers": "X-Test: yes", "inject_script": true},
-    {"name": "Two", "url": "http://127.0.0.1:8000", "hidden": true}
+    {"name": "Two", "url": "http://127.0.0.1:8000", "hidden": true},
+    {"name": "Ghost", "url": "http://does-not-exist.invalid"}
   ],
   "rewrite_prefixes": [],
   "max_body_mb": 100,

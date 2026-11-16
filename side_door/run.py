@@ -19,7 +19,6 @@ import json
 import os
 import re
 import signal
-import socket
 import subprocess
 import sys
 from urllib.parse import urlsplit
@@ -659,28 +658,39 @@ def shell_page(apps):
     return SHELL % {"tabs": tabs}
 
 
-def ipv4_servers(origin):
-    """The IPv4 addresses ("address:port") of an app given by a host name, or
-    None for an app given by an address or a name without IPv4. Home Assistant
-    often has no IPv6 route: nginx, left alone, tries the IPv6 addresses of
-    the name first, fails, and only then uses the others."""
-    parts = urlsplit(origin)
-    host, port = parts.hostname, parts.port or (443 if parts.scheme == "https" else 80)
+def name_servers(path="/etc/resolv.conf"):
+    """The DNS servers of the add-on, as nginx writes them."""
+    found = []
     try:
-        ipaddress.ip_address(host)
-        return None
-    except ValueError:
-        pass
-    try:
-        found = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+        with open(path, encoding="utf-8") as handle:
+            for line in handle:
+                parts = line.split()
+                if len(parts) >= 2 and parts[0] == "nameserver":
+                    try:
+                        address = ipaddress.ip_address(parts[1].split("%")[0])
+                    except ValueError:
+                        continue
+                    found.append(f"[{address}]" if address.version == 6 else str(address))
     except OSError:
-        return None
-    return sorted({f"{info[4][0]}:{port}" for info in found}) or None
+        pass
+    return found
 
 
-def build(options, mark="sd0", resolve=ipv4_servers):
+def by_name(origin):
+    """True when the app is given by a host name, not by an IP address."""
+    try:
+        ipaddress.ip_address(urlsplit(origin).hostname)
+        return False
+    except ValueError:
+        return True
+
+
+def build(options, mark="sd0", dns=None):
     """Returns (nginx configuration, apps for njs/side_door.js, tabs page or
-    None, message for the log)."""
+    None, message for the log). 'dns': the DNS servers (read from the system
+    when not given)."""
+    if dns is None:
+        dns = name_servers()
     apps = read_apps(options)
     shown = [app for app in apps if not app["hidden"]]
     if not shown:
@@ -693,6 +703,7 @@ def build(options, mark="sd0", resolve=ipv4_servers):
     prefixes = all_prefixes(options.get("rewrite_prefixes") or [])
     timeout = int(options.get("timeout", 120))
     maps, locations, script_apps = "", "", {}
+    uses_dns = False
     for n, app in enumerate(apps, 1):
         if app["hidden"]:
             # Not relayed at all: no tab, and its address answers "not found"
@@ -706,14 +717,16 @@ def build(options, mark="sd0", resolve=ipv4_servers):
         extra = "".join(f'            proxy_set_header {name} "{value}";\n' for name, value in app["headers"])
         extra += tls_rules(app)
         target = app["target"]
-        servers = resolve(app["origin"])
-        if servers:
-            # A host name: reached at its IPv4 addresses, under its own name
-            scheme, name = app["origin"].split("://")[0], urlsplit(app["origin"]).hostname
-            maps += "    upstream sd_app_%d {\n%s    }\n" % (n, "".join(f"        server {s};\n" for s in servers))
-            target = f"{scheme}://sd_app_{n}{app['base']}"
-            if f"proxy_ssl_name {name};" not in extra:
-                extra += f"            proxy_ssl_name {name};\n"
+        if dns and by_name(app["origin"]):
+            # A host name is looked up at each use, not once at the start: a
+            # name that does not resolve yet (Internet not ready when Home
+            # Assistant starts) only makes its own tab unavailable, and a name
+            # whose addresses change (a CDN) is followed. IPv4 only: Home
+            # Assistant often has no IPv6 route.
+            target = f"$sd_target_{n}"
+            extra += (f"            set $sd_target_{n} {app['origin']};\n"
+                      f"            rewrite ^{path}(.*)$ {app['base']}$1 break;\n")
+            uses_dns = True
         locations += APP_LOCATION % {
             "path": path, "target": target, "host": app["host"],
             "n": n, "timeout": timeout, "rewrite": rewrite, "forwarded": forwarded + extra,
@@ -724,6 +737,10 @@ def build(options, mark="sd0", resolve=ipv4_servers):
             "path": path, "base": app["base"], "own": app["origin"] + app["base"],
             "rewrite": app["rewrite"], "inject": app["inject"], "prefixes": prefixes,
         }
+    if uses_dns:
+        maps += f"    resolver {' '.join(dns)} ipv6=off valid=30s;\n    resolver_timeout 5s;\n"
+    elif any(by_name(app["origin"]) for app in shown):
+        log("no DNS server found: the names of the apps are looked up once, at the start")
     conf = HEAD % {"port": PORT, "web": WEB, "njs": NJS, "mark": mark, "maps": maps}
     conf += SERVER % {"max_body_mb": int(options.get("max_body_mb", 100))}
     if several:

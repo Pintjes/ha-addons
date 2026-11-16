@@ -110,12 +110,14 @@ class Live(unittest.TestCase):
         self.assertIn("HttpOnly", cookie)
         self.assertNotIn("secure", cookie.lower())
         self.assertNotIn("partitioned", cookie.lower())
+        self.assertNotIn("domain", cookie.lower())
 
     def test_cookie_over_https_is_left_alone(self):
         cookie = get("/app/one/cookie", {"X-Forwarded-Proto": "https"})[1].get("Set-Cookie")
         self.assertIn("Secure", cookie)
         self.assertIn("Partitioned", cookie)
         self.assertIn("SameSite=None", cookie)
+        self.assertNotIn("domain", cookie.lower())
 
     def test_own_addresses_in_an_api_answer(self):
         answer = json.loads(get("/app/one/graphql")[2])
@@ -129,6 +131,14 @@ class Live(unittest.TestCase):
         self.assertEqual(seen["x-test"], "yes")
         self.assertNotIn("if-modified-since", seen)
         self.assertNotIn("accept-encoding", seen)
+
+    def test_name_that_does_not_resolve_only_takes_down_its_own_tab(self):
+        # The add-on started although this name does not exist: the other
+        # tests reached it. Its tab says the app does not answer.
+        status, _, body = get("/app/ghost/")
+        self.assertEqual(status, 502)
+        self.assertIn(b"does not answer", body)
+        self.assertIn(b'data-app="ghost"', get("/")[2])
 
     def test_script_of_the_option_inject_script(self):
         status, _, body = get("/side_door_shim.js")
