@@ -4,6 +4,13 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.21.1] - 2026-11-16
+
+### Changed
+
+- Node panel: the pairing code, with Reset and Remove, sits right under the actions (Ping, Find a new link, Interview) instead of at the bottom. Its QR code is always shown, small, beside the code.
+- To make room, the Matter Server figures move into the technical details, and the outages and parent changes show their five newest lines (the older ones unfold).
+
 ## [2.21.0] - 2026-11-16
 
 ### Changed
