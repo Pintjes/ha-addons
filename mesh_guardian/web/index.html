@@ -336,6 +336,7 @@ const T = {
     hist_wait:"History available within 15 min.", now:"now", d7:"7 d ago", average:"average", threshold:"weak threshold", off_scale:"off scale",
     srv_t:"Matter Server · 24h", srv_sub:"Subscriptions lost", srv_session:"Sessions closed", srv_off:"Offline for the Matter Server", srv_unreach:"Address unreachable", srv_ping:"Pings without answer", srv_addr:"Address used",
     srv_cover:"Counted since {t}", srv_missed:"log not read for {d}", srv_none:"The Matter Server log is not read: nothing is counted.", srv_now:"offline now", t_srv:"Losses 24h", srv_tip:"Subscriptions lost and sessions closed, read in the Matter Server log",
+    t_serial:"Serial number", t_fw:"Firmware", t_uid:"Unique id", t_hw:"Hardware address", t_may_change:"The device may change this value at a factory reset",
     tech:"Technical details", t_id:"Id", t_rloc:"RLOC16", t_nb:"Neighbors", t_weak:"Weak links", t_det:"Detaches 24h", t_pch:"Parent changes 24h",
     t_partch:"Partition changes 24h", t_out:"Outages 24h · 7d", t_down:"Downtime 7d", t_reb:"Reboots total · 24h", t_boot:"Last boot reason", t_up:"Uptime",
     t_src:"Last contact source", t_gap:"Longest silence", copy:"Copy", copied:"Copied", download:"Download", report_tip:"Anonymized report (no names, areas or addresses) to paste in an issue",
@@ -415,6 +416,7 @@ const T = {
     hist_wait:"Historique disponible dans 15 min au plus.", now:"maintenant", d7:"il y a 7 j", average:"moyenne", threshold:"seuil faible", off_scale:"hors échelle",
     srv_t:"Matter Server · 24 h", srv_sub:"Abonnements perdus", srv_session:"Sessions fermées", srv_off:"Hors ligne pour le Matter Server", srv_unreach:"Adresse injoignable", srv_ping:"Pings sans réponse", srv_addr:"Adresse utilisée",
     srv_cover:"Compté depuis {t}", srv_missed:"journal non lu pendant {d}", srv_none:"Le journal du Matter Server n'est pas lu : rien n'est compté.", srv_now:"hors ligne maintenant", t_srv:"Pertes 24 h", srv_tip:"Abonnements perdus et sessions fermées, lus dans le journal du Matter Server",
+    t_serial:"Numéro de série", t_fw:"Firmware", t_uid:"Unique ID", t_hw:"Adresse matérielle", t_may_change:"L'appareil peut changer cette valeur à une réinitialisation d'usine",
     tech:"Détails techniques", t_id:"Id", t_rloc:"RLOC16", t_nb:"Voisins", t_weak:"Liens faibles", t_det:"Décrochages 24 h", t_pch:"Chgt de parent 24 h",
     t_partch:"Chgt de partition 24 h", t_out:"Coupures 24 h · 7 j", t_down:"Indisponibilité 7 j", t_reb:"Redémarrages total · 24 h", t_boot:"Raison du dernier démarrage", t_up:"En marche depuis",
     t_src:"Source du dernier contact", t_gap:"Plus long silence", copy:"Copier", copied:"Copié", download:"Télécharger", report_tip:"Rapport anonymisé (sans noms, pièces ni adresses) à coller dans une issue",
@@ -1027,7 +1029,9 @@ async function openNode(id) {
     ...(net(r) === "thread" ? [[L("h_br"), r.route ? `${aged(r.link_old, r.link_t, esc(r.route.br))}<br><small class="mut" title="${esc(L("r_cost_tip"))}">${esc(hopsTxt(r.route) + " · " + F("r_cost", {c: r.route.cost}))}</small>` : esc(L("r_unknown"))]] : []), [L("d_resp"), `${r.rtt_fail ? L("no_answer") : aged(r.rtt_old, r.rtt_t, ms(r.rtt_ms))} · ${ms(r.rtt_avg_ms)}${!r.rtt_fail && r.rtt_t ? ` <small class="mut">(${esc(F("measured", {t: ago(r.rtt_t)}).toLowerCase())})</small>` : ""}`],
     [L("d_power"), esc(power)], [L("d_last"), r.last_report ? ago(r.last_report) + (r.contact_src ? ` <small class="mut">(${esc(L("csrc")[r.contact_src] || r.contact_src)})</small>` : "") : L("never")]];
   const c = v => v == null ? "—" : v;
-  const tech = [...(r.route ? [[L("t_path"), esc(fullPath(r))]] : []), [L("t_id"), esc(r.id)], [L("t_rloc"), esc(r.rloc16 || "—")], [L("t_nb"), c(r.neighbors)], [L("t_weak"), c(r.weak)],
+  const idv = (v, tip) => v ? `<span${tip ? ` title="${esc(L("t_may_change"))}"` : ""} style="overflow-wrap:anywhere;user-select:all">${esc(v)}</span>` : "—";
+  const tech = [...(r.route ? [[L("t_path"), esc(fullPath(r))]] : []), [L("t_id"), esc(r.id)],
+    [L("t_serial"), idv(r.serial)], [L("t_fw"), idv(r.firmware)], [L("t_uid"), idv(r.unique_id, true)], [L("t_hw"), idv(r.hw_address, true)], [L("t_rloc"), esc(r.rloc16 || "—")], [L("t_nb"), c(r.neighbors)], [L("t_weak"), c(r.weak)],
     [L("t_det"), aged(r.counters_old && r.detaches_24h != null, r.counters_t, c(r.detaches_24h))], [L("t_pch"), aged(r.counters_old && r.parent_changes_24h != null, r.counters_t, c(r.parent_changes_24h))], [L("t_partch"), aged(r.counters_old && r.partition_changes_24h != null, r.counters_t, c(r.partition_changes_24h))],
     [L("t_out"), `${c(r.outages_24h)} · ${c(r.outages_7d)}`], [L("t_down"), dur(r.downtime_7d_min)], [L("t_reb"), `${c(r.reboots)} · ${c(r.reboots_24h)}`],
     [L("t_boot"), r.boot_reason == null ? "—" : esc(L("boot")[r.boot_reason] || r.boot_reason)], [L("t_up"), r.uptime_h == null ? "—" : aged(r.uptime_old, r.uptime_t, dur(Math.round(r.uptime_h * 60)))],

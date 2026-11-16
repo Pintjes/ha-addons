@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.20.0] - 2026-11-16
+
+### Added
+
+- Node panel, technical details: serial number (when the device has one), firmware version, unique id and hardware address (a device may change those two at a factory reset). They are not in the report.
+
 ## [2.19.2] - 2026-11-16
 
 ### Fixed

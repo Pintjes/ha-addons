@@ -66,6 +66,24 @@ def ext_of(attrs):
 BATTERY_LOW = 20   # % : below this, "change the batteries"
 
 
+def identity_of(attrs):
+    """What a device says of itself, for the node panel (never in the report): serial number
+    (optional in Matter), unique id and hardware address (a device may change those two at a
+    factory reset), firmware version."""
+    hw = None
+    for itf in attrs.get("0/51/0") or []:
+        raw = itf.get("4") if isinstance(itf, dict) else None
+        if raw:
+            try:
+                hw = ":".join(f"{x:02X}" for x in base64.b64decode(raw))
+            except Exception:  # noqa: BLE001 - shown as received
+                hw = str(raw)
+            break
+    version = attrs.get("0/40/10")
+    return {"serial": attrs.get("0/40/15") or None, "unique_id": attrs.get("0/40/18") or None, "hw_address": hw,
+            "firmware": str(version) if version not in (None, "") else None}
+
+
 def battery_of(attrs):
     """(percent, level) from the Power Source cluster: BatPercentRemaining (x/47/12, in half
     percent) and BatChargeLevel (x/47/14: 0 ok, 1 warning, 2 critical)."""
@@ -576,7 +594,7 @@ class NodeTable:
                 "rtt_t": rtt_t, "rtt_old": rtt_last is not None and is_old(rtt_t),
                 "id": f"0x{nid.lstrip('0') or '0'}", "name": v["name"], "area": m.get("area") or "",
                 "floor": m.get("floor") or "", "model": m.get("model") or "",
-                "battery": bool(m.get("battery")), "available": bool(avail), "added": v["node"].get("date_commissioned"),
+                "battery": bool(m.get("battery")), "available": bool(avail), "added": v["node"].get("date_commissioned"), **identity_of(a),
                 "since": m.get("since") if not avail else None,
                 "role": ROLE.get(role, str(role)) if role is not None else None,
                 "parent": p[0] if p else None, "rssi": p[1] if p else None, "lqi": p[2] if p else None,
@@ -728,7 +746,7 @@ class NodeTable:
             "rtt_t": rtt_t, "rtt_old": rtt_last is not None and old(rtt_t),
             "network": v["net"], "id": f"0x{nid.lstrip('0') or '0'}", "name": v["name"],
             "area": m.get("area") or "", "floor": m.get("floor") or "", "model": m.get("model") or "",
-            "battery": bool(m.get("battery")), "available": bool(avail), "added": v["node"].get("date_commissioned"),
+            "battery": bool(m.get("battery")), "available": bool(avail), "added": v["node"].get("date_commissioned"), **identity_of(a),
             "since": m.get("since") if not avail else None, "role": None,
             "parent": link, "rssi": a.get("0/54/4") if wifi else None, "lqi": None, "new_parent": None,
             "rloc16": None, "best_link": None, "best_rssi": None, "best_lqi": None, "route": None,
