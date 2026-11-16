@@ -318,6 +318,7 @@ FR = {
     "{node}: new parent not known yet": "{node} : résultat en attente de la node",
     "{node}: no answer from the node": "{node} : pas de réponse de la node",
     "{node}: Thread restart of a router (trial), first link {link}": "{node} : relance du Thread d'un routeur (essai), premier lien {link}",
+    "{node}: Thread restart of the leader (trial), first link {link}": "{node} : relance du Thread du leader (essai), premier lien {link}",
     "{node}: Thread restarted, result in 3 minutes": "{node} : Thread relancé, résultat dans 3 minutes",
     "{node}: Thread restarted, router again, first link {link} (before: {before})": "{node} : Thread relancé, de nouveau routeur, premier lien {link} (avant : {before})",
     "{node}: Thread restarted, still an end device, first link {link} (before: {before})": "{node} : Thread relancé, encore appareil final, premier lien {link} (avant : {before})",

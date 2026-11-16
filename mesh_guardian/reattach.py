@@ -42,9 +42,9 @@ END_DEVICE_ROLES = (2, 3, 4)   # sleepy end device, end device, REED (a full end
 CONNECT_NETWORK = 6   # Network Commissioning command id
 # PROVISIONAL (2.12.0, trial asked by the user): the same command on a router. A router has no
 # parent and picks its routes by itself, so no better link is expected; the trial is to see what
-# it does on a router that answers badly. To go back: remove ROUTER_ROLE, ROUTER_SETTLE_S, _row,
+# it does on a router that answers badly. To go back: remove ROUTER_ROLES, ROUTER_SETTLE_S, _row,
 # _router and _follow_router, the call in run_node, and in the page canParent / the router confirm.
-ROUTER_ROLE = 5       # Thread routing role "router" (the leader, 6, is left alone: a new leader would be elected)
+ROUTER_ROLES = (5, 6)  # Thread routing roles "router" and "leader" (the leader too, asked by the user: the page warns)
 ROUTER_SETTLE_S = 180  # s: a router attaches as a child first and becomes a router again within 2 minutes
 PATHS = ["0/53/1", "0/53/7", "0/51/0", "0/49/1", "0/49/65529"]   # table and addresses read together: same moment
 
@@ -362,14 +362,17 @@ class Reattach:
         """Restart the Thread interface of a router. Returns None when the node is not a router."""
         node_id = int(nid, 16)
         attrs = self._read(node_id)
-        if attrs.get("0/53/1") != ROUTER_ROLE:
+        if attrs.get("0/53/1") not in ROUTER_ROLES:
             return None
         before = self._first_link(self._row(nid))
         network = connected_network(attrs.get("0/49/1"))
         if network is None or CONNECT_NETWORK not in (attrs.get("0/49/65529") or []):
             return {"result": "unsupported"}
-        self.w.emit("reattach_node", t("{node}: Thread restart of a router (trial), first link {link}",
-                                       node=name, area=area, link=self._link_text(before)), node=name)
+        leader = attrs.get("0/53/1") == 6
+        self.w.emit("reattach_node", (t("{node}: Thread restart of the leader (trial), first link {link}", node=name, area=area,
+                                        link=self._link_text(before)) if leader else
+                                      t("{node}: Thread restart of a router (trial), first link {link}", node=name, area=area,
+                                        link=self._link_text(before))), node=name)
         try:
             self._reattach(node_id, network)
         except NoAnswer as err:

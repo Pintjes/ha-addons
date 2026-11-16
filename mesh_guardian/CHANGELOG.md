@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.12.1] - 2026-11-16
+
+### Changed
+
+- Trial, provisional: "Find a new link" also works on the leader, after a stronger warning (the whole network elects a new leader, nodes can become unavailable for about 2 minutes).
+
 ## [2.12.0] - 2026-11-16
 
 ### Changed

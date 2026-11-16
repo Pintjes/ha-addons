@@ -294,7 +294,7 @@ const T = {
     a_ping:"Ping", a_parent:"Find a new link", a_interview:"Interview", a_remove:"Remove", a_remove_tip:"Remove",
     a_remove_confirm:"{n}: remove this node? It must be commissioned again.", a_remove_ok:"{n} removed",
     a_ping_tip:"Ping", a_parent_tip:"Find a new link",
-    a_interview_tip:"Reinterview", a_parent_router:"Thread nodes only, except the leader",
+    a_interview_tip:"Reinterview", a_parent_router:"Thread nodes only", a_parent_confirm_leader:"{n} is the LEADER of the Thread network: its Thread will restart (trial). The whole network elects a new leader: for about 2 minutes, nodes can become unavailable and the network can split into several partitions. Its end devices drop too. Go on?",
     a_parent_confirm:"{n}: find a new parent? The new one may be weaker.", a_parent_confirm_router:"{n} is a router: its Thread will restart (trial). Its end devices drop and attach elsewhere, and it can stay out of reach for 2 minutes. A router picks its routes by itself: a better link is not expected. Go on?", a_interview_confirm:"{n}: interview the node again? It can take a minute.",
     a_ping_ok:"{n}: answers the ping", a_ping_ko:"{n}: no answer to ping", a_interview_ok:"{n} interviewed again ({s} s)",
     a_parent_same:"{n}: same parent {l}", a_parent_unknown:"{n}: waiting for the node…",
@@ -345,7 +345,7 @@ const T = {
     a_ping:"Ping", a_parent:"Recherche d'un nouveau lien", a_interview:"Ré-interviewer", a_remove:"Supprimer", a_remove_tip:"Supprimer",
     a_remove_confirm:"{n} : supprimer cette node ? Il faudra l'appairer à nouveau.", a_remove_ok:"{n} supprimée",
     a_ping_tip:"Ping", a_parent_tip:"Recherche d'un nouveau lien",
-    a_interview_tip:"Reinterview", a_parent_router:"Réservé aux nodes Thread, sauf le leader",
+    a_interview_tip:"Reinterview", a_parent_router:"Réservé aux nodes Thread", a_parent_confirm_leader:"{n} est le LEADER du réseau Thread : son Thread va redémarrer (essai). Tout le réseau élit un nouveau leader : pendant 2 minutes environ, des nodes peuvent devenir indisponibles et le réseau peut se couper en plusieurs partitions. Ses nodes finales décrochent aussi. Continuer ?",
     a_parent_confirm:"{n} : rechercher un nouveau parent ? Le nouveau peut être moins bon.", a_parent_confirm_router:"{n} est un routeur : son Thread va redémarrer (essai). Ses nodes finales décrochent et se rattachent ailleurs, et il peut rester injoignable 2 minutes. Un routeur choisit seul ses routes : un meilleur lien n'est pas attendu. Continuer ?", a_interview_confirm:"{n} : ré-interviewer la node ? Ça peut prendre une minute.",
     a_ping_ok:"{n} : répond au ping", a_ping_ko:"{n} : pas de réponse au ping", a_interview_ok:"{n} ré-interviewée ({s} s)",
     a_parent_same:"{n} : même parent {l}", a_parent_unknown:"{n} : en attente de la node…",
@@ -824,8 +824,8 @@ const ACT_ICON = {
   interview: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg>',
   remove: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 7V4h4v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>',
 };
-// PROVISIONAL (2.12.0): routers too (trial); to go back, add "&& !isRouter(r)" again
-const canParent = r => net(r) === "thread" && r.role !== "leader";
+// PROVISIONAL (2.12.0 / 2.12.1): routers and the leader too (trial); to go back, add "&& !isRouter(r)" again
+const canParent = r => net(r) === "thread";
 function actions(r) {
   const list = [["ping", true], ["parent", canParent(r)], ["interview", true], ["remove", true]];
   return `<span class="acts">${list.map(([a, ok]) => `<button class="act" data-act="${a}" data-node="${esc(r.id)}" ${ok ? "" : "disabled"}
@@ -834,7 +834,7 @@ function actions(r) {
 async function runAction(btn) {
   const a = btn.dataset.act, id = btn.dataset.node, r = (D.rows || []).find(x => x.id === id);
   if (!r) return;
-  if (a === "parent" && !confirm(F(isRouter(r) ? "a_parent_confirm_router" : "a_parent_confirm", {n: r.name}))) return;
+  if (a === "parent" && !confirm(F(r.role === "leader" ? "a_parent_confirm_leader" : isRouter(r) ? "a_parent_confirm_router" : "a_parent_confirm", {n: r.name}))) return;
   if (a === "interview" && !confirm(F("a_interview_confirm", {n: r.name}))) return;
   if (a === "remove" && !confirm(F("a_remove_confirm", {n: r.name}))) return;
   document.querySelectorAll(`[data-act="${a}"][data-node="${id}"]`).forEach(b => { b.disabled = true; b.classList.add("busy"); });
