@@ -147,6 +147,16 @@ class WebUI:
                     q = getattr(ui.w, "quality", None)
                     started = bool(q and q.reread_all())
                     return self._send(200, json.dumps({"started": started}))
+                if path == "/api/br_forget":   # remove an offline border router from the list
+                    try:
+                        n = int(self.headers.get("Content-Length") or 0)
+                        body = json.loads(self.rfile.read(min(n, 4096)) or b"{}")
+                        ok = ui.w.forget_br(str(body.get("id") or ""))
+                        ui.table.cache_t = 0
+                        return self._send(200, json.dumps({"ok": bool(ok)}))
+                    except Exception as err:  # noqa: BLE001
+                        LOG.warning("br_forget: %s", err)
+                        return self._send(200, '{"ok": false}')
                 if path != "/api/ap_name":
                     return self._send(404, '{"error": "not found"}')
                 try:

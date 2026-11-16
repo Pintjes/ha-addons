@@ -756,7 +756,14 @@ class NodeTable:
                             "_seen": b.get("mdns_seen") or b.get("last_seen") or 0,
                             "last_contact": self.w.br_contact(b)[0], "contact_src": self.w.br_contact(b)[1],
                             "detached_24h": st["detached_24h"], "last_detached": st["last_detached"],
-                            "same_subnet": self.h.same_subnet(b.get("addrs"))})
+                            "same_subnet": self.h.same_subnet(b.get("addrs")),
+                            # for the border router panel
+                            "id": key, "vendor": b.get("vendor"), "model": b.get("model"), "network_name": b.get("network"),
+                            "ext_pan": b.get("ext_pan"), "interface": b.get("interface"), "since": b.get("since"),
+                            "ext_address": f"{b['xa']:016x}" if isinstance(b.get("xa"), int) else None,
+                            "addresses": b.get("addrs") or [], "mdns_seen": b.get("mdns_seen"),
+                            "thread_seen": b.get("thread_seen"),
+                            "detaches": sorted(self.w.br_names.get(key, {}).get("detached", []))[-15:]})
         # one primary per partition: when two border routers say they are, the one heard last is
         # right; the other one's announcement is older than the change (it may be gone)
         latest = {}

@@ -4,6 +4,13 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.10.7] - 2026-11-16
+
+### Added
+
+- A border router card opens a panel with everything known about it: state, role, primary, Thread network, prefix, last contact, detaches of the last 7 days, the nodes going through it and attached to it, model, addresses.
+- "Remove" in that panel, for an offline border router that was taken away or whose Thread was turned off on purpose: it leaves the list, the quality score and the Home Assistant entities, and comes back by itself if it is heard again.
+
 ## [2.10.6] - 2026-11-16
 
 ### Fixed

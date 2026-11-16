@@ -98,7 +98,7 @@
   .issue .what { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 
   .brs { display: flex; flex-wrap: wrap; gap: 8px; }
-  .br { padding: 8px 12px; display: flex; gap: 10px; align-items: center; }
+  .br { padding: 8px 12px; display: flex; gap: 10px; align-items: center; cursor: pointer; }
   .br small { color: var(--mut); display: block; }
 
   .st { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px 2px 6px; border-radius: 999px; font-size: 12.5px; font-weight: 500; white-space: nowrap; }
@@ -279,6 +279,11 @@ const T = {
     todo:"Good to know ({n})", new:"new", todo_none:"Nothing to report", w_down:"Unavailable", w_warn:"Action advised", w_info:"Good to know", seen:"Seen", seen_tip:"Hide this note (it comes back if it changes)", w_net:"Network",
     down_do:"Since {t}. Check its power.",
     storm:"Thread storm: pings spaced out, sweep paused.",
+    br_open:"Details of this border router", br_state:"State", br_online:"online", br_offline_since:"offline since {t}", br_primary_l:"Primary", yes:"yes", no:"no",
+    br_net:"Thread network", br_prefix:"Prefix", br_last:"Last contact", br_subnet:"Same subnet as Home Assistant", br_det:"Detaches (24h)", br_det_last:"Last detach", br_detaches:"Detaches of the last 7 days",
+    br_through:"Nodes going through it ({n})", br_children:"Nodes attached to it ({n})", br_model:"Model", br_id:"Identifier", br_ext:"Extended address", br_xpan:"Extended PAN ID", br_part:"Partition", br_addr:"Addresses", br_if:"Thread interface",
+    br_src:{mdns:"announcement", thread:"heard over Thread"}, br_remove:"Remove", br_remove_tip:"Remove this border router from the list. It comes back by itself if it is heard again.", br_remove_online:"Only an offline border router can be removed",
+    br_remove_confirm:"{n}: remove this border router from the list? It comes back by itself if it is heard again.", br_removed:"{n} removed from the list", br_offline_adv:"Check its power and its network, or remove it from the list if you took it away on purpose.",
     brs:"Border routers", br_seen:"seen {t}", br_never:"never seen", br_primary:"primary", offline:"offline", detached24:"detached {n}× in 24h", other_subnet:"other subnet than Home Assistant",
     nodes:"Nodes", search:"Filter: name, area, model…", c_all:"All", c_issues:"To handle", c_bat:"On battery",
     h_node:"Node", h_status:"Status · role", h_link:"Attachment · signal", h_resp:"Response", h_bat:"Power", h_last:"Last contact", h_adv:"Advice",
@@ -323,6 +328,11 @@ const T = {
     todo:"À savoir ({n})", new:"nouveau", todo_none:"Rien à signaler", w_down:"Indisponible", w_warn:"Action conseillée", w_info:"À savoir", seen:"Vu", seen_tip:"Masquer cette note (elle revient si elle change)", w_net:"Réseau",
     down_do:"Depuis {t}. Vérifier l'alimentation.",
     storm:"Tempête Thread : pings espacés, balayage suspendu.",
+    br_open:"Détails de ce border router", br_state:"État", br_online:"en ligne", br_offline_since:"hors ligne depuis {t}", br_primary_l:"Primaire", yes:"oui", no:"non",
+    br_net:"Réseau Thread", br_prefix:"Préfixe", br_last:"Dernier contact", br_subnet:"Même sous-réseau que Home Assistant", br_det:"Décrochages (24 h)", br_det_last:"Dernier décrochage", br_detaches:"Décrochages des 7 derniers jours",
+    br_through:"Nodes qui passent par lui ({n})", br_children:"Nodes rattachées à lui ({n})", br_model:"Modèle", br_id:"Identifiant", br_ext:"Adresse étendue", br_xpan:"Extended PAN ID", br_part:"Partition", br_addr:"Adresses", br_if:"Interface Thread",
+    br_src:{mdns:"annonce", thread:"entendu en Thread"}, br_remove:"Retirer", br_remove_tip:"Retirer ce border router de la liste. Il revient tout seul s'il est de nouveau entendu.", br_remove_online:"Seul un border router hors ligne peut être retiré",
+    br_remove_confirm:"{n} : retirer ce border router de la liste ? Il revient tout seul s'il est de nouveau entendu.", br_removed:"{n} retiré de la liste", br_offline_adv:"Vérifier son alimentation et son réseau, ou le retirer de la liste s'il a été enlevé exprès.",
     brs:"Border routers", br_seen:"vu {t}", br_never:"jamais vu", br_primary:"primaire", offline:"hors ligne", detached24:"décroché {n}× en 24 h", other_subnet:"autre sous-réseau que Home Assistant",
     nodes:"Nodes", search:"Filtrer : nom, pièce, modèle…", c_all:"Toutes", c_issues:"À traiter", c_bat:"Sur pile",
     h_node:"Node", h_status:"Statut · rôle", h_link:"Rattachement · signal", h_resp:"Réponse", h_bat:"Alimentation", h_last:"Dernier contact", h_adv:"Conseil",
@@ -615,7 +625,7 @@ function renderBrs() {
     if (b.primary) extra.push(L("br_primary"));
     if (b.same_subnet === false) extra.push(L("other_subnet"));
     extra.push(b.last_contact ? F("br_seen", {t: ago(b.last_contact)}) : L("br_never"));
-    return `<div class="card br"><span class="st ${k} ic">${k === "ok" ? IC.ok : k === "bad" ? IC.bad : IC.warn}</span>
+    return `<div class="card br" data-br="${esc(b.id)}" role="button" tabindex="0" title="${esc(L("br_open"))}"><span class="st ${k} ic">${k === "ok" ? IC.ok : k === "bad" ? IC.bad : IC.warn}</span>
       <div><b>${esc(b.name)}</b>${b.role === "leader" ? ` <span title="Leader">${IC.crown}</span>` : ""}<small>${extra.map(esc).join(" · ")}</small></div></div>`;
   }).join("");
 }
@@ -946,6 +956,47 @@ async function openNode(id) {
   }
 }
 
+// panel of a border router: everything known about it, and "Remove" when it is offline
+function openBr(id) {
+  const b = (D.border_routers || []).find(x => x.id === id);
+  if (!b) return;
+  openId = null;
+  const rows = D.rows || [];
+  const through = rows.filter(r => r.route && r.route.br === b.name).map(r => r.name).sort();
+  const kids = rows.filter(r => r.parent === b.name).map(r => r.name).sort();
+  const c = v => v == null || v === "" ? "—" : esc(v);
+  const yn = v => v == null ? "—" : L(v ? "yes" : "no");
+  const k = !b.online ? "bad" : b.role === "detached" || b.same_subnet === false ? "warn" : "ok";
+  const state = b.online ? L("br_online") : F("br_offline_since", {t: b.since ? dt(b.since) : "?"});
+  const adv = b.online ? "" : `<div class="advice bad">${IC.bad}<div><b>${esc(state.replace(/^./, x => x.toUpperCase()))}</b><br>${esc(L("br_offline_adv"))}</div></div>`;
+  const kv = [[L("br_state"), `<span class="st ${k}">${k === "ok" ? IC.ok : k === "bad" ? IC.bad : IC.warn}${esc(state)}</span>`],
+    [L("d_role"), b.online ? esc(L("roles")[b.role] || b.role || "—") : "—"], [L("br_primary_l"), b.online ? yn(b.primary) : "—"],
+    [L("br_net"), c(b.network_name)], [L("br_prefix"), b.online ? c(b.omr) : "—"],
+    [L("br_last"), b.last_contact ? ago(b.last_contact) + (b.contact_src ? ` <small class="mut">(${esc(L("br_src")[b.contact_src] || b.contact_src)})</small>` : "") : L("br_never")],
+    [L("br_subnet"), yn(b.same_subnet)], [L("br_det"), c(b.detached_24h)]];
+  const list = (title, names) => `<h2>${esc(F(title, {n: names.length}))}</h2>${names.length ? `<p>${names.map(esc).join(", ")}</p>` : `<p class="mut">${L("none")}</p>`}`;
+  const det = (b.detaches || []).slice().reverse().map(x => `<li>${dt(x)}</li>`).join("");
+  const tech = [[L("br_model"), [b.vendor, b.model].filter(Boolean).map(esc).join(" · ") || "—"], [L("br_id"), c(b.id)], [L("br_ext"), c(b.ext_address)],
+    [L("br_xpan"), c(b.ext_pan)], [L("br_part"), c(b.partition)], [L("br_if"), c(b.interface)],
+    [L("br_addr"), (b.addresses || []).map(esc).join("<br>") || "—"]];
+  openSheet(head(esc(b.name), [b.vendor, b.model].filter(Boolean).map(esc).join(" · ")) + adv + grid(kv) +
+    `<div class="sheet-acts"><button class="btn" id="brRemove" data-brid="${esc(b.id)}" ${b.online ? "disabled" : ""} title="${esc(L(b.online ? "br_remove_online" : "br_remove_tip"))}">${ACT_ICON.remove || ""}<span>${L("br_remove")}</span></button></div>` +
+    (b.online ? list("br_through", through) + list("br_children", kids) : "") +
+    `<h2>${L("br_detaches")}</h2>${det ? `<ul>${det}</ul>` : `<p class="mut">${L("none")}</p>`}` +
+    `<details><summary>${L("tech")}</summary>${grid(tech)}</details>`);
+}
+async function removeBr(id) {
+  const b = (D.border_routers || []).find(x => x.id === id);
+  if (!b || b.online || !confirm(F("br_remove_confirm", {n: b.name}))) return;
+  let ok = false;
+  try {
+    ok = (await (await fetch("api/br_forget", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({id})})).json()).ok;
+  } catch (e) { /* told below */ }
+  toast(F(ok ? "br_removed" : "a_failed", {n: b.name}));
+  if (ok) closeSheet();
+  await load(true);
+}
+
 async function openReport() {
   openSheet(head(L("report"), L("report_tip")) + `<p class="mut">${L("loading")}</p>`);
   try {
@@ -1022,8 +1073,11 @@ document.addEventListener("click", e => {
     P.seen = [...new Set([...(P.seen || []).filter(x => CARD_KEYS.has(x)), sn.dataset.seen])];
     save(); return renderTodo();
   }
-  const t = e.target.closest("[data-id],[data-f],[data-sort],.x");
+  const rm = e.target.closest("#brRemove");
+  if (rm) { if (!rm.disabled) removeBr(rm.dataset.brid); return; }
+  const t = e.target.closest("[data-id],[data-br],[data-f],[data-sort],.x");
   if (!t) return;
+  if (t.dataset.br) return openBr(t.dataset.br);
   if (t.dataset.sort) {   // ascending, descending, then back to "problems first"
     const k = t.dataset.sort;
     P.sort = !P.sort || P.sort.k !== k ? {k, d: 1} : {k, d: -P.sort.d};   // 2 states; default order from the column menu
@@ -1052,7 +1106,7 @@ $("#sheet").addEventListener("submit", async e => {   // name of a Wi-Fi access 
 });
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") closeSheet();
-  if ((e.key === "Enter" || e.key === " ") && e.target.classList && (e.target.classList.contains("row") || e.target.matches(".issue[data-id]"))) { e.preventDefault(); openNode(e.target.dataset.id); }
+  if ((e.key === "Enter" || e.key === " ") && e.target.classList && (e.target.classList.contains("row") || e.target.matches(".issue[data-id],.br[data-br]"))) { e.preventDefault(); if (e.target.dataset.br) openBr(e.target.dataset.br); else openNode(e.target.dataset.id); }
 });
 $("#q").value = P.q;
 $("#q").addEventListener("input", () => { P.q = $("#q").value; save(); if (D) renderList(); });

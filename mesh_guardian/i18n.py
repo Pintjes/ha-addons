@@ -66,6 +66,7 @@ FR = {
     " (battery)": " (pile)",
     ": ": " : ",
     "becomes primary": "devient primaire",
+    "Border router {name} removed from the list": "Border router {name} retiré de la liste",
     "no longer primary": "n'est plus primaire",
     "New Thread partition": "Nouvelle partition Thread",
     "{p} ({n} node)": "{p} ({n} node)",

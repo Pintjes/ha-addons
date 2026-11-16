@@ -75,7 +75,7 @@ from storm import Storm  # noqa: E402
 from suplog import SupervisorLog  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.10.6"
+VERSION = "2.10.7"
 
 _MQ = _load_mqtt()
 MQTT_HOST = _MQ.get("host") or os.environ.get("MQTT_HOST", "core-mosquitto")
@@ -641,6 +641,20 @@ class Watch:
             self.mqtt.publish(topic, b"", retain=True)
             self.mqtt.publish(f"{BASE}/br/{key}", b"", retain=True)
         self.dirty = True
+
+    def forget_br(self, key):
+        """The user removes an offline border router from the list (it was taken away or its
+        Thread was turned off on purpose). It comes back by itself if it is heard again."""
+        with self.lock:
+            b = self.br.get(key)
+            if not b or b.get("online"):
+                return False
+            label = self.br_label(b)
+            self._drop_br(key)
+            self.br_by_name = {k: v for k, v in self.br_by_name.items() if v != key}
+        self.emit("br_removed", t("Border router {name} removed from the list", name=label), br=label)
+        self.dirty = True
+        return True
 
     def _drop_br(self, key):
         """Forget a border router key replaced by a newer one (lock held)."""

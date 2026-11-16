@@ -171,7 +171,7 @@ Every event is written to the add-on log, published on the MQTT topic
 | Event | Meaning |
 |---|---|
 | `startup`, `addon_stop` | monitoring ready (with the version and the state of the automatic recovery), add-on stopping (with the signal received) |
-| `br_appeared`, `br_back`, `br_offline`, `br_change`, `br_renamed` | border router life (role, partition, prefix…); a role change is reported once it held 60s |
+| `br_appeared`, `br_back`, `br_offline`, `br_change`, `br_renamed`, `br_removed` | border router life (role, partition, prefix…); a role change is reported once it held 60s |
 | `br_detach` | a border router left the network and came back within 30s (alone in its own partition): reported as a short detach of that border router, counted in its `detached_24h` and as a partition split for storms |
 | `leader_change`, `partition_change`, `omr_change`, `node_prefix_change` | network-wide changes — the usual cause of lost nodes; leader and partitions once the new state held 30s |
 | `matter_offline`, `matter_back`, `matter_appeared` | Matter node missing from / back in mDNS (not reported for a battery node still available in Home Assistant) |
@@ -337,6 +337,12 @@ five parts; a small mark on each bar gives its value over 24 hours.
 silent nodes (see below), advice. A click opens the node.
 
 **Border routers** — online, role, primary, detaches over 24 hours, last contact.
+A card opens a panel with everything known about the border router (Thread
+network, prefix, detaches of the last 7 days, nodes going through it, model,
+addresses). An offline border router that you took away or whose Thread you
+turned off on purpose can be removed there with **Remove**: it leaves the list,
+the quality score and the entities, and comes back by itself if it is heard
+again.
 
 **Nodes** — problems first by default. Filters: all, to handle, Thread, Wi-Fi,
 Ethernet, on battery; a search box (name, area, model, id). Default columns:
