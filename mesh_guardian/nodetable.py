@@ -32,6 +32,7 @@ COUNTERS = {"detached": "0/53/14", "partition_changes": "0/53/19", "parent_chang
 # (link quality 3 and 2 = good and fair, 1 = weak; the RSSI only when it is not known)
 THRESHOLDS = {"rssi_good": -80, "rssi_bad": -90, "lqi_good": 3, "lqi_bad": 1}
 NEW_PARENT_S = 30 * 60
+OLD_S = 2 * 3600   # a value the node gave longer ago than this (or nobody knows when) is old: shown as such, never as current
 BACKGROUND_S = 20
 
 
@@ -181,7 +182,7 @@ def router_of(attrs, rloc):
     return len(links) >= 2
 
 
-def find_parents(thread, labels):
+def find_parents(thread, labels, used=None):
     """Parent of every child node, with the weakest direction of their link.
 
     thread: node hex -> {"name", "attrs"}; labels: extended address -> name
@@ -197,7 +198,10 @@ def find_parents(thread, labels):
     2. Otherwise the neighbor entry flagged "is child" in the parent's table.
     3. Otherwise the only neighbor of an end device.
     A router (see router_of) has no parent.
+    used, when given, receives for every child the tables its link was taken from, as
+    (node hex, attribute path): the link is as old as the oldest of them.
     """
+    used = {} if used is None else used
     by_name = {v["name"]: k for k, v in thread.items()}
     rlocs = {nid: rloc_of(v["attrs"]) for nid, v in thread.items()}
     router = {nid: router_of(v["attrs"], rlocs[nid]) for nid, v in thread.items()}
@@ -229,6 +233,7 @@ def find_parents(thread, labels):
             q_own = own[0].get("5") if own else None
             q_rt = lowest(rt.get("5"), rt.get("6")) if v["attrs"].get("0/53/1") not in (2, 3) else None
             parents[nid] = (name, nb_rssi(own[0]) if own else None, min_known(q_own, q_rt), ext or prloc)
+            used[nid] = {(nid, "0/53/7"), (nid, "0/51/0")} | ({(nid, "0/53/8")} if fed is not None or q_rt is not None else set())
     for nid, v in thread.items():   # seen from the parent side
         for nb in v["attrs"].get("0/53/7") or []:
             if isinstance(nb, dict) and nb.get("13"):
@@ -240,6 +245,7 @@ def find_parents(thread, labels):
                     # weakest of the two directions (cur: what the child hears from this parent)
                     parents[child] = (v["name"], lowest(nb_rssi(nb), cur[1] if cur else None),
                                       min_known(nb.get("5"), cur[2] if cur else None), ext_of(v["attrs"]) or nid)
+                    used[child] = (used.get(child) or set()) | {(nid, "0/53/7")}
     for nid, v in thread.items():   # an end device only keeps its parent in its table
         if nid in parents or v["attrs"].get("0/53/1") not in (2, 3):
             continue
@@ -247,18 +253,21 @@ def find_parents(thread, labels):
         if len(nbs) == 1:
             parents[nid] = (match(nbs[0].get("0"), labels) or f"0x{(nbs[0].get('2') or 0):04x}",
                             nb_rssi(nbs[0]), nbs[0].get("5"), nbs[0].get("0"))
+            used[nid] = {(nid, "0/53/7")}
     for nid in [k for k in parents if router[k]]:
         del parents[nid]   # a router has no parent (stale "is child" entry in a neighbor table)
     return parents, rlocs
 
 
-def hop_links(thread, routes, parents, rlocs):
+def hop_links(thread, routes, parents, rlocs, used=None):
     """Link every router really sends through: the first hop of its route to the border
     router. Returns node hex -> (name, rssi, lqi), weakest direction of the link: what the
     router hears from the hop, what the hop hears from it (when the hop is a Matter node),
-    and the link quality in and out of its route table. No route known: no link shown."""
+    and the link quality in and out of its route table. No route known: no link shown.
+    used: as in find_parents, the tables each link was taken from."""
     by_name = {v["name"]: k for k, v in thread.items()}
     out = {}
+    used = {} if used is None else used
     for nid, r in routes.items():
         hop = r.get("hop_rid")
         if nid in parents or hop is None or nid not in thread:
@@ -281,9 +290,11 @@ def hop_links(thread, routes, parents, rlocs):
             if (rloc is not None and nb.get("2") == rloc) or \
                     (ext is not None and nb.get("0") is not None and abs(nb["0"] - ext) <= 4096):
                 rssi, lqi = lowest(rssi, nb_rssi(nb)), lowest(lqi, nb.get("5"))
+                used[nid] = {(peer, "0/53/7")}
                 break
         if rssi is not None or lqi:
             out[nid] = (name, rssi, lqi)
+            used[nid] = (used.get(nid) or set()) | {(nid, "0/53/7"), (nid, "0/53/8")}
     return out
 
 
@@ -446,7 +457,8 @@ class NodeTable:
             ext = ext_of(attrs)
             if ext is not None:
                 labels[ext] = thread[nid]["name"]
-        parent_of, rlocs = find_parents(thread, labels)
+        src_p, src_h = {}, {}   # node hex -> tables its link was taken from
+        parent_of, rlocs = find_parents(thread, labels, src_p)
         with self.w.lock:
             br_exts = [b["xa"] for b in self.w.br.values() if b.get("xa") is not None]
         try:
@@ -455,8 +467,17 @@ class NodeTable:
             LOG.debug("route to border router: %s", err)
             routes = {}
         # a router has no parent: the link shown is the one it really sends through
-        best = hop_links(thread, routes, parent_of, rlocs)
+        best = hop_links(thread, routes, parent_of, rlocs, src_h)
         named = bool(meta)
+
+        def given(pairs):
+            """When the nodes gave these values: the oldest time, None if one is not known."""
+            times = [self.live.stamp(k, path) for k, path in pairs]
+            return min(times) if times and None not in times else None
+
+        def is_old(when):
+            return when is None or now - when > OLD_S
+        q = getattr(self, "quality", None)
         leader = None
         if self.radio and self.radio.leader_name and time.time() - self.radio.leader_t < 2400:
             leader = self.radio.leader_name   # Home Assistant names loaded: parent history can start
@@ -533,8 +554,19 @@ class NodeTable:
             avail = m.get("available")
             if avail is None:
                 avail = v["node"].get("available") is not False
+            # when the node gave what is shown: the link (and the route, which starts with it), the
+            # counters, the uptime, the response time
+            link_t = given(src_p[nid]) if p and nid in src_p else given(src_h[nid]) if bl and nid in src_h else None
+            cnt_t = given([(nid, path) for path in COUNTERS.values()])
+            rtt_t, up_t = q.read_times(nid) if q else (None, None)
+            if up_read is None:
+                up_t = self.live.stamp(nid, "0/51/2")
             rows.append({
                 "network": "thread",
+                "link_t": link_t, "link_old": bool(p or bl) and is_old(link_t),
+                "counters_t": cnt_t, "counters_old": is_old(cnt_t),
+                "uptime_t": up_t, "uptime_old": uptime is not None and is_old(up_t),
+                "rtt_t": rtt_t, "rtt_old": rtt_last is not None and is_old(rtt_t),
                 "id": f"0x{nid.lstrip('0') or '0'}", "name": v["name"], "area": m.get("area") or "",
                 "floor": m.get("floor") or "", "model": m.get("model") or "",
                 "battery": bool(m.get("battery")), "available": bool(avail), "added": v["node"].get("date_commissioned"),
@@ -671,7 +703,19 @@ class NodeTable:
         if avail is None:
             avail = v["node"].get("available") is not False
         bat = battery_of(a) if m.get("battery") or any(k.split("/")[1:2] == ["47"] for k in a) else (None, None)
+        now = time.time()
+        link_t = self.live.stamp(nid, "0/54/4") if wifi else None
+        rtt_t, up_t = q.read_times(nid) if q else (None, None)
+        if up_read is None:
+            up_t = self.live.stamp(nid, "0/51/2")
+
+        def old(when):
+            return when is None or now - when > OLD_S
         return {
+            "link_t": link_t, "link_old": wifi and a.get("0/54/4") is not None and old(link_t),
+            "counters_t": None, "counters_old": False,
+            "uptime_t": up_t, "uptime_old": uptime is not None and old(up_t),
+            "rtt_t": rtt_t, "rtt_old": rtt_last is not None and old(rtt_t),
             "network": v["net"], "id": f"0x{nid.lstrip('0') or '0'}", "name": v["name"],
             "area": m.get("area") or "", "floor": m.get("floor") or "", "model": m.get("model") or "",
             "battery": bool(m.get("battery")), "available": bool(avail), "added": v["node"].get("date_commissioned"),

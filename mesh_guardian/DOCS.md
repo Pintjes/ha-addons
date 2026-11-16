@@ -411,11 +411,24 @@ quality score still follow the Matter Server.
 The add-on keeps a live link with the Matter Server and receives every report as
 it arrives. Some nodes stop reporting their Thread diagnostics (role, neighbors)
 after a change of role, so the Matter Server keeps old values: mains nodes are
-read again once an hour (role, neighbor table, addresses), battery nodes never
-(their batteries). The response time comes from a read of the uptime every 15
+read again once an hour (role, neighbor and route tables, addresses, counters).
+Battery nodes are read once an hour too (role, neighbor table, addresses),
+right after the read of their response time, while they are awake: no wake-up
+is added. The response time comes from a read of the uptime every 15
 minutes (mains) or every hour (battery); after a failed read the node is read
 again 2 minutes after it is back. A contact is any report, event, read, ping
 answer or (with `passive_contact`) packet of the node.
+
+**Old values.** The add-on remembers when a node gave each value (a report or
+a read). A value given more than 2 hours ago, or taken from the Matter Server
+cache without anyone knowing when the node gave it, is old: it is shown in
+grey, without colour or signal bars, with its age in the tooltip, and no
+advice is drawn from it. This applies to the link (parent, signal, border
+router and path — a link is as old as the oldest table it was read from), the
+24h counters, the uptime, the response time and the Wi-Fi signal. Right after
+the first start, values turn from grey to current as the nodes are read
+(minutes for mains nodes, up to an hour for battery nodes; opening the page
+reads them at once).
 
 The border router of a node and its path come from the route tables of the
 routers: the border router with the lowest path cost (1 per good hop, up to 4

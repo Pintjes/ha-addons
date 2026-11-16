@@ -182,7 +182,8 @@ def advise(rows, brs, ctx):
             else:
                 out.append((t("Check its batteries") if r.get("battery") else t("Check its power"), "", "high"))
         elif r.get("network") != "thread":
-            if r.get("network") == "wifi" and r.get("rssi") is not None and r["rssi"] <= WIFI_WEAK:
+            if (r.get("network") == "wifi" and r.get("rssi") is not None and r["rssi"] <= WIFI_WEAK
+                    and not r.get("link_old")):
                 ap = r.get("access_point") or r.get("parent")
                 out.append((t("Weak Wi-Fi signal with {ap}", ap=ap) if ap else t("Weak Wi-Fi signal"),
                             t("{rssi} dBm: move the node or an access point closer", rssi=r["rssi"]), "high"))
@@ -192,7 +193,10 @@ def advise(rows, brs, ctx):
             name, rssi, lqi = r["name"], r.get("rssi"), r.get("lqi")
             searching = now - (ctx["forced"].get(name) or 0) < 120 or (r.get("search") or {}).get("state") == "pending"
             ws = ctx["weak_since"]
-            if r.get("parent") and not searching:
+            # an old link (not given by the node for 2 h, or nobody knows when) proves nothing now:
+            # no advice from it, in either direction
+            fresh = not r.get("link_old")
+            if r.get("parent") and not searching and fresh:
                 weak = weak_link(rssi, lqi)
                 known = rssi is not None or lqi is not None
                 if weak:
@@ -243,7 +247,8 @@ def advise(rows, brs, ctx):
             kids = len(children.get(name, []))
             dep = tn(" · {n} node depends on it", " · {n} nodes depend on it", kids) if kids else ""
             n_boot = r.get("reboots_24h") or 0
-            hop_weak = _is_router(r) and not r.get("parent") and r.get("best_link") and weak_link(r.get("best_rssi"), r.get("best_lqi"))
+            hop_weak = (fresh and _is_router(r) and not r.get("parent") and r.get("best_link")
+                        and weak_link(r.get("best_rssi"), r.get("best_lqi")))
             if hop_weak:
                 peer = by_name.get(r["best_link"])
                 there = (peer or {}).get("area") or next((a for a in {o.get("area") for o in rows if o.get("area")}

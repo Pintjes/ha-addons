@@ -36,6 +36,10 @@ def node_hex(node_id):
 
 
 FRESH_KEEP_S = 2 * 3600   # a value read from a node wins over the Matter Server cache this long
+STAMPS_FILE = "/data/value_times.json"
+STAMP_KEEP_S = 7 * 86400  # times kept across a restart
+# values whose age is shown: role, tables, addresses, uptime, counters, Wi-Fi signal
+STAMP_PATHS = FRESH_PATHS + ("0/51/2", "0/53/14", "0/53/19", "0/53/21", "0/54/4")
 RHYTHM_MIN_GAP_S = 30     # shorter silences are bursts of traffic, not the rhythm of the node
 RHYTHM_KEEP = 40          # silences kept per node
 RHYTHM_MIN_SAMPLES = 8    # silences needed before the rhythm is trusted
@@ -71,6 +75,18 @@ class MatterLive:
                         self.fresh[(nid, path)] = (t0, value)
         except Exception:  # noqa: BLE001
             self.fresh = {}
+        # (node hex, path) -> when the node last gave that value (reported or read). No entry:
+        # the value comes from the Matter Server cache and its age is not known
+        self.stamps = {(k, p): t0 for (k, p), (t0, _) in self.fresh.items()}
+        try:
+            with open(STAMPS_FILE) as f:
+                now = time.time()
+                for key, t0 in json.load(f).items():
+                    nid, path = key.split("|", 1)
+                    if now - t0 < STAMP_KEEP_S:
+                        self.stamps[(nid, path)] = max(t0, self.stamps.get((nid, path), 0))
+        except Exception:  # noqa: BLE001
+            pass
         self.sources = {}     # node hex -> {"src", "active": ts, "gap": s, "since": ts}
         try:
             with open(SOURCES_FILE) as f:
@@ -188,6 +204,7 @@ class MatterLive:
                 n = self.nodes.setdefault(nid, {"available": None, "attributes": {}, "last": None, "radio": None})
                 n["attributes"][data[1]] = data[2]
                 getattr(self, "fresh", {}).pop((nid, data[1]), None)   # a real report: it is the current value
+                self.stamps[(nid, data[1])] = now
                 if str(data[1]).startswith("0/53/"):
                     n["radio"] = now
             self.note_contact(nid, now, src="report")
@@ -199,6 +216,8 @@ class MatterLive:
         elif ev == "node_removed":
             with self.lock:
                 self.nodes.pop(node_hex(data or 0), None)
+                for key in [k for k in self.stamps if k[0] == node_hex(data or 0)]:
+                    del self.stamps[key]
                 if self.contacts.pop(node_hex(data or 0), None) is not None:
                     self._save_contacts()
 
@@ -208,6 +227,7 @@ class MatterLive:
             if nid in self.nodes:
                 self.nodes[nid]["attributes"][path] = value
             self.fresh[(nid, path)] = (time.time(), value)
+            self.stamps[(nid, path)] = time.time()
         if time.time() - self._fresh_saved >= 30:
             self.save_fresh()
 
@@ -220,11 +240,19 @@ class MatterLive:
             self._fresh_saved = now
             data = {f"{k}|{p}": v for (k, p), v in self.fresh.items()
                     if p in FRESH_PATHS and now - v[0] < FRESH_KEEP_S}
-        try:
-            with open(FRESH_FILE, "w") as f:
-                json.dump(data, f)
-        except OSError as err:
-            LOG.warning(t("Cannot write {file}: {err}", file=FRESH_FILE, err=err))
+            times = {f"{k}|{p}": round(t0) for (k, p), t0 in self.stamps.items()
+                     if p in STAMP_PATHS and now - t0 < STAMP_KEEP_S and k in self.nodes}
+        for name, content in ((FRESH_FILE, data), (STAMPS_FILE, times)):
+            try:
+                with open(name, "w") as f:
+                    json.dump(content, f)
+            except OSError as err:
+                LOG.warning(t("Cannot write {file}: {err}", file=name, err=err))
+
+    def stamp(self, nid, path):
+        """When the node last gave this value, or None: age not known (Matter Server cache)."""
+        with self.lock:
+            return self.stamps.get((nid, path))
 
     def addresses(self):
         """node hex -> IPv6 addresses (16 bytes) the node reports (General Diagnostics)."""

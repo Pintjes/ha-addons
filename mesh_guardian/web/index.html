@@ -108,6 +108,7 @@
   .st.ic { padding: 4px; }
   .sig { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
   .sig.ok svg { color: var(--ok); } .sig.warn svg { color: var(--warn); } .sig.bad svg { color: var(--bad); }
+  .old, .old * { color: var(--mut) !important; }   /* a value the node gave too long ago: never shown as current */
 
   .tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
   .tools input[type=search] { flex: 1 1 220px; min-height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); padding: 0 12px; }
@@ -298,6 +299,7 @@ const T = {
     r_cost_tip:"Path cost: 1 per good hop, up to 4 for a weak link. The nearest border router is the one with the lowest cost.", r_unknown:"not known yet", no_parent:"Unknown parent (probably a border router)",
     sig:["very weak", "weak", "fair", "good"], sig_tip:"Weakest direction of the link", new_parent:"new parent", none_match:"No node matches.", columns:"Columns", cols_reset:"Default columns", t_out24:"Outages 24h", t_out7:"Outages 7d", sort_tip:"Click to sort, click again to reverse", sort_reset:"Default order (problems first)",
     ago_s:"{n}s ago", ago_m:"{n} min ago", ago_h:"{n} h ago", ago_d:"{n} d ago", never:"never",
+    old_tip:"Old value: given by the node {t}, it may have changed", old_unknown:"Old value: nobody knows when the node gave it (Matter Server cache)", old_short:"read {t}", old_short_unknown:"age unknown", measured:"Measured {t}",
     d_net:"Network", d_role:"Role", d_parent:"Parent", d_best:"Sends through", d_signal:"Signal", d_lqi:"Link quality (0–3)", d_resp:"Response · average",
     d_power:"Power", mains:"mains", battery:"battery", bat_level:["ok", "low", "critical"], d_last:"Last contact",
     sig7:"Signal · last 7 days", resp7:"Response · last 7 days", outages:"Outages", pchanges:"Parent changes", none:"none", ongoing:"ongoing",
@@ -341,6 +343,7 @@ const T = {
     r_cost_tip:"Coût du chemin : 1 par bon saut, jusqu'à 4 pour un lien faible. Le border router le plus proche est celui de plus bas coût.", r_unknown:"inconnu pour l'instant", no_parent:"Parent inconnu (probablement un border router)",
     sig:["très faible", "faible", "correct", "bon"], sig_tip:"Sens le plus faible du lien", new_parent:"nouveau parent", none_match:"Aucune node ne correspond.", columns:"Colonnes", cols_reset:"Colonnes par défaut", t_out24:"Coupures 24 h", t_out7:"Coupures 7 j", sort_tip:"Cliquer pour trier, recliquer pour inverser", sort_reset:"Ordre par défaut (problèmes d'abord)",
     ago_s:"il y a {n} s", ago_m:"il y a {n} min", ago_h:"il y a {n} h", ago_d:"il y a {n} j", never:"jamais",
+    old_tip:"Valeur ancienne : donnée par la node {t}, elle a pu changer", old_unknown:"Valeur ancienne : on ne sait pas quand la node l'a donnée (cache du Matter Server)", old_short:"lu {t}", old_short_unknown:"âge inconnu", measured:"Mesuré {t}",
     d_net:"Réseau", d_role:"Rôle", d_parent:"Parent", d_best:"Transmet par", d_signal:"Signal", d_lqi:"Qualité du lien (0–3)", d_resp:"Réponse · moyenne",
     d_power:"Alimentation", mains:"secteur", battery:"pile", bat_level:["ok", "faible", "critique"], d_last:"Dernier contact",
     sig7:"Signal · 7 derniers jours", resp7:"Réponse · 7 derniers jours", outages:"Coupures", pchanges:"Changements de parent", none:"aucun", ongoing:"en cours",
@@ -418,6 +421,10 @@ const dur = min => min == null ? "—" : !min ? "0" : min < 90 ? min + " min" : 
 const dur1 = s => s == null ? "—" : s < 90 ? Math.round(s) + " s" : dur(Math.round(s / 60));
 const ms = v => v == null ? "—" : v < 1000 ? Math.round(v) + " ms" : dec(v / 1000) + " s";
 const isRouter = r => r.role === "router" || r.role === "leader";
+// a value the node gave more than 2 h ago, or nobody knows when: grey, without colour or bars, its age in the tooltip
+const oldTip = t => t ? F("old_tip", {t: ago(t)}) : L("old_unknown");
+const oldShort = t => t ? F("old_short", {t: ago(t)}) : L("old_short_unknown");
+const aged = (isOld, t, html) => isOld ? `<span class="old" title="${esc(oldTip(t))}">${html}</span>` : html;
 const net = r => r.network || "thread";
 const linkName = r => r.parent || (isRouter(r) ? r.best_link : null);
 const linkRssi = r => r.parent ? r.rssi : (isRouter(r) ? r.best_rssi : null);
@@ -447,6 +454,7 @@ const status = r => r.available && r.silent_s ? `<span class="st warn" title="${
 function signal(r) {
   const v = linkRssi(r), q = linkLqi(r), l = sigLevel(r);
   if (l == null) return net(r) === "thread" ? "" : `<span class="mut">—</span>`;
+  if (r.link_old) return `<span class="sig old" title="${esc(oldTip(r.link_t))}">${v != null ? `<span class="num">${v} dBm</span> ` : ""}<small>${q != null ? `LQI ${q} · ` : ""}${esc(oldShort(r.link_t))}</small></span>`;
   return `<span class="sig ${sigCls(l)}" title="${esc(net(r) === "thread" ? L("sig_tip") : "")}">${bars(sigBars(l))}${v != null ? `<span class="num">${v} dBm</span> ` : ""}<small>${sigWord(l)}${q != null ? ` · <span title="${esc(L("d_lqi"))}">LQI ${q}</span>` : ""}</small></span>`;
 }
 // battery drawn with its charge: green > 50 %, orange 20–50 %, red < 20 % (the percentage is always written too)
@@ -485,7 +493,7 @@ function link(r) {
     np = `<span class="np" title="${esc(F("np_before", {p: r.new_parent.before, r: r.new_parent.before_rssi ?? "?"}))}">${g >= 6 ? "▲" : g <= -6 ? "▼" : "●"}</span>`;
   }
   const rt = route(r);
-  return `<span class="p" title="${esc((best ? L("best_tip") : L("d_parent")) + (rt ? "\n" + L("to_ha") + " : " + rt : ""))}">${esc(n)}${np}</span>`;
+  return `<span class="p${r.link_old ? " old" : ""}" title="${esc((r.link_old ? oldTip(r.link_t) + "\n" : "") + (best ? L("best_tip") : L("d_parent")) + (rt ? "\n" + L("to_ha") + " : " + rt : ""))}">${esc(n)}${r.link_old ? "" : np}</span>`;
 }
 
 // ------------------------------------------------------------ summary
@@ -634,22 +642,22 @@ const COLS = [
   {k:"node", lab:"h_node", w:"minmax(160px, 2fr)", fixed:true},
   {k:"status", lab:"h_status", w:"120px"},
   {k:"link", lab:"h_link", w:"minmax(160px, 1.7fr)"},
-  {k:"br", lab:"h_br", w:"minmax(120px, 1.1fr)", h:r => r.route ? `<span title="${esc(hopsTxt(r.route) + " · " + F("r_cost", {c: r.route.cost}) + "\n" + fullPath(r))}">${esc(r.route.br)}<br><small class="num">${esc(hopsTxt(r.route))}</small></span>` : n0(null),
+  {k:"br", lab:"h_br", w:"minmax(120px, 1.1fr)", h:r => r.route ? `<span${r.link_old ? ' class="old"' : ""} title="${esc((r.link_old ? oldTip(r.link_t) + "\n" : "") + hopsTxt(r.route) + " · " + F("r_cost", {c: r.route.cost}) + "\n" + fullPath(r))}">${esc(r.route.br)}<br><small class="num">${esc(hopsTxt(r.route))}</small></span>` : n0(null),
     s:r => r.route ? r.route.br.toLowerCase() : null},
   {k:"resp", lab:"h_resp", w:"110px", r:true},
   {k:"bat", lab:"h_bat", w:"105px"},
   {k:"last", lab:"h_last", w:"110px"},
   {k:"adv", lab:"h_adv", w:"minmax(130px, 1.8fr)"},
   {k:"act", lab:"h_act", w:"72px", h:r => actions(r), s:null},
-  {k:"route", lab:"to_ha", w:"minmax(170px, 1.5fr)", x:true, h:r => esc(route(r) || "—"), s:r => r.route ? r.route.cost : null},
+  {k:"route", lab:"to_ha", w:"minmax(170px, 1.5fr)", x:true, h:r => aged(r.link_old && r.route, r.link_t, esc(route(r) || "—")), s:r => r.route ? r.route.cost : null},
   {k:"nb", lab:"t_nb", w:"80px", r:true, x:true, h:r => n0(r.neighbors), s:r => r.neighbors},
   {k:"weak", lab:"t_weak", w:"90px", r:true, x:true, h:r => n0(r.weak), s:r => r.weak},
-  {k:"det", lab:"t_det", w:"100px", r:true, x:true, h:r => n0(r.detaches_24h), s:r => r.detaches_24h},
-  {k:"pch", lab:"t_pch", w:"110px", r:true, x:true, h:r => n0(r.parent_changes_24h), s:r => r.parent_changes_24h},
+  {k:"det", lab:"t_det", w:"100px", r:true, x:true, h:r => aged(r.counters_old && r.detaches_24h != null, r.counters_t, n0(r.detaches_24h)), s:r => r.detaches_24h},
+  {k:"pch", lab:"t_pch", w:"110px", r:true, x:true, h:r => aged(r.counters_old && r.parent_changes_24h != null, r.counters_t, n0(r.parent_changes_24h)), s:r => r.parent_changes_24h},
   {k:"out", lab:"t_out", w:"120px", r:true, x:true, h:r => `${r.outages_24h ?? "—"} · ${r.outages_7d ?? "—"}`, s:r => (r.outages_24h || 0) * 1000 + (r.outages_7d || 0)},
   {k:"down7", lab:"t_down", w:"105px", r:true, x:true, h:r => dur(r.downtime_7d_min), s:r => r.downtime_7d_min},
   {k:"reb", lab:"t_reb", w:"120px", r:true, x:true, h:r => `${r.reboots ?? "—"} · ${r.reboots_24h ?? "—"}`, s:r => r.reboots_24h},
-  {k:"up", lab:"t_up", w:"105px", r:true, x:true, h:r => r.uptime_h == null ? n0(null) : dur(Math.round(r.uptime_h * 60)), s:r => r.uptime_h},
+  {k:"up", lab:"t_up", w:"105px", r:true, x:true, h:r => r.uptime_h == null ? n0(null) : aged(r.uptime_old, r.uptime_t, dur(Math.round(r.uptime_h * 60))), s:r => r.uptime_h},
   {k:"rloc", lab:"t_rloc", w:"90px", x:true, h:r => n0(r.rloc16 ? esc(r.rloc16) : null), s:r => r.rloc16 || null},
 ];
 const COLKEYS = COLS.filter(c => !c.x).map(c => [c.k, c.lab]);
@@ -713,7 +721,8 @@ function renderList() {
   $("#rows").innerHTML = list.map(r => {
     const adv = r.advice ? `<span class="adv ${lvl(r)}" title="${esc(r.advice_detail || "")}">${IC.bulb}<span>${esc(r.advice)}</span></span>` : `<span class="adv"></span>`;
     const meta = [r.area, r.model, NETS[net(r)], r.id].filter(Boolean).map(esc).join(" · ");
-    const resp = r.rtt_fail ? `<span class="st bad">${IC.bad}${L("no_answer")}</span>` : `<span class="num">${ms(r.rtt_ms)}</span>`;
+    const resp = r.rtt_fail ? `<span class="st bad">${IC.bad}${L("no_answer")}</span>`
+      : `<span class="num${r.rtt_old ? " old" : ""}" title="${esc(r.rtt_old ? oldTip(r.rtt_t) : r.rtt_t ? F("measured", {t: ago(r.rtt_t)}) : "")}">${ms(r.rtt_ms)}</span>`;
     const last = r.last_report ? `<span title="${esc(new Date(r.last_report * 1000).toLocaleString(LANG) + (r.contact_src ? " · " + (L("csrc")[r.contact_src] || r.contact_src) : ""))}">${ago(r.last_report)}</span>` : `<span class="mut">${L("never")}</span>`;
     const cell = {
       node: `<span class="nm"><b>${esc(r.name)}${isNew(r) ? ` <span class="new">${L("new")}</span>` : ""}</b><small>${meta}</small></span>`,
@@ -900,15 +909,15 @@ async function openNode(id) {
   const best = !r.parent && isRouter(r);
   const power = r.battery ? L("battery") + (r.battery_pct != null ? " " + r.battery_pct + " %" : r.battery_level != null ? " · " + L("bat_level")[r.battery_level] : "") : L("mains");
   const kv = [[L("d_net"), NETS[net(r)]], [L("d_role"), r.role ? esc(L("roles")[r.role] || r.role) : "—"],
-    [best ? L("d_best") : L("d_parent"), `<span title="${esc(net(r) === "thread" ? (best ? L("best_tip") : L("parent_tip")) : "")}">${esc(linkName(r) || "—")}</span>`], [L("d_signal"), signal(r)],
+    [best ? L("d_best") : L("d_parent"), `<span${r.link_old && linkName(r) ? ' class="old"' : ""} title="${esc(net(r) === "thread" ? (best ? L("best_tip") : L("parent_tip")) : "")}">${esc(linkName(r) || "—")}</span>${r.link_old && linkName(r) ? ` <small class="mut">(${esc(oldShort(r.link_t))})</small>` : ""}`], [L("d_signal"), signal(r)],
     ...(net(r) === "wifi" ? [[L("ap"), `<form class="apf" data-bssid="${esc(r.bssid || "")}"><input name="n" value="${esc(r.access_point || "")}" placeholder="${esc(L("ap_ph"))}" maxlength="40"><button class="btn">${L("save")}</button></form><small class="mut">BSSID ${esc(r.bssid || "?")}</small>`]] : []),
-    ...(net(r) === "thread" ? [[L("h_br"), r.route ? `${esc(r.route.br)}<br><small class="mut" title="${esc(L("r_cost_tip"))}">${esc(hopsTxt(r.route) + " · " + F("r_cost", {c: r.route.cost}))}</small>` : esc(L("r_unknown"))]] : []), [L("d_resp"), `${r.rtt_fail ? L("no_answer") : ms(r.rtt_ms)} · ${ms(r.rtt_avg_ms)}`],
+    ...(net(r) === "thread" ? [[L("h_br"), r.route ? `${aged(r.link_old, r.link_t, esc(r.route.br))}<br><small class="mut" title="${esc(L("r_cost_tip"))}">${esc(hopsTxt(r.route) + " · " + F("r_cost", {c: r.route.cost}))}</small>` : esc(L("r_unknown"))]] : []), [L("d_resp"), `${r.rtt_fail ? L("no_answer") : aged(r.rtt_old, r.rtt_t, ms(r.rtt_ms))} · ${ms(r.rtt_avg_ms)}${!r.rtt_fail && r.rtt_t ? ` <small class="mut">(${esc(F("measured", {t: ago(r.rtt_t)}).toLowerCase())})</small>` : ""}`],
     [L("d_power"), esc(power)], [L("d_last"), r.last_report ? ago(r.last_report) + (r.contact_src ? ` <small class="mut">(${esc(L("csrc")[r.contact_src] || r.contact_src)})</small>` : "") : L("never")]];
   const c = v => v == null ? "—" : v;
   const tech = [...(r.route ? [[L("t_path"), esc(fullPath(r))]] : []), [L("t_id"), esc(r.id)], [L("t_rloc"), esc(r.rloc16 || "—")], [L("t_nb"), c(r.neighbors)], [L("t_weak"), c(r.weak)],
-    [L("t_det"), c(r.detaches_24h)], [L("t_pch"), c(r.parent_changes_24h)], [L("t_partch"), c(r.partition_changes_24h)],
+    [L("t_det"), aged(r.counters_old && r.detaches_24h != null, r.counters_t, c(r.detaches_24h))], [L("t_pch"), aged(r.counters_old && r.parent_changes_24h != null, r.counters_t, c(r.parent_changes_24h))], [L("t_partch"), aged(r.counters_old && r.partition_changes_24h != null, r.counters_t, c(r.partition_changes_24h))],
     [L("t_out"), `${c(r.outages_24h)} · ${c(r.outages_7d)}`], [L("t_down"), dur(r.downtime_7d_min)], [L("t_reb"), `${c(r.reboots)} · ${c(r.reboots_24h)}`],
-    [L("t_boot"), r.boot_reason == null ? "—" : esc(L("boot")[r.boot_reason] || r.boot_reason)], [L("t_up"), r.uptime_h == null ? "—" : dur(Math.round(r.uptime_h * 60))],
+    [L("t_boot"), r.boot_reason == null ? "—" : esc(L("boot")[r.boot_reason] || r.boot_reason)], [L("t_up"), r.uptime_h == null ? "—" : aged(r.uptime_old, r.uptime_t, dur(Math.round(r.uptime_h * 60)))],
     [L("t_rhythm"), r.rhythm_s == null ? esc(L("rhythm_wait")) : esc(F("rhythm_v", {u: dur1(r.rhythm_s), l: dur1(r.silent_limit_s)}))],
     [L("t_src"), r.contact_src ? esc(L("csrc")[r.contact_src] || r.contact_src) : "—"], [L("t_gap"), r.active_gap_max_s == null ? "—" : dur(Math.round(r.active_gap_max_s / 60))]];
   const top = head(esc(r.name), [r.area, r.model].filter(Boolean).map(esc).join(" · "), `<div style="margin-top:8px">${status(r)}</div>`) + adv + grid(kv) +

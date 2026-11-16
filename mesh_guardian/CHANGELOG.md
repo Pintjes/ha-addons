@@ -4,6 +4,18 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.10.0] - 2026-11-16
+
+### Added
+
+- Every value now has an age: the add-on remembers when the node gave it (a report or a read). A value given more than 2 hours ago, or taken from the Matter Server cache without anyone knowing when, is old: shown in grey, without colour or signal bars, with its age in the tooltip. It applies to the link (parent, signal, border router, path), the 24h counters, the uptime, the response time and the Wi-Fi signal.
+- The age of the response time is in its tooltip.
+- Battery nodes: role, neighbor table and addresses are read once an hour, right after the read of their response time, while they are awake (no wake-up added). Mains nodes: the counters (detaches, parent and partition changes) are read with their tables once an hour. Wi-Fi nodes: their signal is read once an hour.
+
+### Changed
+
+- No advice is drawn from an old link any more.
+
 ## [2.9.9] - 2026-11-16
 
 ### Added

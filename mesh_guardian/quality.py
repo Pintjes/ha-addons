@@ -106,6 +106,12 @@ class Quality:
             ok = r.get("ok") or []
             return r.get("last"), (round(sum(ok) / len(ok)) if ok else None), bool(r.get("t")) and r.get("last") is None
 
+    def read_times(self, nid):
+        """(time of the last response read, time of the last uptime read), None when never."""
+        with self.lock:
+            r = self.rtt.get(nid) or {}
+            return r.get("t") or None, r.get("up_t")
+
     def uptime(self, nid):
         """Uptime in s from the last read plus the time since (survives restarts), or None."""
         with self.lock:
@@ -158,8 +164,8 @@ class Quality:
                 r["last"] = None
                 r["fails"] = r.get("fails", 0) + 1
                 r["streak"] = r.get("streak", 0) + 1
-        if ok and not battery:
-            self._refresh_thread(nid)
+        if ok:
+            self._refresh_thread(nid, battery)
         if ok:
             self.live.note_contact(nid, src="read")
             if isinstance(value, (int, float)):
@@ -203,6 +209,9 @@ class Quality:
                     if thread and not battery:
                         with self.lock:
                             self.rtt.setdefault(nid, {"last": None, "ok": [], "t": 0, "fails": 0})["thr_t"] = 0
+                    if battery:   # its tables are read just below, not twice
+                        with self.lock:
+                            self.rtt.setdefault(nid, {"last": None, "ok": [], "t": 0, "fails": 0})["thr_t"] = time.time()
                     self.probe(nid, battery)   # mains Thread nodes: tables read too
                     if battery and thread:
                         with self.lock:
@@ -247,22 +256,39 @@ class Quality:
                 LOG.debug("thread read %s %s: %s", nid, path, err)
                 return
 
-    def _refresh_thread(self, nid):
-        """Read again the role, the neighbor and route tables of a mains node, at most hourly: some
-        nodes never report them again (e.g. after becoming an end device), so the Matter
-        Server cache keeps an old table and the link signal cannot be shown. The read
-        updates that cache. Never for battery nodes (their batteries)."""
+    def _refresh_thread(self, nid, battery=False):
+        """Read again, at most hourly, the values a node does not report by itself (some never
+        report their tables again, e.g. after becoming an end device): without it the Matter
+        Server cache keeps an old value and nothing tells how old it is. The read updates
+        that cache.
+        Mains Thread node: role, neighbor and route tables, addresses, counters.
+        Battery Thread node: role, neighbor table and addresses only, right after its hourly response
+        read, while it is awake (no wake-up added).
+        Wi-Fi node: its signal."""
         now = time.time()
+        with self.live.lock:
+            attrs = (self.live.nodes.get(nid) or {}).get("attributes") or {}
+            thread = attrs.get("0/53/1") is not None
+            wifi = not thread and any(k.startswith("0/54/") for k in attrs)
+        if thread and battery:
+            paths = ("0/53/1", "0/53/7", "0/51/0")   # table and RLOC16 together: the parent comes from both
+        elif thread:
+            # role, neighbors, routes (the link a router sends through comes from both tables: read
+            # together, they agree), addresses (RLOC16), counters (detaches, partition and parent changes)
+            paths = ("0/53/1", "0/53/7", "0/53/8", "0/51/0", "0/53/14", "0/53/19", "0/53/21")
+        elif wifi and not battery:
+            paths = ("0/54/4",)
+        else:
+            return
         with self.lock:
             r = self.rtt.setdefault(nid, {"last": None, "ok": [], "t": 0, "fails": 0})
-            if now - (r.get("thr_t") or 0) < NEIGHBOR_REFRESH_S:
+            if now - (r.get("thr_t") or 0) < NEIGHBOR_REFRESH_S - 120:
                 return
             r["thr_t"] = now
-        # role, neighbors, routes (the link a router sends through comes from both tables: read
-        # together, they agree), addresses (RLOC16)
-        for path in ("0/53/1", "0/53/7", "0/53/8", "0/51/0"):
+        for path in paths:
             try:
-                res = self.h.matter_command("read_attribute", {"node_id": int(nid, 16), "attribute_path": path}, timeout=30)
+                res = self.h.matter_command("read_attribute", {"node_id": int(nid, 16), "attribute_path": path},
+                                            timeout=120 if battery else 30)
                 value = res.get(path) if isinstance(res, dict) else res
                 if value is not None:
                     self.live.set_attribute(nid, path, value)
