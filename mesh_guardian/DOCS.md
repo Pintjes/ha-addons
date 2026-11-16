@@ -189,6 +189,7 @@ Every event is written to the add-on log, published on the MQTT topic
 | `names`, `name_synced` | names Home Assistant → Matter (Rename nodes button) |
 | `reattach`, `reattach_node`, `reattach_result`, `reattach_done` | parent search (Find better parents button): start, node asked to attach again, its link before and after (`result`: `better`, `worse`, `similar`, `same`, `unknown`, then `noanswer` if the node never answered), summary |
 | `recover_node`, `recover_result` | recovery attempt on an unavailable node (button of the node table): start, then `result`: `back`, `noanswer` (command sent, node still unavailable), `unreachable` (nothing got through), `failed` (refused by the node) |
+| `node_reset` | a node was reset from a distance (Reset button of the node panel), with the fabrics it left |
 | `statistics`, `auto_recovery` | statistics rebuilt, recovery switched on / off (with who switched it) |
 
 You can trigger automations on them, for example a notification when a node
@@ -448,6 +449,25 @@ pair the device again, and the panel of the new node offers to attach it.
 
 Anyone who can open the Mesh Guardian page can read these codes: a pairing
 code gives full control of a device once it is reset.
+
+### Reset from a distance
+
+The **Reset** button of the node panel makes a node go back to its factory
+state without touching it. Matter has no reset command, but a node that
+leaves its last fabric (its last ecosystem) erases everything it learnt since
+it was paired, and most devices then restart, ready to be paired again. The
+add-on removes the node from every fabric it is in — the other ecosystems
+first (Google Home, Apple Home…), Home Assistant last.
+
+- Only for an available node whose pairing code is kept (see above): the
+  panel shows the fabrics it will leave and its code, and asks you to tick a
+  box. It cannot be undone.
+- The node then has to be paired again within Bluetooth range, with its code,
+  which waits under **Pairing codes**. Nothing has to be pressed on the device.
+- In the other ecosystems the device stays listed as offline: delete it there.
+- What a device does once out of its last fabric is its maker's choice. If it
+  does not offer itself for pairing, it has only left the ecosystems and needs
+  its button after all.
 
 ### Silent nodes
 

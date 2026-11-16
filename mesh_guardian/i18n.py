@@ -352,6 +352,7 @@ FR = {
     "{node}: out of reach, the recovery attempt could not be sent":
         "{node} : hors de portée, la tentative de récupération n'a pas pu être envoyée",
     "{node}: recovery attempt refused": "{node} : tentative de récupération refusée",
+    "{node}: reset from a distance, to pair again": "{node} : réinitialisée à distance, à appairer à nouveau",
     # storm
     "Thread storm": "Tempête Thread",
     "Thread storm: {why}": "Tempête Thread : {why}",

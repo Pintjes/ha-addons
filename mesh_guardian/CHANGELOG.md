@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.15.0] - 2026-11-16
+
+### Added
+
+- Reset from a distance (node panel): the node is removed from every fabric it is in, Home Assistant last, which makes it erase its Matter data and go back to pairing, without touching it. Only for an available node whose pairing code is kept; the panel shows the ecosystems it will leave and asks for a ticked box. Event `node_reset`. Trial: what a device does once out of its last fabric depends on its maker.
+
 ## [2.14.0] - 2026-11-16
 
 ### Added

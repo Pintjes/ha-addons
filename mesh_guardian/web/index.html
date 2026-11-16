@@ -222,6 +222,8 @@
   .pccard .qr { width: 100%; height: 100%; display: block; border-radius: 6px; }
   .pccode { font: 600 19px ui-monospace, monospace; user-select: all; display: inline-block; margin: 2px 0 6px; }
   .pcbtns { display: flex; gap: 8px; margin: 10px 0 0; }
+  .sheet-acts .act[data-reset]:hover:not(:disabled), .btn.danger:not(:disabled) { color: var(--bad); border-color: var(--bad); }
+  .rsok { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; cursor: pointer; }
   .acts { display: inline-grid; grid-template-columns: repeat(2, 28px); gap: 4px; }
   .act[data-act="remove"]:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); }
   .act { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--mut);
@@ -339,6 +341,12 @@ const T = {
     pc_e_node:"Node not found", pc_e_error:"Error", pc_attach:"A code kept for a device that left the table: give it to this node if it is the same device", pc_attach_btn:"Attach",
     pc_list:"Pairing codes", pc_list_tip:"Codes of the devices that left the table (removed or reset): what is needed to pair them again",
     pc_list_none:"No code waiting: every code kept belongs to a node of the table.", pc_count:"Codes kept in all: {n}",
+    rs_btn:"Reset", rs_tip:"Factory reset from a distance: the node leaves every ecosystem and must be paired again", rs_down:"An unavailable node cannot be reset from a distance",
+    rs_title:"Reset {n}?", rs_text:"It will be removed from: {f}. It forgets its network and must be paired again, within Bluetooth range, with its code {c} (kept under Pairing codes). This cannot be undone.",
+    rs_check:"I understand that this node will have to be paired again", rs_go:"Reset for good", rs_cancel:"Cancel", rs_close:"Close",
+    rs_nocode:"Save its pairing code first: without it, the label of the device would be the only way to pair it again.", rs_noanswer:"{n} does not answer: nothing was sent",
+    rs_r_reset:"{n} reset (removed from: {f}). Its code is below, to pair it again.", rs_r_partial:"{n}: removed from {f}, but still in Home Assistant. Try again.",
+    rs_r_noanswer:"{n}: no answer, nothing was removed", rs_r_nocode:"{n}: no pairing code kept, nothing was sent", rs_r_busy:"Another action is running, try again in a moment", rs_r_failed:"{n}: reset failed",
     note_t:"About these values", note:"Radio values: latest reports of the nodes. Battery nodes update less often (see Last contact). The page refreshes every minute.",
     roles:{leader:"Leader router", router:"Router", reed:"End", end_device:"End", sleepy_end_device:"Sleepy end", unassigned:"unassigned", unspecified:"unspecified", detached:"detached", child:"End device", offline:"offline"},
     boot:{unspecified:"unspecified", power_on:"power on", brown_out:"brown-out", software_watchdog:"software watchdog", hardware_watchdog:"hardware watchdog", software_update:"software update", software_reset:"software reset"},
@@ -403,6 +411,12 @@ const T = {
     pc_e_node:"Node introuvable", pc_e_error:"Erreur", pc_attach:"Code conservé pour un appareil sorti du tableau : le rattacher à cette node si c'est le même appareil", pc_attach_btn:"Rattacher",
     pc_list:"Codes d'appairage", pc_list_tip:"Codes des appareils sortis du tableau (supprimés ou réinitialisés) : ce qu'il faut pour les appairer à nouveau",
     pc_list_none:"Aucun code en attente : chaque code conservé appartient à une node du tableau.", pc_count:"Codes conservés au total : {n}",
+    rs_btn:"Réinitialiser", rs_tip:"Réinitialisation d'usine à distance : la node quitte tous les écosystèmes et doit être appairée à nouveau", rs_down:"Une node indisponible ne peut pas être réinitialisée à distance",
+    rs_title:"Réinitialiser {n} ?", rs_text:"Elle sera retirée de : {f}. Elle oublie son réseau et devra être appairée à nouveau, à portée Bluetooth, avec son code {c} (conservé dans « Codes d'appairage »). C'est irréversible.",
+    rs_check:"J'ai compris que cette node devra être appairée à nouveau", rs_go:"Réinitialiser définitivement", rs_cancel:"Annuler", rs_close:"Fermer",
+    rs_nocode:"Enregistre d'abord son code d'appairage : sans lui, l'étiquette de l'appareil serait le seul moyen de l'appairer à nouveau.", rs_noanswer:"{n} ne répond pas : rien n'a été envoyé",
+    rs_r_reset:"{n} réinitialisée (retirée de : {f}). Son code est ci-dessous, pour l'appairer à nouveau.", rs_r_partial:"{n} : retirée de {f}, mais toujours dans Home Assistant. Réessayer.",
+    rs_r_noanswer:"{n} : pas de réponse, rien n'a été retiré", rs_r_nocode:"{n} : pas de code d'appairage conservé, rien n'a été envoyé", rs_r_busy:"Une autre action est en cours, réessayer dans un instant", rs_r_failed:"{n} : réinitialisation en échec",
     note_t:"À propos de ces valeurs", note:"Valeurs radio : derniers rapports des nodes. Sur pile, mises à jour moins fréquentes (voir « Dernier contact »). Page actualisée chaque minute.",
     roles:{leader:"Routeur leader", router:"Routeur", reed:"Final", end_device:"Final", sleepy_end_device:"Final dormant", unassigned:"non attribué", unspecified:"non précisé", detached:"détaché", child:"Appareil final", offline:"hors ligne"},
     boot:{unspecified:"non précisée", power_on:"mise sous tension", brown_out:"baisse de tension", software_watchdog:"watchdog logiciel", hardware_watchdog:"watchdog matériel", software_update:"mise à jour", software_reset:"redémarrage logiciel"},
@@ -860,6 +874,7 @@ const ACT_ICON = {
   ping: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12a7 7 0 0 1 14 0M8.5 12a3.5 3.5 0 0 1 7 0"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>',
   parent: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v7a6 6 0 0 0 12 0V4M6 4h3M15 4h3M6 8h3M15 8h3"/></svg>',
   recover: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><path d="M5.6 5.6l3.9 3.9M14.5 14.5l3.9 3.9M18.4 5.6l-3.9 3.9M9.5 14.5l-3.9 3.9"/></svg>',
+  reset: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v9M6.3 6.8a8 8 0 1 0 11.4 0"/></svg>',
   interview: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg>',
   remove: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 7V4h4v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>',
 };
@@ -991,7 +1006,8 @@ async function openNode(id) {
     [L("t_src"), r.contact_src ? esc(L("csrc")[r.contact_src] || r.contact_src) : "—"], [L("t_gap"), r.active_gap_max_s == null ? "—" : dur(Math.round(r.active_gap_max_s / 60))]];
   const top = head(esc(r.name), [r.area, r.model].filter(Boolean).map(esc).join(" · "), `<div style="margin-top:8px">${status(r)}</div>`) + adv + grid(kv) +
     `<div class="sheet-acts">${nodeActs(r).map(([a, ok]) =>
-      `<button class="btn act" data-act="${a}" data-node="${esc(r.id)}" ${ok ? "" : "disabled"} title="${esc(ok ? L("a_" + a + "_tip") : L("a_parent_router"))}">${ACT_ICON[a]}<span>${L("a_" + a)}</span></button>`).join("")}</div>` +
+      `<button class="btn act" data-act="${a}" data-node="${esc(r.id)}" ${ok ? "" : "disabled"} title="${esc(ok ? L("a_" + a + "_tip") : L("a_parent_router"))}">${ACT_ICON[a]}<span>${L("a_" + a)}</span></button>`).join("")}
+      <button class="btn act" data-reset="${esc(r.id)}" ${r.available ? "" : "disabled"} title="${esc(L(r.available ? "rs_tip" : "rs_down"))}">${ACT_ICON.reset}<span>${L("rs_btn")}</span></button></div><div id="resetbox"></div>` +
     `<h2 title="${esc(L("pc_tip"))}">${L("pc_t")}</h2><div id="pair"></div>`;
   // what the Matter Server log says of the node over 24h (subscriptions lost, sessions closed…)
   const sv = r.server;
@@ -1020,7 +1036,7 @@ async function openNode(id) {
   } catch (e) {
     $("#sheet").innerHTML = top + `<p class="mut">${L("error")}</p>` + techBlock;
   }
-  renderPair();   // the panel was drawn again: its pairing block too
+  renderPair(); renderReset();   // the panel was drawn again: its pairing block and its reset question too
 }
 
 // panel of a border router: everything known about it, and "Remove" when it is offline
@@ -1168,6 +1184,40 @@ async function pairClick(b) {
   }
 }
 
+// ------------------------------------------------------------ factory reset from a distance
+// Asked in the panel itself, in two steps: what will happen (read from the node), then a box to
+// tick. Only for a node whose pairing code is kept: without it the label is the only way back.
+let resetBox = {id: null, html: ""};
+function renderReset() {
+  const el = $("#resetbox"); if (el) el.innerHTML = resetBox.id === openId ? resetBox.html : "";
+}
+async function nodeAction(id, action) {
+  return await (await fetch("api/action", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({id, action})})).json();
+}
+async function resetAsk(id) {
+  const r = (D.rows || []).find(x => x.id === id); if (!r) return;
+  const box = html => { resetBox = {id, html: `<div class="advice bad">${IC.bad}<div>${html}</div></div>`}; renderReset(); };
+  box(esc(L("loading")));
+  let info = null;
+  try { info = await nodeAction(id, "reset_info"); } catch (e) { /* told below */ }
+  if (!info || !info.ok) return box(`<b>${esc(F("rs_noanswer", {n: r.name}))}</b><p class="pcbtns"><button class="btn" data-rs="cancel">${L("rs_close")}</button></p>`);
+  if (!info.manual) return box(`<b>${esc(L("rs_nocode"))}</b><p class="pcbtns"><button class="btn" data-rs="cancel">${L("rs_close")}</button></p>`);
+  box(`<b>${esc(F("rs_title", {n: r.name}))}</b><br>${esc(F("rs_text", {f: info.fabrics.join(", "), c: manualFmt(info.manual)}))}
+    <label class="rsok"><input type="checkbox" id="rsok"> ${esc(L("rs_check"))}</label>
+    <p class="pcbtns"><button class="btn danger" data-rs="go" disabled>${L("rs_go")}</button><button class="btn" data-rs="cancel">${L("rs_cancel")}</button></p>`);
+}
+async function resetGo(b) {
+  const id = resetBox.id, r = (D.rows || []).find(x => x.id === id); if (!r) return;
+  b.disabled = true; b.classList.add("busy");
+  let res = null;
+  try { res = await nodeAction(id, "reset"); } catch (e) { /* told below */ }
+  const k = res && res.ok && ["reset", "partial", "noanswer", "nocode", "busy"].includes(res.result) ? res.result : "failed";
+  toast(F("rs_r_" + k, {n: r.name, f: ((res && res.fabrics) || []).join(", ")}));
+  resetBox = {id: null, html: ""};
+  await load(true);
+  if (k === "reset") openCodes(); else renderReset();   // its code now waits in the list: what is needed to pair it again
+}
+
 async function openReport() {
   openSheet(head(L("report"), L("report_tip")) + `<p class="mut">${L("loading")}</p>`);
   try {
@@ -1247,6 +1297,13 @@ document.addEventListener("click", e => {
   }
   const pc = e.target.closest("button[data-pc]");
   if (pc) return pairClick(pc);
+  const rs = e.target.closest("button[data-reset],button[data-rs]");
+  if (rs) {
+    if (rs.disabled) return;
+    if (rs.dataset.reset) return resetAsk(rs.dataset.reset);
+    if (rs.dataset.rs === "go") return resetGo(rs);
+    resetBox = {id: null, html: ""}; return renderReset();
+  }
   const cp = e.target.closest("button[data-copy]");
   if (cp) {
     navigator.clipboard.writeText(cp.dataset.copy).then(() => { cp.textContent = L("copied"); }, () => toast(cp.dataset.copy));
@@ -1289,7 +1346,10 @@ $("#sheet").addEventListener("submit", e => {   // pairing code typed, or a kept
   if (f.classList.contains("pca")) pairPost({id: pair.id, attach: f.k.value}, "pc_saved");
   else if (f.c.value.trim()) pairPost({id: pair.id, code: f.c.value}, "pc_saved");
 });
-$("#sheet").addEventListener("change", e => { if (e.target.matches(".pcdrop input[type=file]")) pairPhoto(e.target.files[0]); });
+$("#sheet").addEventListener("change", e => {
+  if (e.target.matches(".pcdrop input[type=file]")) pairPhoto(e.target.files[0]);
+  if (e.target.id === "rsok") { const go = $('#sheet button[data-rs="go"]'); if (go) go.disabled = !e.target.checked; }
+});
 // a photo dropped anywhere on the panel while it asks for a code, or pasted
 $("#sheet").addEventListener("dragover", e => { const d = $("#sheet .pcdrop"); if (d) { e.preventDefault(); d.classList.add("over"); } });
 $("#sheet").addEventListener("dragleave", e => { const d = $("#sheet .pcdrop"); if (d && !$("#sheet").contains(e.relatedTarget)) d.classList.remove("over"); });

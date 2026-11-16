@@ -179,6 +179,20 @@ class WebUI:
                         if not getattr(ui.w, "reattach", None):
                             raise RuntimeError("recovery attempt unavailable")
                         out = {"ok": True, **ui.w.reattach.recover_node(nid)}
+                    elif act in ("reset_info", "reset"):
+                        # factory reset from a distance: only for a node whose pairing code is kept,
+                        # or its label would be the only way back
+                        if not getattr(ui.w, "reattach", None):
+                            raise RuntimeError("reset unavailable")
+                        present, attrs = ui._node(nid)[:2]
+                        code = ui.pairing.of(nid, attrs, present)
+                        if act == "reset_info":
+                            fabs = ui.w.reattach.fabrics(nid)[1]
+                            out = {"ok": True, "fabrics": [f["name"] for f in fabs], "manual": code["manual"] if code else None}
+                        elif not code:
+                            out = {"ok": True, "result": "nocode"}
+                        else:
+                            out = {"ok": True, **ui.w.reattach.reset_node(nid)}
                     elif act == "remove":
                         h.matter_command("remove_node", {"node_id": int(nid, 16)}, timeout=120)
                         out = {"ok": True}

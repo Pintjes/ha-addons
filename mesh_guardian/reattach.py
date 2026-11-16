@@ -44,7 +44,8 @@ FOLLOW_FOR_S = 300    # s: ...for this long
 RECOVER_WAIT_S = 120  # s: recovery attempt: time left to the Matter Server to reach an unavailable node
 CLOSE_TRIES = 3       # recovery attempt: tries to close the fail-safe of a node that is back...
 CLOSE_EVERY_S = 10    # s: ...this far apart
-RESULT_KEEP_S = 900 # s: a result stays in the table this long (the page shows it when it arrives)
+FABRIC_VENDORS = {4937: "Apple Home", 24582: "Google Home", 4362: "SmartThings", 4631: "Amazon Alexa"}   # fabric vendor id -> name shown
+RESULT_KEEP_S = 900# s: a result stays in the table this long (the page shows it when it arrives)
 END_DEVICE_ROLES = (2, 3, 4)   # sleepy end device, end device, REED (a full end device attached as a child)
 CONNECT_NETWORK = 6   # Network Commissioning command id
 # PROVISIONAL (2.12.0, trial asked by the user): the same command on a router. A router has no
@@ -591,6 +592,61 @@ class Reattach:
             self._recover_result(nid, name, "failed", t("{node}: recovery attempt refused", node=name))
             return False
         return True
+
+    # ------------------------------------------------------------ factory reset from a distance
+    # Matter has no reset command, but a node that leaves its last fabric erases what it
+    # learnt since it was paired (the SDK of most devices then restarts it, ready to be paired
+    # again). An administrator may remove any fabric of a node, not only its own: the others
+    # are removed first, then the Matter Server removes the node, which removes its own.
+    def fabrics(self, nid):
+        """(index of the fabric of Home Assistant, [{"index", "name", "own"}] of every fabric)."""
+        res = self.h.matter_command("read_attribute", {"node_id": int(nid, 16), "attribute_path": ["0/62/1", "0/62/5"]},
+                                    timeout=60)
+        own, listed = (res or {}).get("0/62/5"), (res or {}).get("0/62/1")
+        if own is None or not isinstance(listed, list) or not listed:
+            raise RuntimeError("fabrics not read")
+        out = []
+        for f in listed:
+            index, vendor, label = _field(f, "fabricIndex", "254"), _field(f, "vendorID", "2"), _field(f, "label", "5")
+            if index is None:
+                raise RuntimeError("fabric without index")
+            name = "Home Assistant" if index == own else FABRIC_VENDORS.get(vendor) or label or f"vendor {vendor}"
+            out.append({"index": index, "name": name, "own": index == own})
+        if not any(f["own"] for f in out):
+            raise RuntimeError("own fabric not listed")
+        return own, out
+
+    def reset_node(self, nid):
+        """Remove the node from every fabric, its own last. Returns {"result": "reset" |
+        "noanswer" (nothing was removed) | "partial" (it left other fabrics but is still in
+        Home Assistant) | "busy", "fabrics": names removed}."""
+        if not self.busy.acquire(timeout=1):
+            return {"result": "busy"}
+        removed = []
+        try:
+            node_id = int(nid, 16)
+            with self.h.lock:
+                name = (self.h.nodes.get(nid) or {}).get("name") or f"0x{nid.lstrip('0')}"
+            try:
+                _own, fabs = self.fabrics(nid)
+                for f in fabs:
+                    if f["own"]:
+                        continue
+                    res = self._command(node_id, 62, "RemoveFabric", {"fabricIndex": f["index"]}, timeout=60)
+                    if _field(res, "statusCode", "0") != 0:
+                        raise RuntimeError(f"RemoveFabric {f['index']}: {res}")
+                    removed.append(f["name"])
+                self.h.matter_command("remove_node", {"node_id": node_id}, timeout=120)
+            except Exception as err:  # noqa: BLE001
+                LOG.warning("reset of %s stopped after %d fabric(s): %s", name, len(removed), err)
+                return {"result": "partial" if removed else "noanswer", "fabrics": removed}
+            removed.append("Home Assistant")
+            self.w.emit("node_reset", t("{node}: reset from a distance, to pair again", node=name), node=name, fabrics=removed)
+            if self.table:
+                self.table.cache_t = 0
+            return {"result": "reset", "fabrics": removed}
+        finally:
+            self.busy.release()
 
     def run_now(self, origin):
         """Read the parent link of every end device and move those whose link is poor (button)."""
