@@ -74,9 +74,10 @@ from radio import Radio  # noqa: E402
 from storm import Storm  # noqa: E402
 from matterlog import MatterLog  # noqa: E402
 from suplog import SupervisorLog  # noqa: E402
+from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.22.1"
+VERSION = "2.23.0"
 
 _MQ = _load_mqtt()
 MQTT_HOST = _MQ.get("host") or os.environ.get("MQTT_HOST", "core-mosquitto")
@@ -278,42 +279,38 @@ class Watch:
 
     # ---------------------------------------------------------------- known
     def _load_known(self):
+        known = load_json(KNOWN_FILE)
+        if known is None:
+            return
         try:
-            with open(KNOWN_FILE) as f:
-                for node in json.load(f):
-                    self.matter.setdefault(node, {
-                        "online": False, "since": None, "fails": 0,
-                        "addrs": [], "prefix": None, "seen": False,
-                    })
+            for node in known:
+                self.matter.setdefault(node, {
+                    "online": False, "since": None, "fails": 0,
+                    "addrs": [], "prefix": None, "seen": False,
+                })
             LOG.info(t("{n} known Matter nodes loaded", n=len(self.matter)))
-        except FileNotFoundError:
-            pass
         except Exception as err:  # noqa: BLE001
             LOG.warning(t("Cannot read {file}: {err}", file=KNOWN_FILE, err=err))
 
     def _save_known(self):
         try:
-            with open(KNOWN_FILE, "w") as f:
-                json.dump(sorted(self.matter), f)
+            with self.lock:
+                nodes = sorted(self.matter)
+            save_json(KNOWN_FILE, nodes)
         except Exception as err:  # noqa: BLE001
             LOG.warning(t("Cannot write {file}: {err}", file=KNOWN_FILE, err=err))
 
     def _load_br_names(self):
-        try:
-            with open(BR_NAMES_FILE) as f:
-                self.br_names = json.load(f)
-        except FileNotFoundError:
-            pass
-        except Exception as err:  # noqa: BLE001
-            LOG.warning(t("Cannot read {file}: {err}", file=BR_NAMES_FILE, err=err))
+        names = load_json(BR_NAMES_FILE)
+        if isinstance(names, dict):
+            self.br_names = names
 
     def _save_br_names(self):
         cutoff = time.time() - 7 * 86400
         for v in self.br_names.values():
             v["detached"] = [x for x in v.get("detached", []) if x >= cutoff]
         try:
-            with open(BR_NAMES_FILE, "w") as f:
-                json.dump(self.br_names, f, ensure_ascii=False)
+            save_json(BR_NAMES_FILE, self.br_names, ensure_ascii=False)
         except Exception as err:  # noqa: BLE001
             LOG.warning(t("Cannot write {file}: {err}", file=BR_NAMES_FILE, err=err))
 

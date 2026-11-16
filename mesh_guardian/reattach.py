@@ -27,12 +27,12 @@ Recovery attempt (recover_node): the same connect command, sent to a Thread node
 that is unavailable, router or end device. Its last known network id is used
 (it cannot be read). Nothing to lose: the node is already out.
 """
-import json
 import logging
 import threading
 import time
 
 from i18n import t, tn
+from store import load_json, save_json
 from nodetable import nb_rssi
 from advice import weak_link
 
@@ -125,12 +125,8 @@ class Reattach:
         self.results = {}         # node hex -> {"state": "pending" | "done", "text", "at"} of the last search
         self.recovering = set()   # node hex of the recovery attempts still followed
         self.resets = {}          # node hex -> time of its reset with the Reset button (its old identity is announced a while)
-        try:
-            with open(RESETS_FILE) as f:
-                data = json.load(f)
-            self.resets = {k: v for k, v in data.items() if time.time() - v < RESETS_KEEP_S} if isinstance(data, dict) else {}
-        except (OSError, ValueError):
-            pass
+        data = load_json(RESETS_FILE, {})
+        self.resets = {k: v for k, v in data.items() if time.time() - v < RESETS_KEEP_S} if isinstance(data, dict) else {}
 
     def was_reset(self, node_id):
         """True for the id (int) of a node reset with the Reset button in the last days."""
@@ -641,10 +637,33 @@ class Reattach:
             raise RuntimeError("own fabric not listed")
         return own, out
 
+    def _leave_own(self, node_id, own):
+        """Ask the node to leave the fabric of Home Assistant. "left" (it confirmed), "unsure"
+        (no answer, and it can no longer be reached: it most likely left, the answer was lost
+        with the session it closed). Raises when it refused or when it still answers on it."""
+        try:
+            res = self._command(node_id, 62, "RemoveFabric", {"fabricIndex": own}, timeout=60)
+        except Exception as err:  # noqa: BLE001
+            LOG.debug("leaving the fabric, no answer from %s: %s", node_id, err)
+            try:   # still reachable on the fabric: it did not leave
+                self.h.matter_command("read_attribute", {"node_id": node_id, "attribute_path": "0/62/5"}, timeout=30)
+            except Exception:  # noqa: BLE001
+                return "unsure"
+            raise RuntimeError("still on the fabric of Home Assistant") from err
+        if _field(res, "statusCode", "0") != 0:
+            raise RuntimeError(f"RemoveFabric {own}: {res}")
+        return "left"
+
     def reset_node(self, nid):
         """Remove the node from every fabric, its own last. Returns {"result": "reset" |
-        "noanswer" (nothing was removed) | "partial" (it left other fabrics but is still in
-        Home Assistant) | "busy", "fabrics": names removed}."""
+        "unsure" (it did not confirm leaving the last one, but no longer answers) | "noanswer"
+        (nothing was removed) | "partial" (it left other fabrics but is still in Home Assistant)
+        | "busy", "fabrics": names removed, "listed": still in the list of the Matter Server}.
+
+        The fabric of Home Assistant is removed here rather than left to remove_node: the
+        Matter Server removes the node from its list even when the device refuses to leave (it
+        only writes it in its log), and the device would then keep a fabric nobody can use,
+        out of reach of any reset from a distance."""
         if not self.busy.acquire(timeout=1):
             return {"result": "busy"}
         removed = []
@@ -653,7 +672,7 @@ class Reattach:
             with self.h.lock:
                 name = (self.h.nodes.get(nid) or {}).get("name") or f"0x{nid.lstrip('0')}"
             try:
-                _own, fabs = self.fabrics(nid)
+                own, fabs = self.fabrics(nid)
                 for f in fabs:
                     if f["own"]:
                         continue
@@ -661,21 +680,27 @@ class Reattach:
                     if _field(res, "statusCode", "0") != 0:
                         raise RuntimeError(f"RemoveFabric {f['index']}: {res}")
                     removed.append(f["name"])
-                self.h.matter_command("remove_node", {"node_id": node_id}, timeout=120)
+                result = "reset" if self._leave_own(node_id, own) == "left" else "unsure"
             except Exception as err:  # noqa: BLE001
                 LOG.warning("reset of %s stopped after %d fabric(s): %s", name, len(removed), err)
                 return {"result": "partial" if removed else "noanswer", "fabrics": removed}
             removed.append("Home Assistant")
+            listed = False
+            try:   # the device has left: the Matter Server forgets it (it cannot reach it any more)
+                self.h.matter_command("remove_node", {"node_id": node_id}, timeout=180)
+            except Exception as err:  # noqa: BLE001
+                listed = "does not exist" not in str(err).lower()
+                LOG.warning("reset of %s: left its fabrics, but the Matter Server did not remove it: %s", name, err)
             self.resets[nid] = time.time()
             try:
-                with open(RESETS_FILE, "w") as f:
-                    json.dump(self.resets, f)
+                save_json(RESETS_FILE, self.resets)
             except OSError as err:
                 LOG.debug("cannot write %s: %s", RESETS_FILE, err)
-            self.w.emit("node_reset", t("{node}: reset from a distance, to pair again", node=name), node=name, fabrics=removed)
+            self.w.emit("node_reset", t("{node}: reset from a distance, to pair again", node=name), node=name,
+                        fabrics=removed, result=result)
             if self.table:
                 self.table.cache_t = 0
-            return {"result": "reset", "fabrics": removed}
+            return {"result": result, "fabrics": removed, "listed": listed}
         finally:
             self.busy.release()
 

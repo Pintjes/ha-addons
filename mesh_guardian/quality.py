@@ -17,7 +17,6 @@ Score: one sample per minute, score over a sliding hour (24h in the attributes).
   (capped at 70 % when the network stays partitioned 5 min or more).
 """
 
-import json
 import logging
 import socket
 import threading
@@ -26,6 +25,7 @@ from collections import deque
 
 from advice import weak_link
 from i18n import t
+from store import load_json, save_json
 
 LOG = logging.getLogger("mg.quality")
 STATE_FILE = "/data/quality.json"
@@ -73,8 +73,7 @@ class Quality:
     # ------------------------------------------------------------ state
     def _load(self):
         try:
-            with open(STATE_FILE) as f:
-                st = json.load(f)
+            st = load_json(STATE_FILE, {}) or {}
             self.rtt = st.get("rtt", {})
             cutoff = time.time() - WINDOW_24H * SAMPLE_S
             self.samples.extend(s for s in st.get("samples", []) if s["t"] >= cutoff)
@@ -83,11 +82,11 @@ class Quality:
 
     def _save(self):
         try:
-            with self.lock:
-                data = {"rtt": self.rtt, "samples": list(self.samples)}
-            with open(STATE_FILE, "w") as f:
-                json.dump(data, f)
-        except OSError as err:
+            with self.lock:   # a copy: the probes add to these lists while the file is written
+                data = {"rtt": {k: (list(v) if isinstance(v, list) else dict(v) if isinstance(v, dict) else v)
+                                for k, v in self.rtt.items()}, "samples": list(self.samples)}
+            save_json(STATE_FILE, data)
+        except (OSError, TypeError, ValueError, RuntimeError) as err:
             LOG.warning(t("Cannot write {file}: {err}", file=STATE_FILE, err=err))
 
     def reset(self):

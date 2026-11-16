@@ -23,6 +23,7 @@ import websocket  # websocket-client
 
 from i18n import t
 from nodetable import ext_of
+from store import load_json, save_json
 
 LOG = logging.getLogger("mg.live")
 CONTACTS_FILE = "/data/last_contact.json"
@@ -61,39 +62,35 @@ class MatterLive:
         self._saved = 0
         self.t0 = time.time()   # start of the add-on: silences across a restart are not the node's
         try:
-            with open(CONTACTS_FILE) as f:
-                self.contacts = {k: float(v) for k, v in json.load(f).items()}
-        except Exception:  # noqa: BLE001
+            self.contacts = {k: float(v) for k, v in (load_json(CONTACTS_FILE, {}) or {}).items()}
+        except Exception:  # noqa: BLE001 - a value of an unexpected type
             self.contacts = {}
         self.fresh = {}       # (node hex, path) -> (time, value) read directly from the node
         self._fresh_saved = 0
         try:
-            with open(FRESH_FILE) as f:
-                now = time.time()
-                for key, (t0, value) in json.load(f).items():
-                    nid, path = key.split("|", 1)
-                    if now - t0 < FRESH_KEEP_S:
-                        self.fresh[(nid, path)] = (t0, value)
+            now = time.time()
+            for key, (t0, value) in (load_json(FRESH_FILE, {}) or {}).items():
+                nid, path = key.split("|", 1)
+                if now - t0 < FRESH_KEEP_S:
+                    self.fresh[(nid, path)] = (t0, value)
         except Exception:  # noqa: BLE001
             self.fresh = {}
         # (node hex, path) -> when the node last gave that value (reported or read). No entry:
         # the value comes from the Matter Server cache and its age is not known
         self.stamps = {(k, p): t0 for (k, p), (t0, _) in self.fresh.items()}
         try:
-            with open(STAMPS_FILE) as f:
-                now = time.time()
-                for key, t0 in json.load(f).items():
-                    nid, path = key.split("|", 1)
-                    if path.endswith(FIRST):
-                        self.stamps[(nid, path)] = t0
-                    elif now - t0 < STAMP_KEEP_S:
-                        self.stamps[(nid, path)] = max(t0, self.stamps.get((nid, path), 0))
+            now = time.time()
+            for key, t0 in (load_json(STAMPS_FILE, {}) or {}).items():
+                nid, path = key.split("|", 1)
+                if path.endswith(FIRST):
+                    self.stamps[(nid, path)] = t0
+                elif now - t0 < STAMP_KEEP_S:
+                    self.stamps[(nid, path)] = max(t0, self.stamps.get((nid, path), 0))
         except Exception:  # noqa: BLE001
             pass
         self.sources = {}     # node hex -> {"src", "active": ts, "gap": s, "since": ts}
         try:
-            with open(SOURCES_FILE) as f:
-                self.sources = json.load(f)
+            self.sources = load_json(SOURCES_FILE, {}) or {}
             for s in self.sources.values():
                 s["active"] = None   # the add-on was stopped: that gap is not the node's
         except Exception:  # noqa: BLE001
@@ -101,9 +98,10 @@ class MatterLive:
 
     def _save_contacts(self):
         try:
-            with open(CONTACTS_FILE, "w") as f:
-                json.dump(self.contacts, f)
-        except OSError as err:
+            with self.lock:
+                data = dict(self.contacts)
+            save_json(CONTACTS_FILE, data)
+        except (OSError, TypeError, ValueError) as err:
             LOG.warning(t("Cannot write {file}: {err}", file=CONTACTS_FILE, err=err))
 
     def reset_contacts(self):
@@ -156,9 +154,10 @@ class MatterLive:
 
     def _save_sources(self):
         try:
-            with open(SOURCES_FILE, "w") as f:
-                json.dump(self.sources, f)
-        except OSError as err:
+            with self.lock:
+                data = {k: dict(v) for k, v in self.sources.items()}
+            save_json(SOURCES_FILE, data)
+        except (OSError, TypeError, ValueError) as err:
             LOG.warning(t("Cannot write {file}: {err}", file=SOURCES_FILE, err=err))
 
     def rhythm(self, nid):
@@ -247,9 +246,8 @@ class MatterLive:
                      if k in self.nodes and (p.endswith(FIRST) or (p in STAMP_PATHS and now - t0 < STAMP_KEEP_S))}
         for name, content in ((FRESH_FILE, data), (STAMPS_FILE, times)):
             try:
-                with open(name, "w") as f:
-                    json.dump(content, f)
-            except OSError as err:
+                save_json(name, content)
+            except (OSError, TypeError, ValueError) as err:
                 LOG.warning(t("Cannot write {file}: {err}", file=name, err=err))
 
     def _mark(self, nid, path, now):

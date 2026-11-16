@@ -4,12 +4,12 @@
 """7-day history of every node: availability, parent (or best link), signal and response
 time every 15 minutes, for the node panel of the table."""
 
-import json
 import logging
 import threading
 import time
 
 from i18n import t
+from store import load_json, save_json
 
 LOG = logging.getLogger("mg.history")
 FILE = "/data/node_history.json"
@@ -22,19 +22,14 @@ class History:
         self.w = watch
         self.lock = threading.Lock()
         self.data = {}   # node hex -> [[t, available, parent, rssi, response ms, link quality], ...]
-        try:
-            with open(FILE) as f:
-                self.data = json.load(f)
-        except Exception:  # noqa: BLE001
-            self.data = {}
+        data = load_json(FILE, {})
+        self.data = data if isinstance(data, dict) else {}
 
     def _save(self):
         try:
             with self.lock:
-                text = json.dumps(self.data, separators=(",", ":"))
-            with open(FILE, "w") as f:
-                f.write(text)
-        except OSError as err:
+                save_json(FILE, self.data, separators=(",", ":"))
+        except (OSError, TypeError, ValueError) as err:
             LOG.warning(t("Cannot write {file}: {err}", file=FILE, err=err))
 
     @staticmethod

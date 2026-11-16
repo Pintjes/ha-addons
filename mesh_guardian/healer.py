@@ -34,6 +34,7 @@ from datetime import datetime, timezone
 import websocket  # websocket-client
 
 from i18n import t
+from store import load_json, save_json
 
 LOG = logging.getLogger("mg.healer")
 
@@ -116,8 +117,9 @@ class Healer:
     # ------------------------------------------------------------- state
     def _load_state(self):
         try:
-            with open(self.state_file) as f:
-                st = json.load(f)
+            st = load_json(self.state_file, {})
+            if not isinstance(st, dict):
+                st = {}
             if "enabled" in st:
                 self.enabled = st["enabled"]
                 self.enabled_origin = t("last state saved, set by the switch")
@@ -135,20 +137,23 @@ class Healer:
             # recovery pings already sent to the nodes still unavailable: the count goes on after a restart
             self.pings_saved = {k: v for k, v in (st.get("ping_counts") or {}).items()
                                 if v and v[1] and time.time() - v[1] < 86400}
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as err:  # noqa: BLE001 - a value of an unexpected type: the rest is kept
+            LOG.warning(t("Cannot save state: {err}", err=err))
 
     def _save_state(self):
         try:
-            with open(self.state_file, "w") as f:
-                json.dump({"enabled": self.enabled, "success": self.success,
-                           "self_recovered": self.self_recovered, "failures": self.failures,
-                           "pings_sent": self.pings_sent, "last_result": self.last_result,
-                           "recent": self.recent, "history_done": self.history_done, "mass": self.mass,
-                           "gave_up_nodes": {k: n.get("gave_up_t") or time.time() for k, n in self.nodes.items()
-                                             if n.get("gave_up") and not n.get("available")},
-                           "ping_counts": {k: [n["pings"], n.get("last_ping")] for k, n in self.nodes.items()
-                                           if n.get("pings") and not n.get("gave_up") and not n.get("available")}}, f)
+            # built under the lock (the nodes change from several threads), and only one writer
+            # at a time: two threads writing the same file could mix their contents
+            with self.lock:
+                data = {"enabled": self.enabled, "success": self.success,
+                        "self_recovered": self.self_recovered, "failures": self.failures,
+                        "pings_sent": self.pings_sent, "last_result": self.last_result,
+                        "recent": list(self.recent), "history_done": self.history_done, "mass": self.mass,
+                        "gave_up_nodes": {k: n.get("gave_up_t") or time.time() for k, n in self.nodes.items()
+                                          if n.get("gave_up") and not n.get("available")},
+                        "ping_counts": {k: [n["pings"], n.get("last_ping")] for k, n in self.nodes.items()
+                                        if n.get("pings") and not n.get("gave_up") and not n.get("available")}}
+                save_json(self.state_file, data)
         except Exception as err:  # noqa: BLE001
             LOG.warning(t("Cannot save state: {err}", err=err))
 
@@ -159,21 +164,18 @@ class Healer:
 
     # ------------------------------------------------------------- statistics
     def _load_outages(self):
-        try:
-            with open(self.outages_file) as f:
-                self.outages = json.load(f)
-        except Exception:  # noqa: BLE001
-            self.outages = {}
+        data = load_json(self.outages_file, {})
+        self.outages = data if isinstance(data, dict) else {}
 
     def _save_outages(self):
         cutoff = time.time() - 8 * 86400
-        for k in list(self.outages):
-            self.outages[k] = [o for o in self.outages[k] if (o[1] or time.time()) >= cutoff]
-            if not self.outages[k]:
-                del self.outages[k]
         try:
-            with open(self.outages_file, "w") as f:
-                json.dump(self.outages, f)
+            with self.lock:   # the outages are read under the lock by the table and the history
+                for k in list(self.outages):
+                    self.outages[k] = [o for o in self.outages[k] if (o[1] or time.time()) >= cutoff]
+                    if not self.outages[k]:
+                        del self.outages[k]
+                save_json(self.outages_file, self.outages)
         except Exception as err:  # noqa: BLE001
             LOG.warning(t("Cannot save statistics: {err}", err=err))
 
@@ -361,6 +363,12 @@ class Healer:
         if self.storm and self.storm.active:
             LOG.info(t("Sweep skipped (storm)"))
             return
+        # a node Home Assistant still lists but the Matter Server no longer knows (removed or
+        # reset) is left out: the server would only answer "does not exist"
+        live = getattr(self.w, "live", None)
+        known = live.node_ids() if live and live.connected else None
+        if known:
+            targets = [k for k in targets if int(k, 16) in known]
         ok, bad = 0, []
         for node in targets:
             if self.w.stop.is_set():
@@ -368,9 +376,12 @@ class Healer:
             try:
                 res = self.matter_command("ping_node", {"node_id": int(node, 16)}, timeout=60)
                 self._answered(node, res)
-            except Exception as err:  # noqa: BLE001
+            except ConnectionError as err:   # the Matter Server is out of reach: no point going on
                 LOG.warning(t("Sweep interrupted: {err}", err=err))
                 return
+            except Exception as err:  # noqa: BLE001 - this node only: it counts as not answering
+                LOG.debug("sweep, %s: %s", node, err)
+                res = None
             self.pings_sent += 1
             self.tally("pings_sent")
             if any((res or {}).values()):
@@ -631,6 +642,11 @@ class Healer:
                         n.update({"pings": min(int(sent[0]), self.max_attempts), "last_ping": sent[1]})
                     self.nodes[node] = n
                     first = True
+                    # an outage left open (the node came back while the add-on was stopped, or
+                    # Home Assistant left it out of a list) ends now that the node is back
+                    lst = self.outages.get(node)
+                    if avail and lst and lst[-1][1] is None:
+                        lst[-1][1] = max(since, lst[-1][0])
                 else:
                     first = False
                 n["name"], n["area"] = item.get("name") or short_id(node), item.get("area") or "?"

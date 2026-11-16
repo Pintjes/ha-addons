@@ -21,7 +21,9 @@ from pairing import Pairing, identity
 
 LOG = logging.getLogger("mg.web")
 PORT = 8790
-ALLOWED = {"172.30.32.2", "127.0.0.1", "::1"}
+# Only the ingress of Home Assistant (it has checked the user): not the loopback, which any
+# process of the host can use when the server listens on every address (fallback below)
+ALLOWED = {"172.30.32.2"}
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 PAGE = os.path.join(WEB, "index.html")
 NEW_NODE_S = 86400   # s: a node paired less than this ago is asked for its pairing code
@@ -232,7 +234,7 @@ class WebUI:
                             out = {"ok": True, "result": "nocode"}
                         else:
                             out = {"ok": True, **ui.w.reattach.reset_node(nid)}
-                            if out.get("result") == "reset":
+                            if out.get("result") in ("reset", "unsure"):
                                 ui.pairing.mark_reset(nid)   # its code follows it when it comes back
                     elif act == "remove":
                         h.matter_command("remove_node", {"node_id": int(nid, 16)}, timeout=120)

@@ -13,11 +13,11 @@ the next report of the node. Nothing here sends traffic to the nodes.
 import base64
 import json
 import logging
-import os
 import threading
 import time
 
 from i18n import lang, t
+from store import load_json, save_json
 
 LOG = logging.getLogger("mg.table")
 from advice import advise, lowest, min_known, weak_link  # noqa: E402
@@ -666,9 +666,8 @@ class NodeTable:
     def _ap_names(self):
         if not hasattr(self, "_ap_names_v"):
             try:
-                with open(self.AP_FILE, encoding="utf-8") as f:
-                    self._ap_names_v = {k.lower(): v for k, v in json.load(f).items()}
-            except (OSError, ValueError):
+                self._ap_names_v = {k.lower(): v for k, v in (load_json(self.AP_FILE, {}) or {}).items()}
+            except (AttributeError, TypeError):
                 self._ap_names_v = {}
         return self._ap_names_v
 
@@ -683,9 +682,7 @@ class NodeTable:
             names[b] = name
         else:
             names.pop(b, None)
-        with open(self.AP_FILE + ".tmp", "w", encoding="utf-8") as f:
-            json.dump(names, f, ensure_ascii=False)
-        os.replace(self.AP_FILE + ".tmp", self.AP_FILE)
+        save_json(self.AP_FILE, names, ensure_ascii=False)
         self._ap_names_v = names
         self.cache_t = 0   # next /api/table rebuilds with the new name
 

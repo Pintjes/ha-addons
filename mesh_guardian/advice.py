@@ -23,11 +23,11 @@ The Advisor, called after every radio survey:
 - keeps what advise() needs across restarts (parent searches, weak links).
 """
 
-import json
 import logging
 import time
 
 from i18n import t, tn
+from store import load_json, save_json
 
 LOG = logging.getLogger("mg.advice")
 STATE_FILE = "/data/advice_state.json"
@@ -319,8 +319,9 @@ class Advisor:
     # ------------------------------------------------------------- state
     def _load(self):
         try:
-            with open(STATE_FILE) as f:
-                st = json.load(f)
+            st = load_json(STATE_FILE)
+            if not isinstance(st, dict):
+                return
             self.prev = st.get("prev", {})
             self.uptimes = st.get("reboot_counts", {})
             self.models = st.get("models", {})
@@ -336,12 +337,10 @@ class Advisor:
 
     def _save(self):
         try:
-            with open(STATE_FILE, "w") as f:
-                json.dump({"prev": self.prev, "reboot_counts": self.uptimes, "models": self.models,
-                           "changes": self.changes[-30:], "last_t": self.last_t,
-                           "tried": {k: v for k, v in self.tried.items() if time.time() - v[0] < 7 * 86400},
-                           "weak_since": self.weak_since},
-                          f, ensure_ascii=False)
+            save_json(STATE_FILE, {"prev": self.prev, "reboot_counts": self.uptimes, "models": self.models,
+                                   "changes": self.changes[-30:], "last_t": self.last_t,
+                                   "tried": {k: v for k, v in list(self.tried.items()) if time.time() - v[0] < 7 * 86400},
+                                   "weak_since": self.weak_since}, ensure_ascii=False)
         except Exception as err:  # noqa: BLE001
             LOG.warning(t("Cannot save the radio advice state: {err}", err=err))
 

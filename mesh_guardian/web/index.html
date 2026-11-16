@@ -317,7 +317,7 @@
 "use strict";
 // ------------------------------------------------------------ texts
 const T = {
-  en: {todo_info:"Good to know ({n})", np_before:"Before: {p}, {r} dBm", a_parent_noanswer:"{n}: no answer (asleep?)", a_parent_new:"{n}: new parent {l}", a_failed:"{n}: action failed", check_bat:"Check its batteries", check_power:"Check its power", flap_power:"Answers now and then. Cut its power for 10 s", flap_bat:"Answers now and then. Remove its battery for 10 s", down_since:"Since {t}.", down_do_bat:"Since {t}. Check its batteries.", more:"+{n}", refresh:"Refresh", reading:"Reading the nodes again… {d}/{n}", reading0:"Reading the nodes again…", report:"Report", classic:"Classic view", loading:"loading…", error:"error", live:"live", polling:"live link down: values read on demand", updated:"updated at {t}", connecting:"connecting to the Matter Server…", updating:"reading the nodes…", updating_n:"reading the nodes… {d}/{n}",
+  en: {todo_info:"Good to know ({n})", np_before:"Before: {p}, {r} dBm", a_parent_noanswer:"{n}: no answer (asleep?)", a_parent_new:"{n}: new parent {l}", a_failed:"{n}: action failed", check_bat:"Check its batteries", check_power:"Check its power", flap_power:"Answers now and then. Cut its power for 10 s", flap_bat:"Answers now and then. Remove its battery for 10 s", down_since:"Since {t}.", down_do_bat:"Since {t}. Check its batteries.", more_n:"+{n}", refresh:"Refresh", reading:"Reading the nodes again… {d}/{n}", reading0:"Reading the nodes again…", report:"Report", classic:"Classic view", loading:"loading…", error:"error", live:"live", polling:"live link down: values read on demand", updated:"updated at {t}", connecting:"connecting to the Matter Server…", updating:"reading the nodes…", updating_n:"reading the nodes… {d}/{n}",
     silent:"silent", w_silent:"Silent", n_silent:"{n} silent node", n_silent_pl:"{n} silent nodes", silent_sub:"{name}: probably without power.",
     silent_tip:"No sign of life for {t} (usually every {u}): probably without power.",
     t_rhythm:"Sign of life", rhythm_v:"every {u} at most · silence flagged after {l}", rhythm_wait:"being measured",
@@ -393,13 +393,15 @@ const T = {
     rs_router:"It is a Thread router: the nodes that go through it pick another one, which takes a few minutes. Wait 2 to 3 minutes before pairing it again, or the pairing may fail.",
     rs_check:"I understand that this node will have to be paired again", rs_go:"Reset for good", rs_cancel:"Cancel", rs_close:"Close",
     rs_nocode:"Save its pairing code first: without it, the label of the device would be the only way to pair it again.", rs_noanswer:"{n} does not answer: nothing was sent",
-    rs_r_reset:"{n} reset (removed from: {f}). Its code is below, to pair it again.", rs_r_partial:"{n}: removed from {f}, but still in Home Assistant. Try again.",
+    rs_r_reset:"{n} reset (removed from: {f}). Its code is below, to pair it again.",
+    rs_r_unsure:"{n}: removed from {f}. It did not confirm leaving Home Assistant but no longer answers: check that it blinks, ready to be paired.",
+    rs_listed:"It is still listed by the Matter Server: remove it from the table.", rs_r_partial:"{n}: removed from {f}, but still in Home Assistant. Try again.",
     rs_r_noanswer:"{n}: no answer, nothing was removed", rs_r_nocode:"{n}: no pairing code kept, nothing was sent", rs_r_busy:"Another action is running, try again in a moment", rs_r_failed:"{n}: reset failed",
     note_t:"About these values", note:"Radio values: latest reports of the nodes. Battery nodes update less often (see Last contact). The page refreshes every minute.",
     roles:{leader:"Leader router", router:"Router", reed:"End", end_device:"End", sleepy_end_device:"Sleepy end", unassigned:"unassigned", unspecified:"unspecified", detached:"detached", child:"End device", offline:"offline"},
     boot:{unspecified:"unspecified", power_on:"power on", brown_out:"brown-out", software_watchdog:"software watchdog", hardware_watchdog:"hardware watchdog", software_update:"software update", software_reset:"software reset"},
     csrc:{report:"report", event:"event", read:"read", ping:"ping", passive:"packet"}},
-  fr: {todo_info:"À savoir ({n})", np_before:"Avant : {p}, {r} dBm", a_parent_noanswer:"{n} : pas de réponse (endormie ?)", a_parent_new:"{n} : nouveau parent {l}", a_failed:"{n} : action impossible", check_bat:"Vérifier les piles", check_power:"Vérifier l'alimentation", flap_power:"Répond par intermittence. Couper son alimentation 10 s", flap_bat:"Répond par intermittence. Retirer la pile 10 s", down_since:"Depuis {t}.", down_do_bat:"Depuis {t}. Vérifier les piles.", more:"+{n}", refresh:"Actualiser", reading:"Relecture des nodes… {d}/{n}", reading0:"Relecture des nodes…", report:"Rapport", classic:"Vue classique", loading:"chargement…", error:"erreur", live:"en direct", polling:"lien direct coupé : valeurs lues à la demande", updated:"mis à jour à {t}", connecting:"connexion au Matter Server…", updating:"lecture des nodes…", updating_n:"lecture des nodes… {d}/{n}",
+  fr: {todo_info:"À savoir ({n})", np_before:"Avant : {p}, {r} dBm", a_parent_noanswer:"{n} : pas de réponse (endormie ?)", a_parent_new:"{n} : nouveau parent {l}", a_failed:"{n} : action impossible", check_bat:"Vérifier les piles", check_power:"Vérifier l'alimentation", flap_power:"Répond par intermittence. Couper son alimentation 10 s", flap_bat:"Répond par intermittence. Retirer la pile 10 s", down_since:"Depuis {t}.", down_do_bat:"Depuis {t}. Vérifier les piles.", more_n:"+{n}", refresh:"Actualiser", reading:"Relecture des nodes… {d}/{n}", reading0:"Relecture des nodes…", report:"Rapport", classic:"Vue classique", loading:"chargement…", error:"erreur", live:"en direct", polling:"lien direct coupé : valeurs lues à la demande", updated:"mis à jour à {t}", connecting:"connexion au Matter Server…", updating:"lecture des nodes…", updating_n:"lecture des nodes… {d}/{n}",
     silent:"silencieuse", w_silent:"Silencieuse", n_silent:"{n} node silencieuse", n_silent_pl:"{n} nodes silencieuses", silent_sub:"{name} : probablement sans courant.",
     silent_tip:"Aucun signe de vie depuis {t} (d'habitude toutes les {u}) : probablement sans courant.",
     t_rhythm:"Signe de vie", rhythm_v:"toutes les {u} au plus · silence signalé après {l}", rhythm_wait:"mesure en cours",
@@ -475,7 +477,9 @@ const T = {
     rs_router:"C'est un routeur Thread : les nodes qui passent par elle en choisissent un autre, ce qui prend quelques minutes. Attendre 2 à 3 minutes avant de l'appairer à nouveau, sinon l'appairage peut échouer.",
     rs_check:"J'ai compris que cette node devra être appairée à nouveau", rs_go:"Réinitialiser définitivement", rs_cancel:"Annuler", rs_close:"Fermer",
     rs_nocode:"Enregistre d'abord son code d'appairage : sans lui, l'étiquette de l'appareil serait le seul moyen de l'appairer à nouveau.", rs_noanswer:"{n} ne répond pas : rien n'a été envoyé",
-    rs_r_reset:"{n} réinitialisée (retirée de : {f}). Son code est ci-dessous, pour l'appairer à nouveau.", rs_r_partial:"{n} : retirée de {f}, mais toujours dans Home Assistant. Réessayer.",
+    rs_r_reset:"{n} réinitialisée (retirée de : {f}). Son code est ci-dessous, pour l'appairer à nouveau.",
+    rs_r_unsure:"{n} : retirée de {f}. Elle n'a pas confirmé quitter Home Assistant mais ne répond plus : vérifier qu'elle clignote, prête à être appairée.",
+    rs_listed:"Elle reste dans la liste du Matter Server : la supprimer du tableau.", rs_r_partial:"{n} : retirée de {f}, mais toujours dans Home Assistant. Réessayer.",
     rs_r_noanswer:"{n} : pas de réponse, rien n'a été retiré", rs_r_nocode:"{n} : pas de code d'appairage conservé, rien n'a été envoyé", rs_r_busy:"Une autre action est en cours, réessayer dans un instant", rs_r_failed:"{n} : réinitialisation en échec",
     note_t:"À propos de ces valeurs", note:"Valeurs radio : derniers rapports des nodes. Sur pile, mises à jour moins fréquentes (voir « Dernier contact »). Page actualisée chaque minute.",
     roles:{leader:"Routeur leader", router:"Routeur", reed:"Final", end_device:"Final", sleepy_end_device:"Final dormant", unassigned:"non attribué", unspecified:"non précisé", detached:"détaché", child:"Appareil final", offline:"hors ligne"},
@@ -648,7 +652,7 @@ function renderHero() {
   if (nAct) parts.push(P2("n_act", nAct));
   const title = parts.length ? parts.join(", ") : L("all_ok");
   const sub = down.length === 1 ? F("down_sub", {name: esc(down[0].name), t: since(down[0])})
-    : down.length ? F("down_sub_pl", {names: down.slice(0, 3).map(x => esc(x.name)).join(", ") + (down.length > 3 ? " " + F("more", {n: down.length - 3}) : "")})
+    : down.length ? F("down_sub_pl", {names: down.slice(0, 3).map(x => esc(x.name)).join(", ") + (down.length > 3 ? " " + F("more_n", {n: down.length - 3}) : "")})
     : quiet.length ? F("silent_sub", {name: esc(quiet[0].name)}) : act.length ? L("act_sub") : L("all_ok_sub");
   const nets = Object.keys(NETS).filter(k => rows.some(r => net(r) === k));
   const brs = D.border_routers || [];
@@ -1439,11 +1443,11 @@ async function resetGo(b) {
   b.disabled = true; b.classList.add("busy");
   let res = null;
   try { res = await nodeAction(id, "reset"); } catch (e) { /* told below */ }
-  const k = res && res.ok && ["reset", "partial", "noanswer", "nocode", "busy"].includes(res.result) ? res.result : "failed";
-  toast(F("rs_r_" + k, {n: r.name, f: ((res && res.fabrics) || []).join(", ")}));
+  const k = res && res.ok && ["reset", "unsure", "partial", "noanswer", "nocode", "busy"].includes(res.result) ? res.result : "failed";
+  toast(F("rs_r_" + k, {n: r.name, f: ((res && res.fabrics) || []).join(", ")}) + (res && res.listed ? " " + L("rs_listed") : ""));
   resetBox = {id: null, html: ""};
   await load(true);
-  if (k === "reset") openCodes(); else renderReset();   // its code now waits in the list: what is needed to pair it again
+  if (k === "reset" || k === "unsure") openCodes(); else renderReset();   // its code now waits in the list: what is needed to pair it again
 }
 
 async function openReport() {

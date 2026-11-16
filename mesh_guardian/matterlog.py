@@ -24,6 +24,7 @@ import urllib.error
 import urllib.request
 
 from i18n import t
+from store import load_json, save_json
 
 LOG = logging.getLogger("mg")
 
@@ -69,8 +70,9 @@ class MatterLog:
     # ------------------------------------------------------------ state
     def _load(self):
         try:
-            with open(STATE_FILE) as f:
-                st = json.load(f)
+            st = load_json(STATE_FILE)
+            if not isinstance(st, dict):
+                return
             now_h = int(time.time() // 3600)
             self.hours = {int(h): v for h, v in (st.get("hours") or {}).items() if now_h - int(h) < KEEP_H}
             self.addr = st.get("addr") or {}
@@ -79,19 +81,16 @@ class MatterLog:
             self.gaps = [g for g in (st.get("gaps") or []) if time.time() - g[1] < KEEP_H * 3600]
             if st.get("saved"):       # not read while the add-on was stopped
                 self.gaps.append([st["saved"], time.time()])
-        except FileNotFoundError:
-            pass
         except Exception as err:  # noqa: BLE001
             LOG.debug("matter log state: %s", err)
 
     def save(self):
-        with self.lock:
-            data = {"hours": self.hours, "addr": self.addr, "opened": self.opened, "since": self.since, "gaps": self.gaps[-20:],
-                    "saved": time.time()}
         try:
-            with open(STATE_FILE, "w") as f:
-                json.dump(data, f)
-        except OSError as err:
+            with self.lock:   # written as text under the lock: the log follower keeps feeding these
+                text = json.dumps({"hours": self.hours, "addr": self.addr, "opened": self.opened, "since": self.since,
+                                   "gaps": self.gaps[-20:], "saved": time.time()})
+            save_json(STATE_FILE, json.loads(text))
+        except (OSError, TypeError, ValueError, RuntimeError) as err:
             LOG.warning(t("Cannot write {file}: {err}", file=STATE_FILE, err=err))
         self._saved = time.time()
 

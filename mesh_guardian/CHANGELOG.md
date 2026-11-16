@@ -4,6 +4,18 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.23.0] - 2026-11-16
+
+### Fixed
+
+- The sweep no longer stops at the first node in error ("Sweep interrupted: Node … does not exist"): a node the Matter Server no longer knows is left out, and a node that fails counts as not answering. Only an unreachable Matter Server stops it.
+- Reset from a distance: the add-on now asks the device itself to leave the fabric of Home Assistant and checks its answer. The Matter Server removed the node even when the device refused, and the reset was then reported done while the device kept a fabric nobody could use. New result "unsure" when the device does not confirm but can no longer be reached.
+- Pairing codes: a code is only matched to a node of the same product (a node id is given again after the Matter Server is installed anew), the hardware address is the one of the Thread interface and never a placeholder of zeros, a code scanned before a pairing goes by itself only to a node paired within 30 minutes, and a code waiting since a reset only within 7 days. Otherwise it waits in the list, to be attached by hand.
+- Files in /data are written whole or not at all (temporary file, flushed, then put in place): a power cut no longer leaves a half-written file. A file that cannot be read is kept aside as `<name>.bad-<date>` with a warning, instead of being replaced by an empty state; before, a damaged state file silently turned the automatic recovery off and lost the pairing codes.
+- An outage left open when a node came back while the add-on was stopped is now closed: its availability no longer drops towards 0 % over 7 days.
+- The page server only answers the Home Assistant ingress, also when it has to listen on every address.
+- Top of the page: "A, B, C +2" again (the text had become "2 older").
+
 ## [2.22.1] - 2026-11-16
 
 ### Changed

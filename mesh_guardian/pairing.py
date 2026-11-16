@@ -18,15 +18,18 @@ the new node.
 
 The codes are never written to the log, the events or the report.
 """
-import json
+import base64
 import logging
-import os
 import threading
 import time
 import uuid
 
+from store import load_json, save_json
+
 LOG = logging.getLogger("mg.pairing")
 FILE = "/data/pairing_codes.json"
+GUESS_RESET_S = 7 * 86400   # s: a code waiting since a reset goes by itself to a node paired within this time
+GUESS_SCAN_S = 30 * 60      # s: a code scanned before a pairing goes by itself to a node paired within this time
 B38 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-."
 # Verhoeff check digit (last digit of a manual pairing code)
 _D = [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], [1, 2, 3, 4, 0, 6, 7, 8, 9, 5], [2, 3, 4, 0, 1, 7, 8, 9, 5, 6],
@@ -104,12 +107,29 @@ def parse(text):
     return out
 
 
+def _blank(b64):
+    """True for an address made only of zeros (placeholder that many devices share)."""
+    try:
+        return not any(base64.b64decode(b64))
+    except Exception:  # noqa: BLE001
+        return True
+
+
 def identity(attrs):
-    """What a device keeps and reports about itself: {"serial", "hw", "uid", "vid", "pid"}."""
+    """What a device keeps and reports about itself: {"serial", "hw", "uid", "vid", "pid"}.
+    hw: the address of its Thread interface (type 4), else of its only interface; never a
+    placeholder made of zeros."""
     attrs = attrs or {}
-    hw = sorted(str(i["4"]) for i in attrs.get("0/51/0") or [] if isinstance(i, dict) and i.get("4"))
+    itfs = [i for i in attrs.get("0/51/0") or [] if isinstance(i, dict) and i.get("4") and not _blank(str(i["4"]))]
+    thread = [str(i["4"]) for i in itfs if i.get("7") == 4]
+    hw = thread or ([str(itfs[0]["4"])] if len(itfs) == 1 else [])
     return {"serial": attrs.get("0/40/15") or None, "hw": hw[0] if hw else None, "uid": attrs.get("0/40/18") or None,
             "vid": attrs.get("0/40/2"), "pid": attrs.get("0/40/4")}
+
+
+def _same_product(e, ident):
+    """The entry can be the code of that device: same vendor and product, or one of them unknown."""
+    return e.get("vid") is None or ident.get("vid") is None or (e.get("vid"), e.get("pid")) == (ident["vid"], ident["pid"])
 
 
 class Pairing:
@@ -117,35 +137,29 @@ class Pairing:
         self.path = path
         self.lock = threading.Lock()
         self.items = {}   # entry id -> {"node", "name", "area", "model", "qr", "manual", "vid", "pid", "serial", "hw", "uid", "saved"}
-        try:
-            with open(path) as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                self.items = {k: v for k, v in data.items() if isinstance(v, dict)}
-        except FileNotFoundError:
-            pass
-        except (OSError, ValueError) as err:
-            LOG.warning("Cannot read %s: %s", path, err)
+        # a file that cannot be read is moved aside by load_json, never overwritten: these
+        # codes cannot be found again for a device in a wall box
+        data = load_json(path, {})
+        if isinstance(data, dict):
+            self.items = {k: v for k, v in data.items() if isinstance(v, dict)}
 
     def _save(self):
-        tmp = self.path + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump(self.items, f, ensure_ascii=False)
-        os.replace(tmp, self.path)
+        save_json(self.path, self.items, ensure_ascii=False)
 
     def _find(self, nid, ident, present):
         """Entry id of a node: by its node id, else by what the device keeps (an entry whose
-        own node is still there is never taken by another node)."""
+        own node is still there is never taken by another node). Always the same product: a
+        node id is given again after the Matter Server is installed anew, and a serial or an
+        address can be shared by two products."""
         for key, e in self.items.items():
-            if e.get("node") == nid:
+            if e.get("node") == nid and _same_product(e, ident):
                 return key
         for field in ("serial", "hw", "uid"):
             value = ident.get(field)
             if not value:
                 continue
             for key, e in self.items.items():
-                if e.get(field) == value and e.get("node") not in present \
-                        and (field != "serial" or (e.get("vid"), e.get("pid")) in ((ident["vid"], ident["pid"]), (None, None))):
+                if e.get(field) == value and e.get("node") not in present and _same_product(e, ident):
                     return key
         return None
 
@@ -160,7 +174,9 @@ class Pairing:
         waiting since such a reset, for a node paired after it (node ids only grow)."""
         if ident["vid"] is None:
             return None
+        now = time.time()
         found = [k for k, e in self.items.items() if e.get("reset") and e.get("node") not in present
+                 and now - (e.get("reset_t") or now) < GUESS_RESET_S
                  and (e.get("vid"), e.get("pid")) == (ident["vid"], ident["pid"])
                  and int(e.get("node") or "0", 16) < int(nid, 16)]
         return found[0] if len(found) == 1 else None
@@ -171,7 +187,11 @@ class Pairing:
         for a node that did not exist when it was scanned (node ids only grow)."""
         if ident["vid"] is None:
             return None
+        # only for the pairing it was scanned for: after GUESS_SCAN_S it waits in the list, to
+        # be attached by hand (a pairing that failed must not give its code to another unit)
+        now = time.time()
         found = [k for k, e in self.items.items() if e.get("pending") and not e.get("node")
+                 and now - (e.get("saved") or 0) < GUESS_SCAN_S
                  and (e.get("vid"), e.get("pid")) == (ident["vid"], ident["pid"])
                  and int(e.get("after") or "0", 16) < int(nid, 16)]
         return found[0] if len(found) == 1 else None
@@ -226,7 +246,7 @@ class Pairing:
             if e.get("node") != nid:
                 e.update({"node": nid, "auto": auto, "serial": ident["serial"], "hw": ident["hw"], "uid": ident["uid"]})
                 changed = True
-            for flag in ("reset", "pending", "after"):
+            for flag in ("reset", "reset_t", "pending", "after"):
                 if e.pop(flag, None) is not None:
                     changed = True
             if changed:
@@ -238,7 +258,7 @@ class Pairing:
         with self.lock:
             for e in self.items.values():
                 if e.get("node") == nid:
-                    e["reset"] = True
+                    e["reset"], e["reset_t"] = True, int(time.time())
                     self._save()
                     return
 
@@ -282,7 +302,7 @@ class Pairing:
                     del self.items[other]
             e.update({"node": nid, "name": name or e.get("name"), "area": area or e.get("area"), "model": model or e.get("model"),
                       "serial": ident["serial"], "hw": ident["hw"], "uid": ident["uid"], "auto": False})
-            for flag in ("reset", "pending", "after"):
+            for flag in ("reset", "reset_t", "pending", "after"):
                 e.pop(flag, None)
             self._save()
             return self._public(key, e)

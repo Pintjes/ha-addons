@@ -28,6 +28,7 @@ import time
 from datetime import datetime
 
 from i18n import t, tn
+from store import load_json, save_json
 from advice import weak_link
 from nodetable import ext_of, find_parents, hop_links, routes_to_br
 
@@ -75,18 +76,14 @@ class Radio:
         self._load()
 
     def _load(self):
-        try:
-            with open(HISTORY_FILE) as f:
-                self.history = json.load(f)
-        except Exception:  # noqa: BLE001
-            self.history = []
+        data = load_json(HISTORY_FILE, [])
+        self.history = data if isinstance(data, list) else []
 
     def _save(self):
         cutoff = time.time() - 8 * 86400
         self.history = [h for h in self.history if h["t"] >= cutoff]
         try:
-            with open(HISTORY_FILE, "w") as f:
-                json.dump(self.history, f)
+            save_json(HISTORY_FILE, self.history)
         except Exception as err:  # noqa: BLE001
             LOG.warning(t("Cannot save the radio history: {err}", err=err))
 
