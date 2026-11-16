@@ -148,7 +148,10 @@ class WebUI:
                 elif path == "/api/table":
                     try:
                         data = ui.table.get(force="force=1" in query)
-                        data = dict(data, pair_new=ui.pairing_new(data.get("rows")))   # a copy: the table keeps its own
+                        # a copy: the table keeps its own. pair_free: codes waiting for their device
+                        # (the page shows its "Pairing codes" button only when there is one)
+                        data = dict(data, pair_new=ui.pairing_new(data.get("rows")),
+                                    pair_free=len(ui.pairing_get(None)["free"]) if ui.pairing.count() else 0)
                         self._send(200, json.dumps(data, ensure_ascii=False))
                     except Exception as err:  # noqa: BLE001
                         self._send(503, json.dumps({"error": str(err)}, ensure_ascii=False))

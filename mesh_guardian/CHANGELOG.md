@@ -4,6 +4,16 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.17.0] - 2026-11-16
+
+### Added
+
+- "Pair" button: starts the pairing of a new or reset device from the page. In the Home Assistant app on a phone it starts the app's own Matter pairing (same as "Add Matter device"); in a browser it opens that screen of Home Assistant. Under "Pairing codes", "Pair with this code" copies the code first.
+
+### Changed
+
+- The "Pairing codes" button is shown only while a code waits for its device.
+
 ## [2.16.0] - 2026-11-16
 
 ### Added

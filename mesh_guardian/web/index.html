@@ -253,7 +253,8 @@
     <span class="live" id="live"></span>
     <span class="sp"></span>
     <button class="btn" id="refresh"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg><span></span></button>
-    <button class="btn" id="codes"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2zM18 14h2M14 18v2"/></svg><span></span></button>
+    <button class="btn" id="pairbtn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span></span></button>
+    <button class="btn" id="codes" style="display:none"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2zM18 14h2M14 18v2"/></svg><span></span></button>
     <button class="btn" id="report"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg><span></span></button>
   </div>
 
@@ -335,6 +336,9 @@ const T = {
     t_partch:"Partition changes 24h", t_out:"Outages 24h · 7d", t_down:"Downtime 7d", t_reb:"Reboots total · 24h", t_boot:"Last boot reason", t_up:"Uptime",
     t_src:"Last contact source", t_gap:"Longest silence", copy:"Copy", copied:"Copied", download:"Download", report_tip:"Anonymized report (no names, areas or addresses) to paste in an issue",
     pc_t:"Pairing code", pc_tip:"Kept by the add-on: the device can be paired again after a reset without reaching its label",
+    pa_btn:"Pair", pa_tip:"Pair a new or reset device: starts the pairing of the Home Assistant app on this phone, next to the device",
+    pa_code:"Pair with this code", pa_started:"Pairing started on this phone", pa_started_code:"Code copied: paste it in the pairing screen instead of scanning the label",
+    pa_screen:"Opening the pairing screen of Home Assistant…", pa_screen_code:"Code copied. Opening the pairing screen of Home Assistant…", pa_none:"Open Settings → Devices → Add a Matter device in Home Assistant",
     pc_cam:"Take a photo of the QR code", pc_new_what:"New node", pc_new:"Its pairing code is not kept yet: photograph its label now, while you are in front of it.",
     pc_drop:"Drop a photo of the QR code here, or", pc_pick:"choose a photo", pc_ph:"or type the code: 1234-567-8901 or MT:…",
     pc_auto:"Attached by itself after the reset: it was the only code of this product waiting. Replace it if this is another device.",
@@ -408,6 +412,9 @@ const T = {
     t_partch:"Chgt de partition 24 h", t_out:"Coupures 24 h · 7 j", t_down:"Indisponibilité 7 j", t_reb:"Redémarrages total · 24 h", t_boot:"Raison du dernier démarrage", t_up:"En marche depuis",
     t_src:"Source du dernier contact", t_gap:"Plus long silence", copy:"Copier", copied:"Copié", download:"Télécharger", report_tip:"Rapport anonymisé (sans noms, pièces ni adresses) à coller dans une issue",
     pc_t:"Code d'appairage", pc_tip:"Conservé par l'add-on : l'appareil peut être appairé à nouveau après une réinitialisation sans accéder à son étiquette",
+    pa_btn:"Appairer", pa_tip:"Appairer un appareil neuf ou réinitialisé : lance l'appairage de l'application Home Assistant sur ce téléphone, à côté de l'appareil",
+    pa_code:"Appairer avec ce code", pa_started:"Appairage lancé sur ce téléphone", pa_started_code:"Code copié : le coller dans l'écran d'appairage au lieu de scanner l'étiquette",
+    pa_screen:"Ouverture de l'écran d'appairage de Home Assistant…", pa_screen_code:"Code copié. Ouverture de l'écran d'appairage de Home Assistant…", pa_none:"Ouvrir Paramètres → Appareils → Ajouter un appareil Matter dans Home Assistant",
     pc_cam:"Photographier le QR code", pc_new_what:"Nouvelle node", pc_new:"Son code d'appairage n'est pas encore conservé : photographier son étiquette maintenant, tant que tu es devant elle.",
     pc_drop:"Déposer ici une photo du QR code, ou", pc_pick:"choisir une photo", pc_ph:"ou saisir le code : 1234-567-8901 ou MT:…",
     pc_auto:"Rattaché tout seul après la réinitialisation : c'était le seul code de ce produit en attente. À remplacer si c'est un autre appareil.",
@@ -1177,6 +1184,33 @@ async function pairPhoto(file) {
   if (!text) return toast(L("pc_noqr"));
   await pairPost({id: pair.id, code: text}, "pc_saved");
 }
+// Pair a device without leaving the page. A new or reset device only speaks Bluetooth, so the
+// phone does it: in the Home Assistant app this starts the same pairing as its "Add Matter
+// device" screen (the app is asked through the Home Assistant page this one is shown in, with
+// the Thread network Home Assistant prefers). Elsewhere, that screen of Home Assistant opens.
+// code: copied first, to paste in the pairing screen instead of scanning the label.
+async function pairStart(code) {
+  if (code) { try { await navigator.clipboard.writeText(code); } catch (e) { /* shown in the list anyway */ } }
+  let hass = null;
+  try { hass = window.parent.document.querySelector("home-assistant").hass; } catch (e) { /* not inside Home Assistant */ }
+  const ext = hass && hass.auth && hass.auth.external;
+  if (ext && ext.config && ext.config.canCommissionMatter) {
+    let payload;
+    try {
+      const ds = ((await hass.callWS({type: "thread/list_datasets"})).datasets || []).find(d => d.preferred);
+      if (ds) payload = {active_operational_dataset: (await hass.callWS({type: "thread/get_dataset_tlv", dataset_id: ds.dataset_id})).tlv,
+        border_agent_id: ds.preferred_border_agent_id, mac_extended_address: ds.preferred_extended_address, extended_pan_id: ds.extended_pan_id};
+    } catch (e) { /* the phone then uses the Thread network it knows */ }
+    try {
+      ext.fireMessage(payload ? {type: "matter/commission", payload} : {type: "matter/commission"});
+      toast(L(code ? "pa_started_code" : "pa_started"));
+      for (const s of [30, 60, 120, 180, 300]) setTimeout(() => load(true), s * 1000);   // the new node shows up by itself
+      return;
+    } catch (e) { /* the screen of Home Assistant below */ }
+  }
+  toast(L(code ? "pa_screen_code" : "pa_screen"));
+  setTimeout(() => { try { window.top.location.assign("/config/matter/add"); } catch (e) { toast(L("pa_none")); } }, code ? 1200 : 300);
+}
 async function openCodes() {   // codes of the devices that left the table: what is needed to pair them again
   openId = null; pair = {id: null, data: null, edit: false};
   openSheet(head(L("pc_list"), L("pc_list_tip")) + `<p class="mut">${L("loading")}</p>`);
@@ -1184,7 +1218,7 @@ async function openCodes() {   // codes of the devices that left the table: what
     const d = await (await fetch("api/pairing", {cache: "no-store"})).json();
     $("#sheet").innerHTML = head(L("pc_list"), L("pc_list_tip")) +
       ((d.free || []).length ? d.free.map(c => codeCard(c, true) +
-        `<p class="pcbtns"><button class="btn" data-pc="delete" data-key="${esc(c.key)}">${L("pc_delete")}</button></p>`).join("")
+        `<p class="pcbtns"><button class="btn" data-pair="${esc(c.manual)}">${L("pa_code")}</button><button class="btn" data-pc="delete" data-key="${esc(c.key)}">${L("pc_delete")}</button></p>`).join("")
         : `<p class="mut" style="margin-top:14px">${L("pc_list_none")}</p>`) +
       `<p class="mut" style="margin-top:18px"><small>${esc(F("pc_count", {n: d.count || 0}))}</small></p>`;
     fillQr();
@@ -1194,7 +1228,10 @@ async function pairClick(b) {
   if (b.dataset.pc === "replace") { pair.edit = true; return renderPair(); }
   if (b.dataset.pc === "delete" && confirm(L("pc_delete_confirm"))) {
     const list = !pair.id;
-    if (await pairPost({delete: b.dataset.key}, "pc_deleted") && list) openCodes();
+    if (await pairPost({delete: b.dataset.key}, "pc_deleted") && list) {   // the list closes with its last code
+      await load(true);
+      if (D.pair_free) openCodes(); else closeSheet();
+    }
   }
 }
 
@@ -1258,6 +1295,7 @@ function texts() {
   $("#refresh span").textContent = L("refresh"); $("#refresh").title = L("refresh");
   $("#report span").textContent = L("report"); $("#report").title = L("report_tip");
   $("#codes span").textContent = L("pc_list"); $("#codes").title = L("pc_list_tip");
+  $("#pairbtn span").textContent = L("pa_btn"); $("#pairbtn").title = L("pa_tip");
   $("#q").placeholder = L("search"); $("#q").setAttribute("aria-label", L("search"));
   $("#noteTitle").textContent = L("note_t"); $("#noteText").textContent = L("note");
   $("#sheet").setAttribute("aria-label", L("h_node"));
@@ -1265,6 +1303,7 @@ function texts() {
 function renderAll() {
   if (!D) return;
   renderHero(); renderTodo(); renderBrs(); renderList();
+  $("#codes").style.display = D.pair_free ? "" : "none";   // only while a code waits for its device
   const rd = D.reading;
   $("#live").className = "live" + (D.live ? "" : " poll") + (rd && D.live ? " reading" : "");
   $("#live").title = rd ? (rd.total ? F("reading", {d: rd.done, n: rd.total}) : L("reading0"))
@@ -1312,6 +1351,8 @@ document.addEventListener("click", e => {
   }
   const pc = e.target.closest("button[data-pc]");
   if (pc) return pairClick(pc);
+  const pa = e.target.closest("button[data-pair]");
+  if (pa) return pairStart(pa.dataset.pair);
   const rs = e.target.closest("button[data-reset],button[data-rs]");
   if (rs) {
     if (rs.disabled) return;
@@ -1387,6 +1428,7 @@ $("#q").addEventListener("input", () => { P.q = $("#q").value; save(); if (D) re
 $("#refresh").addEventListener("click", async () => { await reread(); load(true); });
 $("#report").addEventListener("click", openReport);
 $("#codes").addEventListener("click", openCodes);
+$("#pairbtn").addEventListener("click", () => pairStart());
 const layout = () => {
   const was = document.body.classList.contains("narrow");
   document.body.classList.toggle("narrow", window.innerWidth <= 760);

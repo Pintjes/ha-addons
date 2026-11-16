@@ -451,11 +451,27 @@ the report.
 A device that is paired again gets a new node id. Its code follows it when
 the device reports a serial number; otherwise by its hardware address or
 unique id, which some devices change at a reset. When nothing matches, the
-code waits under **Pairing codes** (top of the page), where you read it to
-pair the device again, and the panel of the new node offers to attach it.
+code waits under **Pairing codes** (a button at the top of the page, shown
+only while a code waits), where you read it to pair the device again, and the panel of the new node offers to attach it.
 
 Anyone who can open the Mesh Guardian page can read these codes: a pairing
 code gives full control of a device once it is reset.
+
+### Pair a device from the page
+
+The **Pair** button (top of the page) starts the pairing of a new or reset
+device without leaving Mesh Guardian. Such a device only speaks Bluetooth, so
+the phone does the pairing, next to the device:
+
+- in the Home Assistant app on a phone, the button starts the same pairing as
+  the "Add Matter device" screen of Home Assistant. The page asks the app
+  through the Home Assistant page it is shown in, and hands over the Thread
+  network Home Assistant prefers, exactly as that screen does;
+- in a browser, the "Add Matter device" screen of Home Assistant opens.
+
+Under **Pairing codes**, "Pair with this code" does the same after copying
+the code: paste it in the pairing screen instead of scanning the label. The
+new node then shows up in the table by itself.
 
 ### Reset from a distance
 
