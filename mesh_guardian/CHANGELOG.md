@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.10.4] - 2026-11-16
+
+### Fixed
+
+- The radio survey no longer names a node "most unstable" when no node has any detach, parent or partition change (a node that only restarted was named).
+
 ## [2.10.3] - 2026-11-16
 
 ### Fixed

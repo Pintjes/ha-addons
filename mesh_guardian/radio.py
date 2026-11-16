@@ -297,6 +297,8 @@ class Radio:
         except Exception:  # noqa: BLE001
             pass
         worst = weak[0] if weak else None
+        # a node only listed for a reboot (score 0) is not "the most unstable"
+        top = unstable[0] if unstable and unstable[0]["score"] > 0 else None
         # Thread networks used by the Home Assistant nodes (border router filter)
         nets = {int(n["ext_pan"]) for n in info.values() if isinstance(n.get("ext_pan"), int)}
         if nets:
@@ -305,8 +307,8 @@ class Radio:
                     t("Radio survey: {n} nodes, {weak}",
                       n=len(info), weak=tn("{n} weak link", "{n} weak links", len(weak)))
                     + (t(" (worst: {a} ↔ {b} {rssi}dBm)", a=worst["a"], b=worst["b"], rssi="?" if worst["rssi"] is None else worst["rssi"]) if worst else "")
-                    + (t(", most unstable: {name} ({d} detach)" if unstable[0]["detaches"] == 1 else ", most unstable: {name} ({d} detaches)",
-                         name=unstable[0]["name"], d=unstable[0]["detaches"]) if unstable else ""),
+                    + (t(", most unstable: {name} ({d} detach)" if top["detaches"] == 1 else ", most unstable: {name} ({d} detaches)",
+                         name=top["name"], d=top["detaches"]) if top else ""),
                     weak=len(weak), links=len(links), unstable=len(unstable))
         self.w.dirty = True
 
