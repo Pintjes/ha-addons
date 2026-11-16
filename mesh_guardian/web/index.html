@@ -342,7 +342,7 @@ const T = {
     parent_tip:"The router this end device sends all its traffic through", h_br:"Border router", hop1:"1 hop", hops:"{n} hops", hops_min:"at least", t_path:"Full path",
     drag_tip:"Drag to move the column", h_act:"Actions",
     a_ping:"Ping", a_parent:"Find a new link", a_interview:"Interview", a_remove:"Remove", a_remove_tip:"Remove",
-    a_remove_confirm:"{n}: remove this node? It must be commissioned again.", a_remove_ok:"{n} removed",
+    a_remove_confirm:"{n}: remove this node? It must be commissioned again.", a_remove_confirm_nocode:"{n}: remove this node? Its pairing code is not kept: on most devices only its label will allow pairing it again.", a_remove_ok:"{n} removed",
     a_ping_tip:"Ping", a_parent_tip:"Find a new link",
     a_interview_tip:"Reinterview", a_parent_router:"Thread nodes only", a_parent_confirm_leader:"{n} is the LEADER of the Thread network: its Thread will restart (trial). The whole network elects a new leader: for about 2 minutes, nodes can become unavailable and the network can split into several partitions. Its end devices drop too. Go on?",
     a_parent_confirm:"{n}: find a new parent? The new one may be weaker.", a_parent_confirm_router:"{n} is a router: its Thread will restart (trial). Its end devices drop and attach elsewhere, and it can stay out of reach for 2 minutes. A router picks its routes by itself: a better link is not expected. Go on?", a_interview_confirm:"{n}: interview the node again? It can take a minute.",
@@ -375,8 +375,8 @@ const T = {
     sc_btn:"Scan the QR code", sc_title:"Pairing code", sc_desc:"Aim at the QR code on the label of the device", sc_skip:"Pair without scanning", sc_close:"Close",
     sc_wrong:"This is not a Matter QR code", sc_waiting:"Scanned code, waiting for its device", pc_e_typed:"Only a QR code can be kept before its device is paired",
     pa_btn:"Pair", pa_tip:"Pair a new or reset device, next to it. In the Home Assistant app: scan its label (the code is kept for the new node), then the pairing of the phone starts",
-    pa_code:"Pair with this code", pa_started:"Pairing started on this phone", pa_started_code:"Code copied: paste it in the pairing screen instead of scanning the label",
-    pa_screen:"Opening the pairing screen of Home Assistant…", pa_screen_code:"Code copied. Opening the pairing screen of Home Assistant…", pa_none:"Open Settings → Devices → Add a Matter device in Home Assistant",
+    pa_code:"Pair with this code", pa_started:"Pairing started on this phone", pa_started_code:"Code copied: paste it in the pairing screen instead of scanning the label", pa_started_show:"Pairing started. Its code, to type in the pairing screen: {c}",
+    pa_screen:"Opening the pairing screen of Home Assistant…", pa_screen_code:"Code copied. Opening the pairing screen of Home Assistant…", pa_screen_show:"Code to type: {c}. Opening the pairing screen of Home Assistant…", sc_none:"The QR code reader of the app did not answer: take a photo of the label instead", pa_none:"Open Settings → Devices → Add a Matter device in Home Assistant",
     pc_cam:"Take a photo of the QR code", pc_new_what:"New node", pc_new:"Its pairing code is not kept yet: photograph its label now, while you are in front of it.",
     sec_tools:"Tools", sec_pair:"Pairing", sec_signal:"Signal and response", sub_hist:"History", none_f:"none",
     more:"{n} older", pc_delete_code:"Delete the code", t_added:"Paired on", sub_ident:"Identity", sub_thread:"Thread", sub_life:"Running", sub_contact:"Contact",
@@ -426,7 +426,7 @@ const T = {
     parent_tip:"Le routeur par lequel cet appareil final fait passer tout son trafic", h_br:"Border router", hop1:"1 saut", hops:"{n} sauts", hops_min:"au moins", t_path:"Chemin complet",
     drag_tip:"Glisser pour déplacer la colonne", h_act:"Actions",
     a_ping:"Ping", a_parent:"Recherche nouveau lien", a_interview:"Interviewer", a_remove:"Supprimer", a_remove_tip:"Supprimer",
-    a_remove_confirm:"{n} : supprimer cette node ? Il faudra l'appairer à nouveau.", a_remove_ok:"{n} supprimée",
+    a_remove_confirm:"{n} : supprimer cette node ? Il faudra l'appairer à nouveau.", a_remove_confirm_nocode:"{n} : supprimer cette node ? Son code d'appairage n'est pas conservé : sur la plupart des appareils, seule son étiquette permettra de l'appairer à nouveau.", a_remove_ok:"{n} supprimée",
     a_ping_tip:"Ping", a_parent_tip:"Recherche nouveau lien",
     a_interview_tip:"Reinterview", a_parent_router:"Réservé aux nodes Thread", a_parent_confirm_leader:"{n} est le LEADER du réseau Thread : son Thread va redémarrer (essai). Tout le réseau élit un nouveau leader : pendant 2 minutes environ, des nodes peuvent devenir indisponibles et le réseau peut se couper en plusieurs partitions. Ses nodes finales décrochent aussi. Continuer ?",
     a_parent_confirm:"{n} : rechercher un nouveau parent ? Le nouveau peut être moins bon.", a_parent_confirm_router:"{n} est un routeur : son Thread va redémarrer (essai). Ses nodes finales décrochent et se rattachent ailleurs, et il peut rester injoignable 2 minutes. Un routeur choisit seul ses routes : un meilleur lien n'est pas attendu. Continuer ?", a_interview_confirm:"{n} : ré-interviewer la node ? Ça peut prendre une minute.",
@@ -459,8 +459,8 @@ const T = {
     sc_btn:"Scanner le QR code", sc_title:"Code d'appairage", sc_desc:"Viser le QR code de l'étiquette de l'appareil", sc_skip:"Appairer sans scanner", sc_close:"Fermer",
     sc_wrong:"Ce n'est pas un QR code Matter", sc_waiting:"Code scanné, en attente de son appareil", pc_e_typed:"Seul un QR code peut être conservé avant l'appairage de son appareil",
     pa_btn:"Appairer", pa_tip:"Appairer un appareil neuf ou réinitialisé, à côté de lui. Dans l'application Home Assistant : scanner son étiquette (le code est conservé pour la nouvelle node), puis l'appairage du téléphone se lance",
-    pa_code:"Appairer avec ce code", pa_started:"Appairage lancé sur ce téléphone", pa_started_code:"Code copié : le coller dans l'écran d'appairage au lieu de scanner l'étiquette",
-    pa_screen:"Ouverture de l'écran d'appairage de Home Assistant…", pa_screen_code:"Code copié. Ouverture de l'écran d'appairage de Home Assistant…", pa_none:"Ouvrir Paramètres → Appareils → Ajouter un appareil Matter dans Home Assistant",
+    pa_code:"Appairer avec ce code", pa_started:"Appairage lancé sur ce téléphone", pa_started_code:"Code copié : le coller dans l'écran d'appairage au lieu de scanner l'étiquette", pa_started_show:"Appairage lancé. Son code, à saisir dans l'écran d'appairage : {c}",
+    pa_screen:"Ouverture de l'écran d'appairage de Home Assistant…", pa_screen_code:"Code copié. Ouverture de l'écran d'appairage de Home Assistant…", pa_screen_show:"Code à saisir : {c}. Ouverture de l'écran d'appairage de Home Assistant…", sc_none:"Le lecteur de QR code de l'application n'a pas répondu : photographier l'étiquette à la place", pa_none:"Ouvrir Paramètres → Appareils → Ajouter un appareil Matter dans Home Assistant",
     pc_cam:"Photographier le QR code", pc_new_what:"Nouvelle node", pc_new:"Son code d'appairage n'est pas encore conservé : photographier son étiquette maintenant, tant que tu es devant elle.",
     sec_tools:"Outils", sec_pair:"Appairage", sec_signal:"Signal et réponse", sub_hist:"Historique", none_f:"aucune",
     more:"{n} plus anciens", pc_delete_code:"Supprimer le code", t_added:"Appairée le", sub_ident:"Identité", sub_thread:"Thread", sub_life:"Fonctionnement", sub_contact:"Contact",
@@ -963,7 +963,11 @@ async function runAction(btn) {
   if (a === "parent" && !confirm(F(r.role === "leader" ? "a_parent_confirm_leader" : isRouter(r) ? "a_parent_confirm_router" : "a_parent_confirm", {n: r.name}))) return;
   if (a === "recover" && !confirm(F("a_recover_confirm", {n: r.name}))) return;
   if (a === "interview" && !confirm(F("a_interview_confirm", {n: r.name}))) return;
-  if (a === "remove" && !confirm(F("a_remove_confirm", {n: r.name}))) return;
+  if (a === "remove") {   // without its pairing code, the label of the device is the only way to pair it again
+    let kept = true;
+    try { kept = !!(await (await fetch("api/pairing?id=" + encodeURIComponent(id), {cache: "no-store"})).json()).code; } catch (e) { /* asked as usual */ }
+    if (!confirm(F(kept ? "a_remove_confirm" : "a_remove_confirm_nocode", {n: r.name}))) return;
+  }
   document.querySelectorAll(`[data-act="${a}"][data-node="${id}"]`).forEach(b => { b.disabled = true; b.classList.add("busy"); });
   let msg;
   try {
@@ -972,7 +976,7 @@ async function runAction(btn) {
     if (!res.ok) msg = F("a_failed", {n: r.name});
     else if (a === "ping") msg = F(res.answered ? "a_ping_ok" : "a_ping_ko", {n: r.name});
     else if (a === "interview") msg = F("a_interview_ok", {n: r.name, s: res.s});
-    else if (a === "remove") msg = F("a_remove_ok", {n: r.name});
+    else if (a === "remove") msg = res.result === "busy" ? L("rs_r_busy") : F("a_remove_ok", {n: r.name});
     else if (a === "recover") {   // sent in the background: the result comes with the table
       msg = F("a_recover_" + (["unsupported", "busy"].includes(res.result) ? res.result : "pending"), {n: r.name});
       if (res.result === "pending") followSearch(id, 10);
@@ -988,19 +992,41 @@ async function runAction(btn) {
   toast(msg);
   document.querySelectorAll(`[data-act="${a}"][data-node="${id}"]`).forEach(b => { b.disabled = false; b.classList.remove("busy"); });
   await load(true);
-  if ($("#sheet").classList.contains("on") && openId === id) openNode(id);   // the panel shows the new values
+  refreshNode(id);   // the panel shows the new values
+}
+// The user is doing something in the panel: typing, a question to answer, a photo being taken.
+// A panel shown again then would lose it: it waits.
+let fileOpen = false;
+function panelBusy() {
+  const s = $("#sheet"), a = document.activeElement;
+  if (!s.classList.contains("on")) return false;
+  return fileOpen || pair.edit || (resetBox.id && resetBox.id === openId) || !!naming ||
+    (a && s.contains(a) && a.matches("input, select, textarea")) ||
+    [...s.querySelectorAll("input:not([type=file]):not([type=checkbox])")].some(i => i.value !== i.defaultValue);
+}
+// the panel of a node shown again with new values (after an action), at the same place
+function refreshNode(id) {
+  if ($("#sheet").classList.contains("on") && openId === id && !panelBusy()) openNode(id, true);
 }
 // result of a parent search not known yet: the add-on reads the node and its parent again for
-// 5 minutes; the page reloads meanwhile and shows the result (row, panel, message) when it comes
+// 5 minutes; the page reloads meanwhile and shows the result (row, panel, message) when it comes.
+// One follow-up per node; nothing is read while the page is hidden.
+const following = new Set();
 async function followSearch(id, minutes = 6) {
+  if (following.has(id)) return;
+  following.add(id);
+  try { await followLoop(id, minutes); } finally { following.delete(id); }
+}
+async function followLoop(id, minutes) {
   const end = Date.now() + minutes * 60e3;
   while (Date.now() < end) {
     await new Promise(r => setTimeout(r, 20e3));
+    if (document.hidden) continue;
     await load(true);
     const r = (D.rows || []).find(x => x.id === id);
     if (r && r.search && r.search.state === "done") {
       toast(r.search.text);
-      if ($("#sheet").classList.contains("on") && openId === id) openNode(id);
+      refreshNode(id);
       return;
     }
   }
@@ -1053,14 +1079,16 @@ const hist = (title, items, none) => !items.length ? `<p class="histnone">${titl
 const secOpen = (key, open) => P.sec && key in P.sec ? !!P.sec[key] : open;
 function openSheet(html) {
   $("#sheet").innerHTML = html; $("#sheet").classList.add("on"); $("#scrim").classList.add("on");
-  const x = $("#sheet .x"); if (x) x.focus();
+  $("#sheet").scrollTop = 0;
+  const x = $("#sheet .x"); if (x) x.focus({preventScroll: true});
 }
 const closeSheet = () => { $("#sheet").classList.remove("on"); $("#scrim").classList.remove("on"); };
 const head = (title, sub, extra) => `<header><div><h3>${title}</h3>${sub ? `<span class="mut">${sub}</span>` : ""}${extra || ""}</div>
   <button class="x" aria-label="✕">✕</button></header>`;
 
 let openId = null;
-async function openNode(id) {
+// again: the same panel shown once more with new values: no placeholder, same scroll
+async function openNode(id, again) {
   openId = id;
   const r = (D.rows || []).find(x => x.id === id);
   if (!r) return;
@@ -1119,8 +1147,9 @@ async function openNode(id) {
     sec("hist", L("sub_hist"), histBody, true) +
     sec("tech", L("tech"), groups.map(g => subsec(...g)).join("") + subsec("t_srv", L("srv_t"), srvBody), false);
   const wait = `<p class="mut">${L("loading")}</p>`;
-  openSheet(draw(wait, wait));
-  loadPair(id);
+  const top0 = again ? $("#sheet").scrollTop : 0;
+  if (!again) openSheet(draw(wait, wait));
+  loadPair(id, again);
   try {
     const d = await (await fetch("api/node?id=" + encodeURIComponent(id), {cache: "no-store"})).json();
     if (!$("#sheet").classList.contains("on") || openId !== id) return;
@@ -1138,6 +1167,7 @@ async function openNode(id) {
     $("#sheet").innerHTML = draw(`<p class="mut">${L("error")}</p>`, `<p class="mut">${L("error")}</p>`);
   }
   renderPair(); renderReset();   // the panel was drawn again: its pairing block and its reset question too
+  if (again) $("#sheet").scrollTop = top0;
 }
 
 // panel of a border router: everything known about it, and "Remove" when it is offline
@@ -1224,8 +1254,8 @@ function renderPair() {
         <small class="mut">${L("pc_attach")}</small>` : "");
   fillQr();
 }
-async function loadPair(id) {
-  pair = {id, data: null, edit: false};
+async function loadPair(id, keep) {
+  pair = keep && pair.id === id ? {...pair} : {id, data: null, edit: false};
   try {
     const d = await (await fetch("api/pairing?id=" + encodeURIComponent(id), {cache: "no-store"})).json();
     if (pair.id === id && !d.error) { pair.data = d; renderPair(); }
@@ -1288,18 +1318,25 @@ const appBus = () => {
 };
 const canScan = () => { const {ext} = appBus(); return !!(ext && ext.config && ext.config.hasBarCodeScanner && typeof ext._commandHandler === "function"); };
 // alt: label of the second button of the reader. Resolves {text} (a Matter QR code) or {aborted: reason}
+let scanEnd = null;   // ends the scan running, if any: one at a time
+// the page is left during a scan (other page of Home Assistant, app sent to the background):
+// the handler of Home Assistant is given back, or its own next scan would not get its result
+window.addEventListener("pagehide", () => { if (scanEnd) scanEnd({aborted: "left"}); });
 function scanQr(alt) {
   const {ext} = appBus();
+  if (scanEnd) return Promise.resolve({aborted: "busy"});
   return new Promise(done => {
     const orig = ext._commandHandler;
-    let over = false;
+    let over = false, mine = null;
     const end = v => {
       if (over) return;
-      over = true; ext._commandHandler = orig;
+      over = true; scanEnd = null;
+      if (ext._commandHandler === mine) ext._commandHandler = orig;   // not if Home Assistant replaced it meanwhile
       try { ext.fireMessage({type: "bar_code/close"}); } catch (e) { /* closed already */ }
       done(v);
     };
-    ext._commandHandler = msg => {
+    scanEnd = end;
+    ext._commandHandler = mine = msg => {
       if (over || (msg.command !== "bar_code/scan_result" && msg.command !== "bar_code/aborted")) return orig(msg);
       try { ext.fireMessage({id: msg.id, type: "result", success: true, result: null}); } catch (e) { /* the app does not wait for it */ }
       const p = msg.payload || {};
@@ -1334,6 +1371,7 @@ async function watchNewDevice(hass, known) {
   }
   try { window.parent.removeEventListener("matter-commission-finish", onFinish); } catch (e) { /* nothing to remove */ }
   if (!dev || run !== watching) return;
+  for (let i = 0; i < 60 && panelBusy(); i++) await new Promise(r => setTimeout(r, 2000));   // not over what the user is typing
   naming = {hass, dev};
   const areas = Object.values(hass.areas || {}).sort((a, b) => String(a.name).localeCompare(String(b.name)));
   openId = null; pair = {id: null, data: null, edit: false};
@@ -1354,10 +1392,21 @@ async function nameSave(f) {
     setTimeout(() => load(true), 3000);   // the table takes the name from Home Assistant
   } catch (e) { toast(L("error")); b.disabled = false; }
 }
+// the code copied for the pairing screen; false when the browser refused (it may, long after a click)
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) { return false; }
+}
+let pairing = false;
 async function pairStart(code) {
+  if (pairing) return;   // a second tap while the first pairing starts
+  pairing = true;
+  try { await pairRun(code); } finally { pairing = false; }
+}
+async function pairRun(code) {
   if (!code && canScan()) {   // the label first: its code is kept for the node this pairing brings
     const r = await scanQr(L("sc_skip"));
-    if (r.aborted === "canceled" || r.aborted === "timeout" || r.aborted === "error") return;
+    if (r.aborted === "timeout" || r.aborted === "error") toast(L("sc_none"));
+    if (r.aborted === "canceled" || r.aborted === "timeout" || r.aborted === "error" || r.aborted === "left" || r.aborted === "busy") return;
     if (r.text) {
       try {
         const res = await (await fetch("api/pairing", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({scan: r.text})})).json();
@@ -1365,7 +1414,8 @@ async function pairStart(code) {
       } catch (e) { /* the pairing goes on without the code */ }
     }
   }
-  if (code) { try { await navigator.clipboard.writeText(code); } catch (e) { /* shown in the list anyway */ } }
+  const copied = code ? await copyText(code) : false;
+  const said = k => code ? F(copied ? k + "_code" : k + "_show", {c: manualFmt(code)}) : L(k);   // the code shown when it could not be copied
   const {hass, ext} = appBus();
   if (ext && ext.config && ext.config.canCommissionMatter) {
     let payload;
@@ -1377,13 +1427,13 @@ async function pairStart(code) {
     try {
       const before = await matterDevices(hass);
       ext.fireMessage(payload ? {type: "matter/commission", payload} : {type: "matter/commission"});
-      toast(L(code ? "pa_started_code" : "pa_started"));
+      toast(said("pa_started"));
       if (before) watchNewDevice(hass, new Set(before.map(d => d.id)));   // then its name and area are asked here
-      for (const s of [30, 60, 120, 180, 300]) setTimeout(() => load(true), s * 1000);   // the new node shows up by itself
+      for (const s of [30, 60, 120, 180, 300]) setTimeout(() => { if (!document.hidden) load(true); }, s * 1000);   // the new node shows up by itself
       return;
     } catch (e) { /* the screen of Home Assistant below */ }
   }
-  toast(L(code ? "pa_screen_code" : "pa_screen"));
+  toast(said("pa_screen"));
   setTimeout(() => { try { window.top.location.assign("/config/matter/add"); } catch (e) { toast(L("pa_none")); } }, code ? 1200 : 300);
 }
 async function openCodes() {   // codes of the devices that left the table: what is needed to pair them again
@@ -1403,6 +1453,7 @@ async function pairClick(b) {
   if (b.dataset.pc === "replace") { pair.edit = true; return renderPair(); }
   if (b.dataset.pc === "scan") {   // the label of a node of the table, read by the app
     const id = pair.id, r = await scanQr(L("sc_close"));
+    if (r.aborted === "timeout" || r.aborted === "error") toast(L("sc_none"));
     if (r.text && id) await pairPost({id, code: r.text}, "pc_saved");
     return;
   }
@@ -1584,6 +1635,9 @@ $("#sheet").addEventListener("submit", e => {   // pairing code typed, or a kept
   if (f.classList.contains("pca")) pairPost({id: pair.id, attach: f.k.value}, "pc_saved");
   else if (f.c.value.trim()) pairPost({id: pair.id, code: f.c.value}, "pc_saved");
 });
+// a photo is being chosen or taken: until the page has the focus back
+$("#sheet").addEventListener("click", e => { const l = e.target.closest("label"); if (l && l.querySelector("input[type=file]")) fileOpen = true; }, true);
+window.addEventListener("focus", () => setTimeout(() => { fileOpen = false; }, 1500));
 // a section folded or unfolded stays so, for every panel ("toggle" does not bubble: caught on its way down)
 $("#sheet").addEventListener("toggle", e => {
   const key = e.target.dataset && e.target.dataset.sec;
@@ -1591,7 +1645,7 @@ $("#sheet").addEventListener("toggle", e => {
   P.sec = {...(P.sec || {}), [key]: e.target.open}; save();
 }, true);
 $("#sheet").addEventListener("change", e => {
-  if (e.target.matches(".pcdrop input[type=file]")) pairPhoto(e.target.files[0]);
+  if (e.target.matches(".pcdrop input[type=file]")) { fileOpen = false; pairPhoto(e.target.files[0]); }
   if (e.target.id === "rsok") { const go = $('#sheet button[data-rs="go"]'); if (go) go.disabled = !e.target.checked; }
 });
 // a photo dropped anywhere on the panel while it asks for a code, or pasted

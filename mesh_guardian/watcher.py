@@ -77,7 +77,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.23.0"
+VERSION = "2.24.0"
 
 _MQ = _load_mqtt()
 MQTT_HOST = _MQ.get("host") or os.environ.get("MQTT_HOST", "core-mosquitto")
@@ -1209,10 +1209,27 @@ class Watch:
             info = None
         return type_, name, info
 
+    def _keep_running(self, loop, what):
+        """Run a loop of a thread again when it fails: one bad value must not stop the probes
+        or the MQTT states for good while the add-on looks alive."""
+        while not self.stop.is_set():
+            try:
+                loop()
+                return
+            except Exception as err:  # noqa: BLE001
+                LOG.warning(t("{what} failed, started again: {err}", what=what, err=err))
+                LOG.debug("%s", what, exc_info=True)
+                if self.stop.wait(30):
+                    return
+
     def prober(self):
+        self._keep_running(self._prober, t("Active probes"))
+
+    def _prober(self):
         """Actively query every known service: detects a disappearance even
         without a removal announcement (device unplugged, crashed, restarted)."""
-        pool = ThreadPoolExecutor(max_workers=8)
+        pool = getattr(self, "_probe_pool", None) or ThreadPoolExecutor(max_workers=8)
+        self._probe_pool = pool
         last_browse = time.time()
         first = True
         while not self.stop.wait(30 if first else PROBE_INTERVAL):
@@ -1456,9 +1473,12 @@ class Watch:
                             count("{n} weak link", "{n} weak links", r.get("weak_links", "?")))))
 
     def publisher(self):
+        self._keep_running(self._publisher, t("MQTT publishing"))
+
+    def _publisher(self):
         last_full = 0
         last_hourly = time.time()
-        startup_reported = False
+        startup_reported = getattr(self, "_startup_reported", False)   # once, also when the loop starts again
         while not self.stop.wait(5):
             if self.storm and not self.quiet:
                 try:
@@ -1474,10 +1494,10 @@ class Watch:
                                        origin=self.healer.enabled_origin),
                           version=VERSION, br=s["br_list"], matter=s["matter_online"], cast=s["cast_list_online"],
                           auto_recovery=self.healer.enabled, auto_recovery_origin=self.healer.enabled_origin)
+                startup_reported = self._startup_reported = True
                 self.check_global()
                 self.check_node_prefixes()
                 self.cleanup_discovery()
-                startup_reported = True
             if time.time() - last_hourly >= 3600:
                 last_hourly = time.time()
                 try:
@@ -1505,7 +1525,21 @@ class Watch:
                 LOG.info(t("🧹 obsolete entity removed: {topic}", topic=topic))
         self.retained.clear()
 
+    # The MQTT library stops its loop for good when a callback raises: no reconnection after
+    # that. Every callback is wrapped.
     def on_connect(self, client, userdata, flags, reason_code, properties=None):
+        try:
+            self._on_connect(client, reason_code)
+        except Exception as err:  # noqa: BLE001
+            LOG.warning(t("MQTT connection: {err}", err=err))
+
+    def on_message(self, client, userdata, msg):
+        try:
+            self._on_message(msg)
+        except Exception as err:  # noqa: BLE001
+            LOG.warning(t("MQTT message on {topic}: {err}", topic=getattr(msg, "topic", "?"), err=err))
+
+    def _on_connect(self, client, reason_code):
         LOG.info(t("Connected to MQTT", code=reason_code))
         client.publish(f"{BASE}/status", "online", retain=True)
         client.subscribe(f"{BASE}/healer/set")
@@ -1517,7 +1551,7 @@ class Watch:
         self.publish_discovery()
         self.dirty = True
 
-    def on_message(self, client, userdata, msg):
+    def _on_message(self, msg):
         if msg.topic.startswith(f"{DISCOVERY}/"):
             if msg.retain and msg.payload:
                 self.retained.add(msg.topic)
@@ -1539,7 +1573,7 @@ class Watch:
                              daemon=True, name="ping_all").start()
             return
         if msg.topic == f"{BASE}/healer/set" and self.healer:
-            self.healer.set_enabled(msg.payload.decode().strip().upper() == "ON",
+            self.healer.set_enabled(msg.payload.decode(errors="replace").strip().upper() == "ON",
                                     t("switch.mesh_guardian_auto_recovery in Home Assistant"))
 
     # ---------------------------------------------------------------- run

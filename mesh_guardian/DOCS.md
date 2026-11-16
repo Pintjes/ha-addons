@@ -189,7 +189,8 @@ Every event is written to the add-on log, published on the MQTT topic
 | `names`, `name_synced` | names Home Assistant → Matter (Rename nodes button) |
 | `reattach`, `reattach_node`, `reattach_result`, `reattach_done` | parent search (Find better parents button): start, node asked to attach again, its link before and after (`result`: `better`, `worse`, `similar`, `same`, `unknown`, then `noanswer` if the node never answered), summary |
 | `recover_node`, `recover_result` | recovery attempt on an unavailable node (button of the node table): start, then `result`: `back`, `noanswer` (command sent, node still unavailable), `unreachable` (nothing got through), `failed` (refused by the node) |
-| `node_reset` | a node was reset from a distance (Reset button of the node panel), with the fabrics it left |
+| `node_reset` | a node was reset from a distance (Reset button of the node panel), with the fabrics it left and `result` (`reset`, or `unsure` when it did not confirm leaving Home Assistant) |
+| `node_removed` | a node was removed from Home Assistant (Remove button) |
 | `statistics`, `auto_recovery` | statistics rebuilt, recovery switched on / off (with who switched it) |
 
 You can trigger automations on them, for example a notification when a node

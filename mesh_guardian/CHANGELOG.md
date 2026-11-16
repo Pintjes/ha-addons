@@ -4,6 +4,25 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.24.0] - 2026-11-16
+
+### Fixed
+
+- The active probes and the MQTT publishing start again after an error instead of stopping for good while the add-on looks alive; an error in an MQTT callback no longer stops the MQTT connection.
+- The live link to the Matter Server reconnects within seconds after a drop, also after several drops (the wait stayed at 2 minutes).
+- Automatic recovery no longer freezes when more than half of the nodes are removed: a much shorter list of nodes is taken as the real one after 10 minutes.
+- Node panel: shown again after an action only when you are not typing in it, answering the reset question, replacing the pairing code or taking a photo; and at the same place in the panel instead of the top. A photo taken with the phone is no longer lost.
+- QR code reader of the app: one scan at a time, and the reader of Home Assistant is given back when you leave the page during a scan. "Pair" pressed twice starts one pairing. When the code cannot be copied, the message shows it instead of saying "copied". When the reader does not answer, a message says so.
+- A parent search or recovery is followed once per node, and not while the page is hidden.
+- The "New device paired" panel waits until you are done with the panel you are typing in.
+- "Remove": same lock as the other actions on a node, an event `node_removed`, and a warning in the confirmation when the pairing code of the node is not kept.
+- The anonymized report no longer shows the name of Wi-Fi access points (channel only).
+
+### Changed
+
+- README: lists every action that writes to a node, the reset and the removal included.
+- The tests written during the audit are in the repository (`tests/mesh_guardian`, `python tests/mesh_guardian/run_all.py`) and run in the CI.
+
 ## [2.23.0] - 2026-11-16
 
 ### Fixed

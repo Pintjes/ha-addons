@@ -353,6 +353,12 @@ FR = {
         "{node} : hors de portée, la tentative de récupération n'a pas pu être envoyée",
     "{node}: recovery attempt refused": "{node} : tentative de récupération refusée",
     "{node}: reset from a distance, to pair again": "{node} : réinitialisée à distance, à appairer à nouveau",
+    "{node}: removed from Home Assistant": "{node} : supprimée de Home Assistant",
+    "{what} failed, started again: {err}": "{what} en échec, relancé : {err}",
+    "Active probes": "Sondage actif",
+    "MQTT publishing": "Publication MQTT",
+    "MQTT connection: {err}": "Connexion MQTT : {err}",
+    "MQTT message on {topic}: {err}": "Message MQTT sur {topic} : {err}",
     "Cannot read {file} ({err}): kept as {bad}, starting without it": "Lecture de {file} impossible ({err}) : fichier conservé sous {bad}, démarrage sans lui",
     # storm
     "Thread storm": "Tempête Thread",

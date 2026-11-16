@@ -237,8 +237,20 @@ class WebUI:
                             if out.get("result") in ("reset", "unsure"):
                                 ui.pairing.mark_reset(nid)   # its code follows it when it comes back
                     elif act == "remove":
-                        h.matter_command("remove_node", {"node_id": int(nid, 16)}, timeout=120)
-                        out = {"ok": True}
+                        # on many devices, leaving their last fabric is a factory reset: same lock as
+                        # the other actions on a node, and a trace in the events like the reset
+                        rt = getattr(ui.w, "reattach", None)
+                        if rt and not rt.busy.acquire(timeout=1):
+                            out = {"ok": True, "result": "busy"}
+                        else:
+                            try:
+                                name = ui._node(nid)[2] or f"0x{nid.lstrip('0')}"
+                                h.matter_command("remove_node", {"node_id": int(nid, 16)}, timeout=180)
+                            finally:
+                                if rt:
+                                    rt.busy.release()
+                            ui.w.emit("node_removed", t("{node}: removed from Home Assistant", node=name), node=name)
+                            out = {"ok": True, "result": "removed"}
                     elif act == "interview":
                         h.matter_command("interview_node", {"node_id": int(nid, 16)}, timeout=300)
                         out = {"ok": True, "s": round(time.time() - t0)}

@@ -19,6 +19,8 @@ jobs:
         run: pip install ruff yamllint
       - name: Python syntax and common errors
         run: ruff check --select E9,F63,F7,F82,F401,F811 mesh_guardian voice_agent_bridge side_door
+      - name: Tests (Mesh Guardian)
+        run: python tests/mesh_guardian/run_all.py
       - name: YAML
         run: >-
           yamllint -d "{extends: relaxed, rules: {line-length: disable}}"

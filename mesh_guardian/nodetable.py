@@ -760,7 +760,7 @@ class NodeTable:
             "contact_src": src[0], "active_gap_max_s": src[1], "since_active_s": src[2], **self._silence(nid, bool(avail)),
             "rtt_ms": rtt_last, "rtt_avg_ms": rtt_avg, "rtt_fail": rtt_fail,
             "last_report": v["node"].get("last"), "last_radio": None,
-            "bssid": bssid, "access_point": ap,
+            "bssid": bssid, "access_point": ap, "channel": ch if wifi else None,
         }
 
     def header(self):

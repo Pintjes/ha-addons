@@ -461,11 +461,14 @@ class MatterLive:
         delay = 5
         while not self.w.stop.is_set():
             for url in list(self.h.urls):
+                before = self.since
                 try:
                     self._listen(url)
                     delay = 5
                 except Exception as err:  # noqa: BLE001
                     LOG.debug("Live link %s: %s", url, err)
+                    if self.since != before:   # it was connected, then dropped: try again soon, not in 2 min
+                        delay = 5
                 if self.w.stop.is_set():
                     return
             if self.w.stop.wait(delay):

@@ -45,8 +45,9 @@ is fine and, if not, which node and what to do. Every node — Thread, Wi-Fi and
 Ethernet — with its status and role, its parent (or first hop for a router)
 and signal, the border router it reaches Home Assistant through and in how many
 hops, its response time, power and battery, last contact and a one-line advice
-such as *Remove the battery 10s*. Ping a node, make it look for a better parent
-or interview it again from its line. A node that suddenly goes silent is
+such as *Remove the battery 10s*. Ping a node, make it look for a new link or
+interview it again from its line; keep the pairing code of each device and pair
+a device again from the page. A node that suddenly goes silent is
 flagged minutes before Home Assistant marks it unavailable. Sort, filter, pick
 and move the columns; 7-day curves for every node; light and dark theme, phone
 layout.
@@ -71,11 +72,16 @@ All three only act when you press them, never automatically.
 - Everything as Home Assistant entities (MQTT): border routers, leader,
   partitions, unavailable nodes, recoveries, weak links, storms.
 - A readable event log (also kept in a file and sent over MQTT).
-- Safe: it never controls a device on its own. It listens to mDNS, reads Home
+- Safe: it never writes to a device on its own. It listens to mDNS, reads Home
   Assistant, and asks the Matter Server for node data, pings and neighbor
-  tables. It only writes to a node when you press a button: the node name
-  (**Rename nodes**), or a request to attach again to its own Thread network
-  (**Find better parents**).
+  tables. It only writes to a node when you press a button:
+  - the node name (**Rename nodes**);
+  - a request to attach again to its own Thread network (**Find better
+    parents**, **Find a new link**, **Recovery attempt** on an unavailable
+    node; on a router it restarts its Thread interface, a trial);
+  - and, after a confirmation, the two that cannot be undone: **Reset**
+    (the node leaves every ecosystem and has to be paired again) and
+    **Remove** (the node leaves Home Assistant).
 - Local only: no cloud, no telemetry.
 - English and French.
 

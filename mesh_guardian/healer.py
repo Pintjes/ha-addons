@@ -37,6 +37,7 @@ from i18n import t
 from store import load_json, save_json
 
 LOG = logging.getLogger("mg.healer")
+SHORT_LIST_S = 600   # s: a list of nodes far shorter than before is taken as the real one after this time
 
 NODES_TEMPLATE = (
     "{% set ns = namespace(out=[]) %}"
@@ -610,9 +611,15 @@ class Healer:
     # ------------------------------------------------------------- loop
     def cycle(self):
         data = self.fetch_ha_nodes()
-        if data is None or (len(self.nodes) >= 10 and len(data) < len(self.nodes) // 2):
+        short = data is not None and len(self.nodes) >= 10 and len(data) < len(self.nodes) // 2
+        if not short:
+            self._short_since = None
+        elif not getattr(self, "_short_since", None):
+            self._short_since = time.time()
+        if data is None or (short and time.time() - self._short_since < SHORT_LIST_S):
             # Home Assistant is starting (its Matter integration not loaded yet): the nodes are
-            # not gone, wait for the full list
+            # not gone, wait for the full list. A short list that lasts is the real one (nodes
+            # removed by the user): taken after SHORT_LIST_S, or the recovery would stop for good
             self.ha_down_t = time.time()
             return
         if not self._backfilled:

@@ -45,7 +45,11 @@ def build(data, version):
             "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in sorted(rows, key=lambda r: alias[r["name"]]):
         parent = r.get("parent")
-        parent = parent if r.get("network", "thread") != "thread" else alias.get(parent, "border router" if parent else "—")
+        if r.get("network", "thread") != "thread":   # the access point: its channel, never the name given to it
+            parent = (f"Wi-Fi · ch {r.get('channel')}" if r.get("channel") else "Wi-Fi") if r.get("network") == "wifi" \
+                else "Ethernet"
+        else:
+            parent = alias.get(parent, "border router" if parent else "—")
         rssi = r.get("rssi") if r.get("rssi") is not None else r.get("best_rssi")
         lqi = r.get("lqi") if r.get("lqi") is not None else r.get("best_lqi")
         out.append(f"| {alias[r['name']]} | {r.get('network', 'thread')} | {r.get('model') or '?'} | {'battery' if r.get('battery') else 'mains'} | "
