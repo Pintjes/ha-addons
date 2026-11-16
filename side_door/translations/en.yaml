@@ -5,19 +5,10 @@ configuration:
     description: "For a single app: the address Home Assistant uses to reach it, for example http://192.168.1.10:8000."
   apps:
     name: Several apps
-    description: "One entry per app, with the name shown on its tab and its address. Optional 'start': the page the tab opens on, when it is not the root of the app (web/index.html for Plex). Optional 'headers': headers sent to the app with every request, written 'Name: value' and separated by ' | ', for an app behind a gate that lets a token in. Optional 'hidden': the app is put aside, it has no tab and is not loaded. With two apps or more, the panel shows a row of tabs. When this list is filled, the address above is ignored."
-  rewrite_paths:
-    name: Rewrite paths
-    description: "Needed when the app uses paths starting with / (most apps). Turn off for an app that already handles the X-Ingress-Path header."
+    description: "One entry per app, with the name shown on its tab and its address. Optional 'start': the page the tab opens on, when it is not the root of the app (web/index.html for Plex). Optional 'headers': headers sent to the app with every request, written 'Name: value' and separated by ' | ', for an app behind a gate that lets a token in. Optional 'hidden': the app is put aside, it has no tab and is not loaded. Optional, for apps that need them: 'rewrite' (on by default: off for an app that already handles the X-Ingress-Path header), 'inject_script' (for an app that builds its addresses in JavaScript and stays blank or leaves the panel), 'hide_proxy' (for an app that asks for a login through Side Door but not on the local network), 'verify_tls' (auto by default: the certificate of an https address is checked when the app is given by a name, not by an IP address; on or off to decide). With two apps or more, the panel shows a row of tabs. When this list is filled, the address above is ignored."
   rewrite_prefixes:
     name: More texts to rewrite
     description: "Advanced. Text found right before a path starting with / that the add-on does not rewrite by itself, for example data-url=\"."
-  inject_script:
-    name: Inject a script (experimental)
-    description: "For apps that build their addresses in JavaScript and stay blank or leave the panel. A script loaded before the app moves these addresses under the ingress path. Leave off when the app works without it."
-  hide_proxy:
-    name: Hide the relay from the apps
-    description: "For apps that ask for a login through Side Door but not on the local network (Plex, for example): they treat a relayed request as coming from outside. The app then only sees the address of Home Assistant."
   max_body_mb:
     name: Largest upload (MB)
     description: Largest file that can be sent to the app.

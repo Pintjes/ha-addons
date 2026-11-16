@@ -1,13 +1,10 @@
 {
   "target_url": "",
   "apps": [
-    {"name": "One", "url": "http://127.0.0.1:8000", "headers": "X-Test: yes"},
+    {"name": "One", "url": "http://127.0.0.1:8000", "headers": "X-Test: yes", "inject_script": true},
     {"name": "Two", "url": "http://127.0.0.1:8000", "hidden": true}
   ],
-  "rewrite_paths": true,
   "rewrite_prefixes": [],
-  "inject_script": true,
-  "hide_proxy": false,
   "max_body_mb": 100,
   "timeout": 120
 }

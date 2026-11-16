@@ -1,6 +1,6 @@
 FROM nginx:1.28-alpine
 
-RUN apk add --no-cache python3
+RUN apk add --no-cache python3 ca-certificates
 
 COPY run.py /run.py
 COPY web /web

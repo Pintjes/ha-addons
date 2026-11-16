@@ -50,11 +50,8 @@ computer that runs the app, and the rules between your networks (VLANs).
 | Option | Default | Description |
 |---|---|---|
 | `target_url` | empty | For a single app: the address Home Assistant uses to reach it, for example `http://192.168.1.10:8000`. A path is accepted (`http://192.168.1.10/app/`). |
-| `apps` | empty | For several apps: a list of `name` and `url` (see below). When filled, `target_url` is ignored. |
-| `rewrite_paths` | `true` | Rewrites the paths of the app (see below). Turn off for an app that already handles the `X-Ingress-Path` header. |
+| `apps` | empty | A list of apps, each with a `name`, a `url` and its own settings (see below). When filled, `target_url` is ignored. |
 | `rewrite_prefixes` | empty | Advanced: more texts after which a path is rewritten. |
-| `inject_script` | `false` | Experimental: for apps that build their addresses in JavaScript (see below). |
-| `hide_proxy` | `false` | For apps that ask for a login through Side Door but not on the local network (see below). |
 | `max_body_mb` | `100` | Largest upload, in MB. |
 | `timeout` | `120` | Seconds to wait for an answer of the app. A WebSocket with no traffic for that long is closed. |
 
@@ -73,8 +70,23 @@ apps:
     url: http://192.168.1.20
 ```
 
-An entry can also have a `start` page, for an app whose interface is not at
-its root: `start: web/index.html` for Plex.
+### Settings of an app
+
+Each entry can also have, only when the app needs it:
+
+| Setting | Default | Description |
+|---|---|---|
+| `start` | empty | The page the tab opens on, when the interface is not at the root of the app: `web/index.html` for Plex. |
+| `rewrite` | on | Rewrites the paths of the app (see below). Turn off for an app that already handles the `X-Ingress-Path` header. |
+| `inject_script` | off | Experimental: for an app that builds its addresses in JavaScript (see below). |
+| `hide_proxy` | off | For an app that asks for a login through Side Door but not on the local network (see below). |
+| `verify_tls` | `auto` | The certificate of an `https://` app (see *Security*). |
+| `headers` | empty | Headers sent with every request (see below). |
+| `hidden` | off | The app is put aside (see below). |
+
+A target set with `target_url` takes the default settings. Up to version
+1.10, `rewrite_paths`, `inject_script` and `hide_proxy` were options of the
+whole add-on; they are now settings of each app.
 
 An entry can have `headers`, sent to the app with every request. They are
 written `Name: value` and separated by ` | `. This is for an app behind a
@@ -142,7 +154,7 @@ log in to them once more.
 Behind the ingress, the app is not at `/` but under a path such as
 `/api/hassio_ingress/<token>/`. Most apps write links starting with `/`
 (`/static/style.css`, `/login`), which would leave the ingress. With
-`rewrite_paths` on, the add-on:
+`rewrite` on (the default), the add-on:
 
 - rewrites redirections (`Location`) and the path of cookies;
 - rewrites, in HTML, CSS, JavaScript and JSON answers, a path starting with
@@ -160,11 +172,18 @@ Behind the ingress, the app is not at `/` but under a path such as
 
 The original `X-Ingress-Path` header is passed on to the app.
 
+Limits of the rewriting:
+
+- a path built in JavaScript at run time is not seen. If it always follows the
+  same text, add that text to `rewrite_prefixes` (for example `data-url="`);
+- a single-page app with its own router may need a base path setting on its
+  side instead.
+
 ### Apps that build their addresses in JavaScript
 
 Some apps send an almost empty page and a program that builds every address
 in the browser. Nothing can be rewritten in what the add-on relays, and the
-app stays blank or leaves the panel. With `inject_script` on, the add-on:
+app stays blank or leaves the panel. With `inject_script` on for that app, the add-on:
 
 - loads a small script before the app. It moves under the ingress path the
   requests of the app (`fetch`, `XMLHttpRequest`, WebSocket), its internal
@@ -180,15 +199,16 @@ on the page it expects. This needs the app to be a tab (two apps or more).
 
 This is experimental and cannot work with every app: a script that reads
 `location` without `window.` in front is not caught, and neither is an
-address built inside a web worker. Leave the option off when the app works
-without it. It applies to every app of the list.
+address built inside a web worker. Leave it off for an app that works
+without it.
 
 ### Apps that only trust the local network
 
 Some apps let the local network in without a login, and ask for one as soon
 as a request was relayed (they look at the `X-Forwarded-For` header). Plex
 does. With `hide_proxy` on, the add-on no longer says the request was
-relayed: the app sees a request coming from Home Assistant itself. The
+relayed: the app sees a request coming from Home Assistant itself. Set it
+only on the apps that need it. The
 address of Home Assistant must then be one the app lets in without a login
 (in Plex: Settings → Network → *List of IP addresses and networks that are
 allowed without auth*).
@@ -196,14 +216,14 @@ allowed without auth*).
 Everyone who can open the panel then enters the app without a login: only
 use it when that is what you want.
 
-Limits:
-
-- a path built in JavaScript at run time is not seen. If it always follows the
-  same text, add that text to `rewrite_prefixes` (for example `data-url="`);
-- a single-page app with its own router may need a base path setting on its
-  side instead.
-
 ## Security
+
+**Only open apps you trust.** An app shown by Side Door runs at the address of
+Home Assistant. Its JavaScript, and every script it loads from elsewhere, can
+read what Home Assistant keeps in the browser, your login included, and act on
+Home Assistant as you. It can read the other apps of the panel too. No setting
+can prevent it while the app goes through the ingress: keep Side Door for apps
+of your own network that you trust, never for a public website.
 
 - Only the Home Assistant ingress (172.30.32.2) is accepted; no port is
   published.
@@ -215,8 +235,12 @@ Limits:
   nobody could log in to it. They then travel unencrypted between the browser
   and Home Assistant, like the rest of that session. Over HTTPS nothing
   changes.
-- The TLS certificate of an `https://` target is not checked (self-signed
-  certificates are common on a local network).
+- The certificate of an `https://` app is checked when the app is given by a
+  name (`https://app.example.com`) and not when it is given by an IP address
+  (`https://192.168.1.1`), since devices of a local network often sign their
+  own certificate. Set `verify_tls` to `on` or `off` to decide. Keep it
+  checked for an app reached over the Internet, above all when it receives
+  `headers`: they would otherwise go to whoever stands in the way.
 
 ## FAQ and troubleshooting
 
@@ -229,6 +253,11 @@ computer off, app stopped, firewall, or a rule between two networks.
 **The page shows without style, or links leave the panel** — a path is not
 rewritten. Look at the address that fails in the browser developer tools and
 add the text that precedes it to `rewrite_prefixes`.
+
+**"The app does not answer" for an `https://` app given by a name** — its
+certificate may not be valid (self-signed, expired, another name). The Log tab
+says `certificate verify failed`. Set `verify_tls: off` for that app if you
+trust the network in between.
 
 **The add-on does not start** — a host name that cannot be resolved stops
 nginx. Use an IP address.

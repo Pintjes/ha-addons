@@ -542,22 +542,30 @@ def discreet(url):
     return re.sub(r"//[^/@]*@", "//***@", url)
 
 
+def flag(entry, key, default):
+    """A yes/no setting of an app entry; the default when it is not set."""
+    value = entry.get(key)
+    return default if value is None else bool(value)
+
+
 def read_apps(options):
     """Valid apps of the options: a list of dicts name, id, target, origin,
-    host, base. 'apps' wins over the single 'target_url'."""
+    host, base, and the settings of the app. 'apps' wins over the single
+    'target_url', which takes the default settings."""
     entries = []
     for entry in options.get("apps") or []:
         if isinstance(entry, dict):
-            entries.append(((entry.get("name") or "").strip(), (entry.get("url") or "").strip(),
-                            (entry.get("start") or "").strip(), entry.get("headers") or "",
-                            bool(entry.get("hidden"))))
+            entries.append(entry)
     single = (options.get("target_url") or "").strip()
     if entries and single:
         log("apps is set: target_url is ignored")
     elif single:
-        entries = [("", single, "", "", False)]
+        entries = [{"url": single}]
     apps, used = [], set()
-    for name, url, start, headers, hidden in entries:
+    for entry in entries:
+        name, url = (entry.get("name") or "").strip(), (entry.get("url") or "").strip()
+        start, headers = (entry.get("start") or "").strip(), entry.get("headers") or ""
+        hidden = flag(entry, "hidden", False)
         label = name or discreet(url) or "(empty)"
         if not url:
             log(f"app {label!r} ignored: no address")
@@ -572,11 +580,43 @@ def read_apps(options):
         if not re.fullmatch(r"[A-Za-z0-9._~/#?=&%!-]*", start) or ".." in start:
             log(f"app {label!r}: start page {start!r} ignored (only letters, digits and ._~/#?=&%!- are accepted)")
             start = ""
+        verify_tls = str(entry.get("verify_tls") or "auto").lower()
+        if verify_tls not in ("auto", "on", "off"):
+            log(f"app {label!r}: verify_tls {verify_tls!r} ignored (auto, on or off)")
+            verify_tls = "auto"
         # A hidden app keeps its place: the paths of the others do not move
         apps.append({"name": name, "id": app_id(name, used), "target": target,
                      "origin": origin, "host": host, "base": base, "start": start,
-                     "hidden": hidden, "headers": [] if hidden else read_headers(label, headers)})
+                     "hidden": hidden, "headers": [] if hidden else read_headers(label, headers),
+                     "rewrite": flag(entry, "rewrite", True), "inject": flag(entry, "inject_script", False),
+                     "hide_proxy": flag(entry, "hide_proxy", False), "verify_tls": verify_tls})
     return apps
+
+
+# The certificates of the public authorities (package ca-certificates)
+AUTHORITIES = "/etc/ssl/certs/ca-certificates.crt"
+
+
+def tls_rules(app):
+    """nginx directives on the certificate of an app reached over HTTPS.
+    "auto": checked when the app is given by a name (a public site, or a name
+    with a real certificate), not when it is given by an address (a device of
+    the local network, most often with a certificate it signed itself)."""
+    if not app["origin"].startswith("https://"):
+        return ""
+    mode = app["verify_tls"]
+    if mode == "auto":
+        try:
+            ipaddress.ip_address(urlsplit(app["origin"]).hostname)
+            mode = "off"
+        except ValueError:
+            mode = "on"
+    if mode == "off":
+        return "            proxy_ssl_verify off;\n"
+    return ("            proxy_ssl_verify on;\n"
+            f"            proxy_ssl_trusted_certificate {AUTHORITIES};\n"
+            "            proxy_ssl_verify_depth 5;\n"
+            f"            proxy_ssl_name {urlsplit(app['origin']).hostname};\n")
 
 
 # Headers the add-on sets itself: an app entry cannot replace them
@@ -648,9 +688,6 @@ def build(options, mark="sd0", resolve=ipv4_servers):
     # Tabs as soon as the list has two apps, hidden ones included: hiding an
     # app does not move the others (they would ask for a new login)
     several = len(apps) > 1
-    rewrite_on = bool(options.get("rewrite_paths", True))
-    inject = bool(options.get("inject_script", False))
-    forwarded = NOT_FORWARDED if options.get("hide_proxy", False) else FORWARDED
     prefixes = all_prefixes(options.get("rewrite_prefixes") or [])
     timeout = int(options.get("timeout", 120))
     maps, locations, script_apps = "", "", {}
@@ -660,8 +697,12 @@ def build(options, mark="sd0", resolve=ipv4_servers):
             continue
         path = f"/app/{app['id']}/" if several else "/"
         maps += MAPS % {"n": n, "origin": app["origin"]}
-        rewrite = redirect_rules(app["origin"], app["base"], "$http_x_ingress_path" + path) if rewrite_on else ""
+        rewrite = ""
+        if app["rewrite"]:
+            rewrite = redirect_rules(app["origin"], app["base"], "$http_x_ingress_path" + path)
+        forwarded = NOT_FORWARDED if app["hide_proxy"] else FORWARDED
         extra = "".join(f'            proxy_set_header {name} "{value}";\n' for name, value in app["headers"])
+        extra += tls_rules(app)
         target = app["target"]
         servers = resolve(app["origin"])
         if servers:
@@ -669,7 +710,8 @@ def build(options, mark="sd0", resolve=ipv4_servers):
             scheme, name = app["origin"].split("://")[0], urlsplit(app["origin"]).hostname
             maps += "    upstream sd_app_%d {\n%s    }\n" % (n, "".join(f"        server {s};\n" for s in servers))
             target = f"{scheme}://sd_app_{n}{app['base']}"
-            extra += f"            proxy_ssl_name {name};\n"
+            if f"proxy_ssl_name {name};" not in extra:
+                extra += f"            proxy_ssl_name {name};\n"
         locations += APP_LOCATION % {
             "path": path, "target": target, "host": app["host"],
             "n": n, "timeout": timeout, "rewrite": rewrite, "forwarded": forwarded + extra,
@@ -678,21 +720,32 @@ def build(options, mark="sd0", resolve=ipv4_servers):
             locations += START_LOCATION % {"start": app["start"]}
         script_apps[str(n)] = {
             "path": path, "base": app["base"], "own": app["origin"] + app["base"],
-            "rewrite": rewrite_on, "inject": inject, "prefixes": prefixes,
+            "rewrite": app["rewrite"], "inject": app["inject"], "prefixes": prefixes,
         }
     conf = HEAD % {"port": PORT, "web": WEB, "njs": NJS, "mark": mark, "maps": maps}
     conf += SERVER % {"max_body_mb": int(options.get("max_body_mb", 100))}
     if several:
         conf += SHELL_LOCATION % {"shell_dir": SHELL_DIR}
     conf += locations + "    }\n}\n"
-    paths = "paths rewritten" if rewrite_on else "paths not rewritten"
-    if inject:
-        paths += ", script injected"
-    listed = ", ".join(f"{app['name']} -> {app['target']}" for app in shown)
+    listed = ", ".join(f"{app['name']} -> {app['target']}{settings(app)}" for app in shown)
     hidden = [app["name"] for app in apps if app["hidden"]]
     if hidden:
         listed += f" (hidden: {', '.join(hidden)})"
-    return conf, script_apps, shell_page(shown) if several else None, f"{len(shown)} app(s), {paths}: {listed}"
+    return conf, script_apps, shell_page(shown) if several else None, f"{len(shown)} app(s): {listed}"
+
+
+def settings(app):
+    """The settings of an app that are not the default ones, for the log."""
+    said = []
+    if not app["rewrite"]:
+        said.append("paths not rewritten")
+    if app["inject"]:
+        said.append("script injected")
+    if app["hide_proxy"]:
+        said.append("relay hidden")
+    if app["origin"].startswith("https://"):
+        said.append("certificate " + ("checked" if "proxy_ssl_verify on;" in tls_rules(app) else "not checked"))
+    return f" [{', '.join(said)}]" if said else ""
 
 
 def script(source, script_apps, mark="sd0"):

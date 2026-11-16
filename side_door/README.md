@@ -32,7 +32,10 @@ expects.
 ## Also
 
 - One option to set: the address of the app.
-- Several apps in the same panel, each on a tab with the name you choose.
+- Several apps in the same panel, each on a tab with the name you choose, and
+  settings of their own.
+- An eye to hide apps, and a link for each app to open it from a dashboard
+  button, with or without the row of tabs.
 - A clear page when the app is off or the address is missing.
 - Extra rewrite rules for the stubborn cases.
 

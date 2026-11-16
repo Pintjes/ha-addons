@@ -4,6 +4,26 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.0] - 2026-11-17
+
+### Changed
+
+- **Breaking:** `rewrite_paths`, `inject_script` and `hide_proxy` are now
+  settings of each app (`rewrite`, `inject_script`, `hide_proxy` in the
+  entries of `apps`), no longer options of the whole add-on. An app that
+  needed one of them must have it set again after the update.
+
+### Added
+
+- The certificate of an `https://` app is checked when the app is given by a
+  name, not when it is given by an IP address. `verify_tls` (`auto`, `on`,
+  `off`) decides for an app.
+
+### Documentation
+
+- Security: every app shown by Side Door can act on Home Assistant as you; only
+  open apps you trust.
+
 ## [1.10.1] - 2026-11-17
 
 ### Fixed

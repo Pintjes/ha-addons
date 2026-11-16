@@ -58,9 +58,9 @@ class Build(unittest.TestCase):
         self.assertEqual(conf, build({"apps": [A]})[0])
 
     def test_several_apps(self):
-        conf, apps, shell, _, _ = build({"target_url": "http://ignored:1", "inject_script": True, "apps": [
-            A, {"name": "<b>NAS & co</b>", "url": "https://nas.lan/app"}, dict(A, url="http://10.0.0.5"),
-            {"name": "x", "url": "nope"}]})
+        conf, apps, shell, _, _ = build({"target_url": "http://ignored:1", "apps": [
+            A, {"name": "<b>NAS & co</b>", "url": "https://nas.lan/app", "inject_script": True},
+            dict(A, url="http://10.0.0.5"), {"name": "x", "url": "nope"}]})
         for line in ["location = / {", "location /app/immo/ {", "location /app/b-nas-co-b/ {",
                      "location /app/immo-2/ {", "proxy_pass https://nas.lan/app/;",
                      "proxy_redirect /app/ $http_x_ingress_path/app/b-nas-co-b/;", "set $sd_app 3;"]:
@@ -109,9 +109,58 @@ class Build(unittest.TestCase):
 
     def test_hide_proxy(self):
         self.assertIn("proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;", build({"apps": [A]})[0])
-        conf = build({"apps": [A], "hide_proxy": True})[0]
+        conf = build({"apps": [dict(A, hide_proxy=True)]})[0]
         self.assertIn('proxy_set_header X-Forwarded-For "";', conf)
         self.assertNotIn("$proxy_add_x_forwarded_for", conf)
+
+    def location(self, conf, app_id):
+        """The block of an app in the configuration."""
+        start = conf.index(f"location /app/{app_id}/ {{")
+        return conf[start:conf.index("\n        }\n", start)]
+
+    def test_settings_are_per_app(self):
+        conf, apps, _, message, _ = build({"apps": [
+            A, dict(B, inject_script=True, hide_proxy=True), {"name": "Raw", "url": "http://h", "rewrite": False}]})
+        immo, plex, raw = self.location(conf, "immo"), self.location(conf, "plex"), self.location(conf, "raw")
+        self.assertIn("$proxy_add_x_forwarded_for", immo)
+        self.assertIn('proxy_set_header X-Forwarded-For "";', plex)
+        self.assertIn("proxy_redirect", immo)
+        self.assertNotIn("proxy_redirect", raw)
+        self.assertEqual([apps[n]["inject"] for n in "123"], [False, True, False])
+        self.assertEqual([apps[n]["rewrite"] for n in "123"], [True, True, False])
+        self.assertIn("Plex -> http://192.168.0.64:32400/ [script injected, relay hidden]", message)
+        self.assertIn("Raw -> http://h/ [paths not rewritten]", message)
+        self.assertIn("Immo -> http://192.168.0.12:8000/,", message)
+
+    def test_old_options_of_the_whole_add_on_are_ignored(self):
+        conf, apps, _, _, _ = build({"apps": [A], "inject_script": True, "hide_proxy": True, "rewrite_paths": False})
+        self.assertFalse(apps["1"]["inject"])
+        self.assertTrue(apps["1"]["rewrite"])
+        self.assertIn("$proxy_add_x_forwarded_for", conf)
+
+    def test_certificate(self):
+        conf = build({"apps": [
+            {"name": "Lan", "url": "https://192.168.0.1"},
+            {"name": "Named", "url": "https://plex.example.com"},
+            {"name": "Self", "url": "https://nas.local", "verify_tls": "off"},
+            {"name": "Forced", "url": "https://10.0.0.9", "verify_tls": "on"},
+            {"name": "Plain", "url": "http://10.0.0.8"},
+            {"name": "Odd", "url": "https://odd.example", "verify_tls": "maybe"}]})[0]
+        checked = "proxy_ssl_verify on;\n            proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;"
+        self.assertIn("proxy_ssl_verify off;", self.location(conf, "lan"))
+        self.assertIn(checked, self.location(conf, "named"))
+        self.assertIn("proxy_ssl_name plex.example.com;", self.location(conf, "named"))
+        self.assertIn("proxy_ssl_verify off;", self.location(conf, "self"))
+        self.assertIn(checked, self.location(conf, "forced"))
+        self.assertNotIn("proxy_ssl_verify", self.location(conf, "plain"))
+        self.assertIn(checked, self.location(conf, "odd"))
+
+    def test_certificate_of_a_name_reached_over_ipv4(self):
+        conf = build({"apps": [A, {"name": "R", "url": "https://remote.example"}]},
+                     lambda origin: ["104.21.1.1:443"] if "remote" in origin else None)[0]
+        block = self.location(conf, "r")
+        self.assertIn("proxy_ssl_verify on;", block)
+        self.assertEqual(block.count("proxy_ssl_name remote.example;"), 1)
 
     def test_host_name_is_reached_over_ipv4(self):
         conf = build({"apps": [A, {"name": "R", "url": "https://remote.example/x"}]},
