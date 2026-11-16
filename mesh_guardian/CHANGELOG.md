@@ -4,6 +4,19 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.15.1] - 2026-11-16
+
+### Changed
+
+- After a reset from a distance, the pairing code follows the node by itself when it comes back: the only code of that product waiting since such a reset is attached to the new node (the panel says so).
+- A code typed for a device whose QR code is already kept takes that QR code back, instead of showing digits only.
+- Reset of a Thread router: the panel warns to wait 2 to 3 minutes before pairing it again.
+- Documentation: what to do when the pairing stops halfway and the device stays paired with the phone only.
+
+### Fixed
+
+- The old identity of a node reset from a distance, still announced by the border routers for some days, is no longer reported as "unknown to the Matter Server".
+
 ## [2.15.0] - 2026-11-16
 
 ### Added

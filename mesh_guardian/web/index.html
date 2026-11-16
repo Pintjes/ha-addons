@@ -335,7 +335,8 @@ const T = {
     t_src:"Last contact source", t_gap:"Longest silence", copy:"Copy", copied:"Copied", download:"Download", report_tip:"Anonymized report (no names, areas or addresses) to paste in an issue",
     pc_t:"Pairing code", pc_tip:"Kept by the add-on: the device can be paired again after a reset without reaching its label",
     pc_drop:"Drop a photo of the QR code here, or", pc_pick:"choose a photo", pc_ph:"or type the code: 1234-567-8901 or MT:…",
-    pc_none_qr:"Typed code: no QR code to show", pc_replace:"Replace", pc_delete:"Delete", pc_delete_confirm:"Delete this pairing code?",
+    pc_auto:"Attached by itself after the reset: it was the only code of this product waiting. Replace it if this is another device.",
+    pc_none_qr:"Typed code: no QR code to show (the digits do not hold everything a QR code needs)", pc_replace:"Replace", pc_delete:"Delete", pc_delete_confirm:"Delete this pairing code?",
     pc_saved:"Pairing code saved", pc_deleted:"Pairing code deleted", pc_reading:"Reading the photo…", pc_noqr:"No QR code found in this photo",
     pc_e_format:"This is not a Matter pairing code", pc_e_check:"Wrong code: a digit is mistyped", pc_e_device:"This QR code is the one of another product",
     pc_e_node:"Node not found", pc_e_error:"Error", pc_attach:"A code kept for a device that left the table: give it to this node if it is the same device", pc_attach_btn:"Attach",
@@ -343,6 +344,7 @@ const T = {
     pc_list_none:"No code waiting: every code kept belongs to a node of the table.", pc_count:"Codes kept in all: {n}",
     rs_btn:"Reset", rs_tip:"Factory reset from a distance: the node leaves every ecosystem and must be paired again", rs_down:"An unavailable node cannot be reset from a distance",
     rs_title:"Reset {n}?", rs_text:"It will be removed from: {f}. It forgets its network and must be paired again, within Bluetooth range, with its code {c} (kept under Pairing codes). This cannot be undone.",
+    rs_router:"It is a Thread router: the nodes that go through it pick another one, which takes a few minutes. Wait 2 to 3 minutes before pairing it again, or the pairing may fail.",
     rs_check:"I understand that this node will have to be paired again", rs_go:"Reset for good", rs_cancel:"Cancel", rs_close:"Close",
     rs_nocode:"Save its pairing code first: without it, the label of the device would be the only way to pair it again.", rs_noanswer:"{n} does not answer: nothing was sent",
     rs_r_reset:"{n} reset (removed from: {f}). Its code is below, to pair it again.", rs_r_partial:"{n}: removed from {f}, but still in Home Assistant. Try again.",
@@ -405,7 +407,8 @@ const T = {
     t_src:"Source du dernier contact", t_gap:"Plus long silence", copy:"Copier", copied:"Copié", download:"Télécharger", report_tip:"Rapport anonymisé (sans noms, pièces ni adresses) à coller dans une issue",
     pc_t:"Code d'appairage", pc_tip:"Conservé par l'add-on : l'appareil peut être appairé à nouveau après une réinitialisation sans accéder à son étiquette",
     pc_drop:"Déposer ici une photo du QR code, ou", pc_pick:"choisir une photo", pc_ph:"ou saisir le code : 1234-567-8901 ou MT:…",
-    pc_none_qr:"Code saisi : pas de QR code à afficher", pc_replace:"Remplacer", pc_delete:"Supprimer", pc_delete_confirm:"Supprimer ce code d'appairage ?",
+    pc_auto:"Rattaché tout seul après la réinitialisation : c'était le seul code de ce produit en attente. À remplacer si c'est un autre appareil.",
+    pc_none_qr:"Code saisi : pas de QR code à afficher (les chiffres ne contiennent pas tout ce qu'il faut à un QR code)", pc_replace:"Remplacer", pc_delete:"Supprimer", pc_delete_confirm:"Supprimer ce code d'appairage ?",
     pc_saved:"Code d'appairage enregistré", pc_deleted:"Code d'appairage supprimé", pc_reading:"Lecture de la photo…", pc_noqr:"Aucun QR code trouvé dans cette photo",
     pc_e_format:"Ce n'est pas un code d'appairage Matter", pc_e_check:"Code erroné : un chiffre est mal saisi", pc_e_device:"Ce QR code est celui d'un autre produit",
     pc_e_node:"Node introuvable", pc_e_error:"Erreur", pc_attach:"Code conservé pour un appareil sorti du tableau : le rattacher à cette node si c'est le même appareil", pc_attach_btn:"Rattacher",
@@ -413,6 +416,7 @@ const T = {
     pc_list_none:"Aucun code en attente : chaque code conservé appartient à une node du tableau.", pc_count:"Codes conservés au total : {n}",
     rs_btn:"Réinitialiser", rs_tip:"Réinitialisation d'usine à distance : la node quitte tous les écosystèmes et doit être appairée à nouveau", rs_down:"Une node indisponible ne peut pas être réinitialisée à distance",
     rs_title:"Réinitialiser {n} ?", rs_text:"Elle sera retirée de : {f}. Elle oublie son réseau et devra être appairée à nouveau, à portée Bluetooth, avec son code {c} (conservé dans « Codes d'appairage »). C'est irréversible.",
+    rs_router:"C'est un routeur Thread : les nodes qui passent par elle en choisissent un autre, ce qui prend quelques minutes. Attendre 2 à 3 minutes avant de l'appairer à nouveau, sinon l'appairage peut échouer.",
     rs_check:"J'ai compris que cette node devra être appairée à nouveau", rs_go:"Réinitialiser définitivement", rs_cancel:"Annuler", rs_close:"Fermer",
     rs_nocode:"Enregistre d'abord son code d'appairage : sans lui, l'étiquette de l'appareil serait le seul moyen de l'appairer à nouveau.", rs_noanswer:"{n} ne répond pas : rien n'a été envoyé",
     rs_r_reset:"{n} réinitialisée (retirée de : {f}). Son code est ci-dessous, pour l'appairer à nouveau.", rs_r_partial:"{n} : retirée de {f}, mais toujours dans Home Assistant. Réessayer.",
@@ -1107,7 +1111,7 @@ function renderPair() {
   const el = $("#pair"); if (!el || !pair.data || pair.id !== openId) return;
   const c = pair.data.code, free = pair.data.free || [];
   el.innerHTML = c && !pair.edit
-    ? codeCard(c) + `<p class="pcbtns"><button class="btn" data-pc="replace">${L("pc_replace")}</button><button class="btn" data-pc="delete" data-key="${esc(c.key)}">${L("pc_delete")}</button></p>`
+    ? codeCard(c) + (c.auto ? `<small class="mut">${L("pc_auto")}</small>` : "") + `<p class="pcbtns"><button class="btn" data-pc="replace">${L("pc_replace")}</button><button class="btn" data-pc="delete" data-key="${esc(c.key)}">${L("pc_delete")}</button></p>`
     : `<div class="pcdrop">${L("pc_drop")} <label class="btn">${L("pc_pick")}<input type="file" accept="image/*" hidden></label></div>
        <form class="pcf"><input name="c" placeholder="${esc(L("pc_ph"))}" autocomplete="off" spellcheck="false" maxlength="80"><button class="btn">${L("save")}</button></form>` +
       (free.length ? `<form class="pca"><select name="k" aria-label="${esc(L("pc_attach"))}">${free.map(f =>
@@ -1203,6 +1207,7 @@ async function resetAsk(id) {
   if (!info || !info.ok) return box(`<b>${esc(F("rs_noanswer", {n: r.name}))}</b><p class="pcbtns"><button class="btn" data-rs="cancel">${L("rs_close")}</button></p>`);
   if (!info.manual) return box(`<b>${esc(L("rs_nocode"))}</b><p class="pcbtns"><button class="btn" data-rs="cancel">${L("rs_close")}</button></p>`);
   box(`<b>${esc(F("rs_title", {n: r.name}))}</b><br>${esc(F("rs_text", {f: info.fabrics.join(", "), c: manualFmt(info.manual)}))}
+    ${isRouter(r) ? `<br><br>${esc(L("rs_router"))}` : ""}
     <label class="rsok"><input type="checkbox" id="rsok"> ${esc(L("rs_check"))}</label>
     <p class="pcbtns"><button class="btn danger" data-rs="go" disabled>${L("rs_go")}</button><button class="btn" data-rs="cancel">${L("rs_cancel")}</button></p>`);
 }

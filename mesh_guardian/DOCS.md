@@ -467,7 +467,21 @@ first (Google Home, Apple Home…), Home Assistant last.
 - In the other ecosystems the device stays listed as offline: delete it there.
 - What a device does once out of its last fabric is its maker's choice. If it
   does not offer itself for pairing, it has only left the ecosystems and needs
-  its button after all.
+  its button after all. Tried on an IKEA GRILLPLATS plug: it goes back to
+  pairing by itself.
+- A Thread router that is reset leaves the nodes that went through it without
+  their route for a few minutes. Wait 2 to 3 minutes before pairing it again:
+  pairing while the network settles may fail.
+- If the pairing stops halfway (the device no longer blinks but is not in Home
+  Assistant), it stayed paired with the phone only. Remove it there, which
+  resets it again, then pair it once more: on Android, Settings → Google →
+  Devices & sharing → Matter devices; on iPhone, Settings → General → Matter
+  Accessories.
+- For some days the border routers still announce the old identity of the
+  node. Mesh Guardian does not report it as unknown; nothing can withdraw it
+  but time. Its code follows the node: when it comes back, the only code of
+  that product waiting since a reset is attached to it by itself (the panel
+  says so; replace it if it is another device).
 
 ### Silent nodes
 

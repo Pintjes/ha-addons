@@ -27,6 +27,7 @@ Recovery attempt (recover_node): the same connect command, sent to a Thread node
 that is unavailable, router or end device. Its last known network id is used
 (it cannot be read). Nothing to lose: the node is already out.
 """
+import json
 import logging
 import threading
 import time
@@ -45,7 +46,9 @@ RECOVER_WAIT_S = 120  # s: recovery attempt: time left to the Matter Server to r
 CLOSE_TRIES = 3       # recovery attempt: tries to close the fail-safe of a node that is back...
 CLOSE_EVERY_S = 10    # s: ...this far apart
 FABRIC_VENDORS = {4937: "Apple Home", 24582: "Google Home", 4362: "SmartThings", 4631: "Amazon Alexa"}   # fabric vendor id -> name shown
-RESULT_KEEP_S = 900# s: a result stays in the table this long (the page shows it when it arrives)
+RESETS_FILE = "/data/reset_nodes.json"
+RESETS_KEEP_S = 7 * 86400   # s: the old identity of a reset node is not reported as unknown for this long
+RESULT_KEEP_S = 900   # s: a result stays in the table this long (the page shows it when it arrives)
 END_DEVICE_ROLES = (2, 3, 4)   # sleepy end device, end device, REED (a full end device attached as a child)
 CONNECT_NETWORK = 6   # Network Commissioning command id
 # PROVISIONAL (2.12.0, trial asked by the user): the same command on a router. A router has no
@@ -120,6 +123,18 @@ class Reattach:
         self.last = {"date": None, "checked": 0, "poor": 0, "better": 0, "nodes": []}
         self.results = {}         # node hex -> {"state": "pending" | "done", "text", "at"} of the last search
         self.recovering = set()   # node hex of the recovery attempts still followed
+        self.resets = {}          # node hex -> time of its reset with the Reset button (its old identity is announced a while)
+        try:
+            with open(RESETS_FILE) as f:
+                data = json.load(f)
+            self.resets = {k: v for k, v in data.items() if time.time() - v < RESETS_KEEP_S} if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            pass
+
+    def was_reset(self, node_id):
+        """True for the id (int) of a node reset with the Reset button in the last days."""
+        at = self.resets.get(f"{node_id:016X}") if isinstance(node_id, int) else None
+        return bool(at) and time.time() - at < RESETS_KEEP_S
 
     def result_of(self, nid):
         """Last parent search of a node for the table, while it is recent."""
@@ -641,6 +656,12 @@ class Reattach:
                 LOG.warning("reset of %s stopped after %d fabric(s): %s", name, len(removed), err)
                 return {"result": "partial" if removed else "noanswer", "fabrics": removed}
             removed.append("Home Assistant")
+            self.resets[nid] = time.time()
+            try:
+                with open(RESETS_FILE, "w") as f:
+                    json.dump(self.resets, f)
+            except OSError as err:
+                LOG.debug("cannot write %s: %s", RESETS_FILE, err)
             self.w.emit("node_reset", t("{node}: reset from a distance, to pair again", node=name), node=name, fabrics=removed)
             if self.table:
                 self.table.cache_t = 0

@@ -193,6 +193,8 @@ class WebUI:
                             out = {"ok": True, "result": "nocode"}
                         else:
                             out = {"ok": True, **ui.w.reattach.reset_node(nid)}
+                            if out.get("result") == "reset":
+                                ui.pairing.mark_reset(nid)   # its code follows it when it comes back
                     elif act == "remove":
                         h.matter_command("remove_node", {"node_id": int(nid, 16)}, timeout=120)
                         out = {"ok": True}

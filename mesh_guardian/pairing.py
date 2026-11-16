@@ -154,19 +154,61 @@ class Pairing:
         return {"key": key, "name": e.get("name"), "area": e.get("area"), "model": e.get("model"), "qr": e.get("qr"),
                 "manual": e.get("manual"), "saved": e.get("saved"), **more}
 
+    def _after_reset(self, nid, ident, present):
+        """Entry id of the code waiting for a node that was reset with the Reset button and
+        came back with nothing to tell it is the same device: the only code of that product
+        waiting since such a reset, for a node paired after it (node ids only grow)."""
+        if ident["vid"] is None:
+            return None
+        found = [k for k, e in self.items.items() if e.get("reset") and e.get("node") not in present
+                 and (e.get("vid"), e.get("pid")) == (ident["vid"], ident["pid"])
+                 and int(e.get("node") or "0", 16) < int(nid, 16)]
+        return found[0] if len(found) == 1 else None
+
+    def _twin(self, key, present):
+        """A code typed again for a device whose QR code is already kept: the typed digits do
+        not hold what a QR code needs, the kept entry does. The QR code moves to the typed
+        entry and the kept one, whose node is gone, is dropped."""
+        e = self.items[key]
+        if e.get("qr"):
+            return False
+        for other, o in list(self.items.items()):
+            if other != key and o.get("qr") and o.get("manual") == e.get("manual") and o.get("node") not in present \
+                    and (e.get("vid") is None or o.get("vid") is None or (o.get("vid"), o.get("pid")) == (e.get("vid"), e.get("pid"))):
+                e["qr"] = o["qr"]
+                del self.items[other]
+                return True
+        return False
+
     def of(self, nid, attrs, present):
-        """Code of a node, or None. A code found by what the device keeps is attached to the
-        node for good (it came back with a new node id)."""
+        """Code of a node, or None. A code found by what the device keeps, or waiting since
+        its reset, is attached to the node for good (it came back with a new node id)."""
         ident = identity(attrs)
         with self.lock:
-            key = self._find(nid, ident, present)
+            key, auto = self._find(nid, ident, present), False
+            if key is None:
+                key, auto = self._after_reset(nid, ident, present), True
             if key is None:
                 return None
             e = self.items[key]
+            changed = self._twin(key, present)
             if e.get("node") != nid:
-                e["node"] = nid
+                e.update({"node": nid, "auto": auto, "serial": ident["serial"], "hw": ident["hw"], "uid": ident["uid"]})
+                changed = True
+            if e.pop("reset", None):
+                changed = True
+            if changed:
                 self._save()
-            return self._public(key, e)
+            return self._public(key, e, auto=bool(e.get("auto")))
+
+    def mark_reset(self, nid):
+        """The node was reset with the Reset button: its code waits for the node that comes back."""
+        with self.lock:
+            for e in self.items.values():
+                if e.get("node") == nid:
+                    e["reset"] = True
+                    self._save()
+                    return
 
     def free(self, present, vid=None, pid=None):
         """Codes whose node is no longer there (removed or reset), newest first. vid / pid:
@@ -192,6 +234,7 @@ class Pairing:
                                "manual": code["manual"], "vid": ident["vid"] if ident["vid"] is not None else code["vid"],
                                "pid": ident["pid"] if ident["pid"] is not None else code["pid"],
                                "serial": ident["serial"], "hw": ident["hw"], "uid": ident["uid"], "saved": int(time.time())}
+            self._twin(key, present)
             self._save()
             return self._public(key, self.items[key])
 
@@ -206,7 +249,8 @@ class Pairing:
                 if other != key and o.get("node") == nid:
                     del self.items[other]
             e.update({"node": nid, "name": name or e.get("name"), "area": area or e.get("area"), "model": model or e.get("model"),
-                      "serial": ident["serial"], "hw": ident["hw"], "uid": ident["uid"]})
+                      "serial": ident["serial"], "hw": ident["hw"], "uid": ident["uid"], "auto": False})
+            e.pop("reset", None)
             self._save()
             return self._public(key, e)
 

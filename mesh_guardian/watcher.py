@@ -76,7 +76,7 @@ from matterlog import MatterLog  # noqa: E402
 from suplog import SupervisorLog  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.15.0"
+VERSION = "2.15.1"
 
 _MQ = _load_mqtt()
 MQTT_HOST = _MQ.get("host") or os.environ.get("MQTT_HOST", "core-mosquitto")
@@ -784,7 +784,12 @@ class Watch:
                 del self.matter[k]
             # still announced on the fabric but unknown to the Matter Server: a device removed
             # from Home Assistant without a factory reset keeps announcing itself
-            ghosts = sorted(k for k in self.matter if _int16(k) not in ids and self.matter[k].get("online"))
+            # A node reset with the Reset button is not one of them: its old identity stays
+            # announced by the border routers until their record of it expires, and nobody
+            # but the device could withdraw it (the Matter Server no longer knows the node)
+            rt = getattr(self, "reattach", None)
+            ghosts = sorted(k for k in self.matter if _int16(k) not in ids and self.matter[k].get("online")
+                            and not (rt and rt.was_reset(_int16(k))))
         if gone:
             self._save_known()
         if ghosts != getattr(self, "ghosts", []):
