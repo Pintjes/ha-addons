@@ -152,7 +152,7 @@ class Pairing:
     @staticmethod
     def _public(key, e, **more):
         return {"key": key, "name": e.get("name"), "area": e.get("area"), "model": e.get("model"), "qr": e.get("qr"),
-                "manual": e.get("manual"), "saved": e.get("saved"), **more}
+                "manual": e.get("manual"), "saved": e.get("saved"), "scanned": bool(e.get("pending")), **more}
 
     def _after_reset(self, nid, ident, present):
         """Entry id of the code waiting for a node that was reset with the Reset button and
@@ -164,6 +164,35 @@ class Pairing:
                  and (e.get("vid"), e.get("pid")) == (ident["vid"], ident["pid"])
                  and int(e.get("node") or "0", 16) < int(nid, 16)]
         return found[0] if len(found) == 1 else None
+
+    def _scanned(self, nid, ident):
+        """Entry id of the code scanned just before a pairing started from the page, for the
+        node that this pairing brought: the only scanned code of that product still waiting,
+        for a node that did not exist when it was scanned (node ids only grow)."""
+        if ident["vid"] is None:
+            return None
+        found = [k for k, e in self.items.items() if e.get("pending") and not e.get("node")
+                 and (e.get("vid"), e.get("pid")) == (ident["vid"], ident["pid"])
+                 and int(e.get("after") or "0", 16) < int(nid, 16)]
+        return found[0] if len(found) == 1 else None
+
+    def scan(self, text, present):
+        """Keep a code scanned before its device is paired: it waits for the node the pairing
+        brings. Raises ValueError("format" | "check" | "typed": only a QR code tells the product)."""
+        code = parse(text)
+        if not code["qr"]:
+            raise ValueError("typed")
+        with self.lock:
+            for key, e in list(self.items.items()):   # scanned twice: once is kept
+                if e.get("pending") and not e.get("node") and e.get("qr") == code["qr"]:
+                    del self.items[key]
+            key = uuid.uuid4().hex[:12]
+            self.items[key] = {"node": None, "pending": True, "after": max(present, key=lambda n: int(n, 16), default="0"),
+                               "name": "", "area": "", "model": "", "qr": code["qr"], "manual": code["manual"],
+                               "vid": code["vid"], "pid": code["pid"], "serial": None, "hw": None, "uid": None,
+                               "saved": int(time.time())}
+            self._save()
+            return self._public(key, self.items[key])
 
     def _twin(self, key, present):
         """A code typed again for a device whose QR code is already kept: the typed digits do
@@ -189,14 +218,17 @@ class Pairing:
             if key is None:
                 key, auto = self._after_reset(nid, ident, present), True
             if key is None:
+                key, auto = self._scanned(nid, ident), False   # scanned for this very pairing: nothing to check
+            if key is None:
                 return None
             e = self.items[key]
             changed = self._twin(key, present)
             if e.get("node") != nid:
                 e.update({"node": nid, "auto": auto, "serial": ident["serial"], "hw": ident["hw"], "uid": ident["uid"]})
                 changed = True
-            if e.pop("reset", None):
-                changed = True
+            for flag in ("reset", "pending", "after"):
+                if e.pop(flag, None) is not None:
+                    changed = True
             if changed:
                 self._save()
             return self._public(key, e, auto=bool(e.get("auto")))
@@ -250,7 +282,8 @@ class Pairing:
                     del self.items[other]
             e.update({"node": nid, "name": name or e.get("name"), "area": area or e.get("area"), "model": model or e.get("model"),
                       "serial": ident["serial"], "hw": ident["hw"], "uid": ident["uid"], "auto": False})
-            e.pop("reset", None)
+            for flag in ("reset", "pending", "after"):
+                e.pop(flag, None)
             self._save()
             return self._public(key, e)
 

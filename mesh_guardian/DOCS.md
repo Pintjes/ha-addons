@@ -463,7 +463,14 @@ The **Pair** button (top of the page) starts the pairing of a new or reset
 device without leaving Mesh Guardian. Such a device only speaks Bluetooth, so
 the phone does the pairing, next to the device:
 
-- in the Home Assistant app on a phone, the button starts the same pairing as
+- in the Home Assistant app on a phone, the QR code reader of the app opens
+  first: aim at the label, and the code is kept for the node this pairing will
+  bring (it attaches to it by itself when the node shows up; "Pair without
+  scanning" skips this). The code in digits is copied, to paste in the pairing
+  screen. The pairing of the phone cannot hand the code over itself: it only
+  tells whether it succeeded. The same reader is offered in the panel of a
+  node, next to the photo;
+- then the button starts the same pairing as
   the "Add Matter device" screen of Home Assistant. The page asks the app
   through the Home Assistant page it is shown in, and hands over the Thread
   network Home Assistant prefers, exactly as that screen does;

@@ -336,7 +336,9 @@ const T = {
     t_partch:"Partition changes 24h", t_out:"Outages 24h · 7d", t_down:"Downtime 7d", t_reb:"Reboots total · 24h", t_boot:"Last boot reason", t_up:"Uptime",
     t_src:"Last contact source", t_gap:"Longest silence", copy:"Copy", copied:"Copied", download:"Download", report_tip:"Anonymized report (no names, areas or addresses) to paste in an issue",
     pc_t:"Pairing code", pc_tip:"Kept by the add-on: the device can be paired again after a reset without reaching its label",
-    pa_btn:"Pair", pa_tip:"Pair a new or reset device: starts the pairing of the Home Assistant app on this phone, next to the device",
+    sc_btn:"Scan the QR code", sc_title:"Pairing code", sc_desc:"Aim at the QR code on the label of the device", sc_skip:"Pair without scanning", sc_close:"Close",
+    sc_wrong:"This is not a Matter QR code", sc_waiting:"Scanned code, waiting for its device", pc_e_typed:"Only a QR code can be kept before its device is paired",
+    pa_btn:"Pair", pa_tip:"Pair a new or reset device, next to it. In the Home Assistant app: scan its label (the code is kept for the new node), then the pairing of the phone starts",
     pa_code:"Pair with this code", pa_started:"Pairing started on this phone", pa_started_code:"Code copied: paste it in the pairing screen instead of scanning the label",
     pa_screen:"Opening the pairing screen of Home Assistant…", pa_screen_code:"Code copied. Opening the pairing screen of Home Assistant…", pa_none:"Open Settings → Devices → Add a Matter device in Home Assistant",
     pc_cam:"Take a photo of the QR code", pc_new_what:"New node", pc_new:"Its pairing code is not kept yet: photograph its label now, while you are in front of it.",
@@ -412,7 +414,9 @@ const T = {
     t_partch:"Chgt de partition 24 h", t_out:"Coupures 24 h · 7 j", t_down:"Indisponibilité 7 j", t_reb:"Redémarrages total · 24 h", t_boot:"Raison du dernier démarrage", t_up:"En marche depuis",
     t_src:"Source du dernier contact", t_gap:"Plus long silence", copy:"Copier", copied:"Copié", download:"Télécharger", report_tip:"Rapport anonymisé (sans noms, pièces ni adresses) à coller dans une issue",
     pc_t:"Code d'appairage", pc_tip:"Conservé par l'add-on : l'appareil peut être appairé à nouveau après une réinitialisation sans accéder à son étiquette",
-    pa_btn:"Appairer", pa_tip:"Appairer un appareil neuf ou réinitialisé : lance l'appairage de l'application Home Assistant sur ce téléphone, à côté de l'appareil",
+    sc_btn:"Scanner le QR code", sc_title:"Code d'appairage", sc_desc:"Viser le QR code de l'étiquette de l'appareil", sc_skip:"Appairer sans scanner", sc_close:"Fermer",
+    sc_wrong:"Ce n'est pas un QR code Matter", sc_waiting:"Code scanné, en attente de son appareil", pc_e_typed:"Seul un QR code peut être conservé avant l'appairage de son appareil",
+    pa_btn:"Appairer", pa_tip:"Appairer un appareil neuf ou réinitialisé, à côté de lui. Dans l'application Home Assistant : scanner son étiquette (le code est conservé pour la nouvelle node), puis l'appairage du téléphone se lance",
     pa_code:"Appairer avec ce code", pa_started:"Appairage lancé sur ce téléphone", pa_started_code:"Code copié : le coller dans l'écran d'appairage au lieu de scanner l'étiquette",
     pa_screen:"Ouverture de l'écran d'appairage de Home Assistant…", pa_screen_code:"Code copié. Ouverture de l'écran d'appairage de Home Assistant…", pa_none:"Ouvrir Paramètres → Appareils → Ajouter un appareil Matter dans Home Assistant",
     pc_cam:"Photographier le QR code", pc_new_what:"Nouvelle node", pc_new:"Son code d'appairage n'est pas encore conservé : photographier son étiquette maintenant, tant que tu es devant elle.",
@@ -1113,7 +1117,7 @@ function qrSvg(text) {
   return `<svg class="qr" viewBox="0 0 ${n + 8} ${n + 8}" role="img" aria-label="QR code"><rect width="100%" height="100%" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
 }
 const codeCard = (c, who) => `<div class="pccard">${c.qr ? `<div class="qrbox" data-qr="${esc(c.qr)}"></div>` : ""}<div>
-  ${who ? `<b>${esc(c.name || "?")}</b><br><small class="mut">${esc([c.area, c.model].filter(Boolean).join(" · "))}</small><br>` : ""}
+  ${who ? `<b>${esc(c.name || (c.scanned ? L("sc_waiting") : "?"))}</b><br><small class="mut">${esc([c.area, c.model].filter(Boolean).join(" · "))}</small><br>` : ""}
   <span class="pccode">${esc(manualFmt(c.manual))}</span><br>
   <button class="btn" data-copy="${esc(c.manual)}">${L("copy")}</button>${c.qr ? "" : `<br><small class="mut">${L("pc_none_qr")}</small>`}</div></div>`;
 async function fillQr() {   // draws the QR codes of the cards shown
@@ -1128,11 +1132,11 @@ function renderPair() {
   const c = pair.data.code, free = pair.data.free || [];
   el.innerHTML = c && !pair.edit
     ? codeCard(c) + (c.auto ? `<small class="mut">${L("pc_auto")}</small>` : "") + `<p class="pcbtns"><button class="btn" data-pc="replace">${L("pc_replace")}</button><button class="btn" data-pc="delete" data-key="${esc(c.key)}">${L("pc_delete")}</button></p>`
-    : `<div class="pcdrop"><label class="btn pccam">${IC_CAM}${L("pc_cam")}<input type="file" accept="image/*" capture="environment" hidden></label>
+    : `<div class="pcdrop">${canScan() ? `<button class="btn pccam" data-pc="scan">${IC_CAM}${L("sc_btn")}</button><br>` : ""}<label class="btn pccam">${IC_CAM}${L("pc_cam")}<input type="file" accept="image/*" capture="environment" hidden></label>
          <div>${L("pc_drop")} <label class="btn">${L("pc_pick")}<input type="file" accept="image/*" hidden></label></div></div>
        <form class="pcf"><input name="c" placeholder="${esc(L("pc_ph"))}" autocomplete="off" spellcheck="false" maxlength="80"><button class="btn">${L("save")}</button></form>` +
       (free.length ? `<form class="pca"><select name="k" aria-label="${esc(L("pc_attach"))}">${free.map(f =>
-        `<option value="${esc(f.key)}">${esc([f.name || "?", f.area, manualFmt(f.manual)].filter(Boolean).join(" · "))}</option>`).join("")}</select><button class="btn">${L("pc_attach_btn")}</button></form>
+        `<option value="${esc(f.key)}">${esc([f.name || (f.scanned ? L("sc_waiting") : "?"), f.area, manualFmt(f.manual)].filter(Boolean).join(" · "))}</option>`).join("")}</select><button class="btn">${L("pc_attach_btn")}</button></form>
         <small class="mut">${L("pc_attach")}</small>` : "");
   fillQr();
 }
@@ -1189,11 +1193,55 @@ async function pairPhoto(file) {
 // device" screen (the app is asked through the Home Assistant page this one is shown in, with
 // the Thread network Home Assistant prefers). Elsewhere, that screen of Home Assistant opens.
 // code: copied first, to paste in the pairing screen instead of scanning the label.
+// The Home Assistant app has a QR code reader of its own (live, no photo). The Home Assistant
+// page this one is shown in talks to the app; the answer of the reader comes back to that
+// page, so its handler of app messages is wrapped for the time of one scan, then put back.
+// This leans on how the Home Assistant frontend is built: checked before each use, and the
+// photo stays as the other way.
+const appBus = () => {
+  try { const hass = window.parent.document.querySelector("home-assistant").hass; return {hass, ext: hass.auth && hass.auth.external}; }
+  catch (e) { return {}; }   // not inside Home Assistant
+};
+const canScan = () => { const {ext} = appBus(); return !!(ext && ext.config && ext.config.hasBarCodeScanner && typeof ext._commandHandler === "function"); };
+// alt: label of the second button of the reader. Resolves {text} (a Matter QR code) or {aborted: reason}
+function scanQr(alt) {
+  const {ext} = appBus();
+  return new Promise(done => {
+    const orig = ext._commandHandler;
+    let over = false;
+    const end = v => {
+      if (over) return;
+      over = true; ext._commandHandler = orig;
+      try { ext.fireMessage({type: "bar_code/close"}); } catch (e) { /* closed already */ }
+      done(v);
+    };
+    ext._commandHandler = msg => {
+      if (over || (msg.command !== "bar_code/scan_result" && msg.command !== "bar_code/aborted")) return orig(msg);
+      try { ext.fireMessage({id: msg.id, type: "result", success: true, result: null}); } catch (e) { /* the app does not wait for it */ }
+      const p = msg.payload || {};
+      if (msg.command === "bar_code/aborted") end({aborted: p.reason || "canceled"});
+      else if (/MT:/i.test(p.rawValue || "")) end({text: p.rawValue});
+      else { try { ext.fireMessage({type: "bar_code/notify", payload: {message: L("sc_wrong")}}); } catch (e) { /* keeps scanning */ } }
+      return true;
+    };
+    try { ext.fireMessage({type: "bar_code/scan", payload: {title: L("sc_title"), description: L("sc_desc"), alternative_option_label: alt}}); }
+    catch (e) { end({aborted: "error"}); }
+    setTimeout(() => end({aborted: "timeout"}), 180000);
+  });
+}
 async function pairStart(code) {
+  if (!code && canScan()) {   // the label first: its code is kept for the node this pairing brings
+    const r = await scanQr(L("sc_skip"));
+    if (r.aborted === "canceled" || r.aborted === "timeout" || r.aborted === "error") return;
+    if (r.text) {
+      try {
+        const res = await (await fetch("api/pairing", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({scan: r.text})})).json();
+        if (res.ok) code = res.code.manual; else toast(L("pc_e_" + res.error) || L("error"));
+      } catch (e) { /* the pairing goes on without the code */ }
+    }
+  }
   if (code) { try { await navigator.clipboard.writeText(code); } catch (e) { /* shown in the list anyway */ } }
-  let hass = null;
-  try { hass = window.parent.document.querySelector("home-assistant").hass; } catch (e) { /* not inside Home Assistant */ }
-  const ext = hass && hass.auth && hass.auth.external;
+  const {hass, ext} = appBus();
   if (ext && ext.config && ext.config.canCommissionMatter) {
     let payload;
     try {
@@ -1226,6 +1274,11 @@ async function openCodes() {   // codes of the devices that left the table: what
 }
 async function pairClick(b) {
   if (b.dataset.pc === "replace") { pair.edit = true; return renderPair(); }
+  if (b.dataset.pc === "scan") {   // the label of a node of the table, read by the app
+    const id = pair.id, r = await scanQr(L("sc_close"));
+    if (r.text && id) await pairPost({id, code: r.text}, "pc_saved");
+    return;
+  }
   if (b.dataset.pc === "delete" && confirm(L("pc_delete_confirm"))) {
     const list = !pair.id;
     if (await pairPost({delete: b.dataset.key}, "pc_deleted") && list) {   // the list closes with its last code

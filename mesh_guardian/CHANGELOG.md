@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.18.0] - 2026-11-16
+
+### Added
+
+- In the Home Assistant app, "Pair" first opens the QR code reader of the app: the code of the label is kept and attaches by itself to the node the pairing brings. The same reader is offered in the node panel ("Scan the QR code"), next to the photo.
+
 ## [2.17.0] - 2026-11-16
 
 ### Added

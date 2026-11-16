@@ -89,6 +89,9 @@ class WebUI:
     def pairing_post(self, body):
         if body.get("delete"):
             return {"ok": self.pairing.delete(str(body["delete"]))}
+        if body.get("scan"):   # scanned before the pairing: waits for the node it brings
+            present = {f"{int(n.get('node_id', 0)):016X}" for n in self.table._nodes()}
+            return {"ok": True, "code": self.pairing.scan(str(body["scan"]), present)}
         nid = f"{int(str(body.get('id')), 16):016X}"
         present, attrs, name, area, model = self._node(nid)
         if nid not in present:
@@ -261,7 +264,7 @@ class WebUI:
                         body = json.loads(self.rfile.read(min(n, 4096)) or b"{}")
                         return self._send(200, json.dumps(ui.pairing_post(body), ensure_ascii=False))
                     except ValueError as err:   # format, check, device or node: said to the user, the code is not logged
-                        why = str(err) if str(err) in ("format", "check", "device", "node") else "format"
+                        why = str(err) if str(err) in ("format", "check", "device", "node", "typed") else "format"
                         return self._send(200, json.dumps({"ok": False, "error": why}))
                     except Exception as err:  # noqa: BLE001
                         LOG.warning("pairing code: %s", type(err).__name__)
