@@ -2,14 +2,15 @@
 """A small app for test_live.py: each address answers the way some real app
 does (compressed anyway, not in UTF-8, with a cookie reserved to HTTPS...).
 
-python side_door/tests/upstream.py [port]
+python side_door/tests/upstream.py   (listens on 127.0.0.1:8000)
 """
 import gzip
 import json
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
+# Fixed: test_live.py imports this file to compare what it receives
+PORT = 8000
 OWN = f"http://127.0.0.1:{PORT}/"
 
 PAGE = (

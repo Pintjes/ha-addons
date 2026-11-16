@@ -88,7 +88,7 @@ jobs:
       - name: Live test (Side Door)
         if: matrix.arch == 'amd64' && matrix.addon == 'side_door'
         run: |
-          python3 side_door/tests/upstream.py 8000 &
+          python3 side_door/tests/upstream.py &
           mkdir -p /tmp/sd-live
           cp side_door/tests/options_live.json /tmp/sd-live/options.json
           docker run -d --name sd-live --network host -v /tmp/sd-live:/data sd-test
