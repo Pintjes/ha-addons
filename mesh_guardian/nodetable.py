@@ -753,9 +753,19 @@ class NodeTable:
                 brs.append({"name": self.w.br_label(b), "key": key[:16], "role": b.get("role") if b["online"] else "offline",
                             "online": bool(b["online"]), "partition": b.get("partition"), "omr": b.get("omr"),
                             "primary": bool(b.get("bbr_primary")) and bool(b["online"]),
+                            "_seen": b.get("mdns_seen") or b.get("last_seen") or 0,
                             "last_contact": self.w.br_contact(b)[0], "contact_src": self.w.br_contact(b)[1],
                             "detached_24h": st["detached_24h"], "last_detached": st["last_detached"],
                             "same_subnet": self.h.same_subnet(b.get("addrs"))})
+        # one primary per partition: when two border routers say they are, the one heard last is
+        # right; the other one's announcement is older than the change (it may be gone)
+        latest = {}
+        for x in brs:
+            if x["primary"]:
+                latest[x["partition"]] = max(latest.get(x["partition"], 0), x["_seen"])
+        for x in brs:
+            x["primary"] = x["primary"] and x["_seen"] == latest.get(x["partition"])
+            del x["_seen"]
         brs.sort(key=lambda x: (not x["online"], x["name"].lower()))
         with self.h.lock:
             unavailable = sum(1 for n in self.h.nodes.values() if not n["available"])
