@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.19.1] - 2026-11-16
+
+### Changed
+
+- "Find a new link" on a router: the result is given as soon as the node is a router again (its role is read every 20 seconds) instead of after a fixed 3 minutes, which stay the limit. The message now says "waiting for the result…" and is replaced by the result.
+
 ## [2.19.0] - 2026-11-16
 
 ### Added

@@ -57,6 +57,7 @@ CONNECT_NETWORK = 6   # Network Commissioning command id
 # _router and _follow_router, the call in run_node, and in the page canParent / the router confirm.
 ROUTER_ROLES = (5, 6)  # Thread routing roles "router" and "leader" (the leader too, asked by the user: the page warns)
 ROUTER_SETTLE_S = 180  # s: a router attaches as a child first and becomes a router again within 2 minutes
+ROUTER_POLL_S = 20     # s: its role is read this often meanwhile, the result is given as soon as it is a router again
 PATHS = ["0/53/1", "0/53/7", "0/51/0", "0/49/1", "0/49/65529"]   # table and addresses read together: same moment
 
 
@@ -409,16 +410,25 @@ class Reattach:
         except Exception as err:  # noqa: BLE001
             LOG.warning(t("{node}: parent search refused: {err}", node=name, area=area, err=err))
             return {"result": "failed"}
-        text = t("{node}: Thread restarted, result in 3 minutes", node=name)
+        text = t("{node}: Thread restarted, waiting for the result…", node=name)
         self.results[nid] = {"state": "pending", "text": text, "at": time.time()}
         threading.Thread(target=self._follow_router, args=(nid, name, before), daemon=True, name="reattach-router").start()
         return {"result": "restarted", "text": text}
 
     def _follow_router(self, nid, name, before):
-        """Role and first link of the router once it had the time to become a router again."""
-        if self.w.stop.wait(ROUTER_SETTLE_S):
-            return
+        """Role and first link of the router as soon as it is a router again: its role is
+        read every ROUTER_POLL_S, and after ROUTER_SETTLE_S the result is given as it is."""
         node_id = int(nid, 16)
+        end = time.time() + ROUTER_SETTLE_S
+        while time.time() < end:
+            if self.w.stop.wait(min(ROUTER_POLL_S, max(0.0, end - time.time()))):
+                return
+            try:   # a node that is attaching again may not answer: next try
+                res = self.h.matter_command("read_attribute", {"node_id": node_id, "attribute_path": "0/53/1"}, timeout=15)
+                if isinstance(res, dict) and res.get("0/53/1") in ROUTER_ROLES:
+                    break
+            except Exception as err:  # noqa: BLE001
+                LOG.debug("role of %s after thread restart: %s", name, err)
         try:
             res = self.h.matter_command("read_attribute", {"node_id": node_id,
                                                            "attribute_path": ["0/53/1", "0/53/7", "0/53/8", "0/51/0"]}, timeout=60)

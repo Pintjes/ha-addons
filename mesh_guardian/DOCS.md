@@ -404,8 +404,9 @@ names, areas, addresses or prefixes) to copy or download and paste in an issue.
   are asked to confirm: the new parent can be weaker). Trial, provisional: on a
   router or on the leader the button restarts its Thread interface, after a
   warning (stronger for the leader: the network elects a new one); its end devices drop and attach elsewhere, and no better link is
-  expected since a router picks its routes by itself. The result comes 3
-  minutes later.
+  expected since a router picks its routes by itself. The result comes as
+  soon as the node is a router again (its role is read every 20 seconds), and
+  after 3 minutes at the latest.
 - **Recovery attempt** — replaces "Find a new link" on a Thread node that is
   unavailable (router or end device). The add-on pings the node, then sends it
   the same command: if it gets through, the node restarts its
