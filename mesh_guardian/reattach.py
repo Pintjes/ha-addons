@@ -530,10 +530,19 @@ class Reattach:
             network = connected_network(attrs.get("0/49/1"))
             if network is None or CONNECT_NETWORK not in (attrs.get("0/49/65529") or []):
                 return {"result": "unsupported"}
+            # the thread is created first: when it cannot start (no thread left), the node is not
+            # left marked "recovering" for good, with a result "pending" that never ends
+            th = threading.Thread(target=self._recover, args=(nid, name, area, network), daemon=True, name="recover")
             self.recovering.add(nid)
             self.results[nid] = {"state": "pending", "text": t("{node}: recovery attempt", node=name, area=area),
                                  "at": time.time()}
-            threading.Thread(target=self._recover, args=(nid, name, area, network), daemon=True, name="recover").start()
+            try:
+                th.start()
+            except RuntimeError as err:
+                self.recovering.discard(nid)
+                self.results.pop(nid, None)
+                LOG.warning(t("{node}: recovery attempt not started ({err})", node=name, err=err))
+                return {"result": "failed"}
             started = True
             return {"result": "pending"}
         finally:

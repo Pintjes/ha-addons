@@ -74,9 +74,21 @@ def manual_code(discriminator, passcode):
     return body + verhoeff(body)
 
 
+# passcodes the Matter specification forbids (too easy to guess): a device never uses them, so
+# a code that holds one is a typing or reading mistake
+BAD_PASSCODES = {0, 11111111, 22222222, 33333333, 44444444, 55555555, 66666666, 77777777, 88888888,
+                 99999999, 12345678, 87654321}
+MAX_PASSCODE = 99999998
+
+
+def _check_passcode(passcode):
+    if passcode in BAD_PASSCODES or passcode > MAX_PASSCODE:
+        raise ValueError("passcode")
+
+
 def parse(text):
     """What a QR code text or a typed code holds: {"qr", "manual", "vid", "pid"}.
-    Raises ValueError("format" | "check") when it is not a Matter pairing code."""
+    Raises ValueError("format" | "check" | "passcode") when it is not a Matter pairing code."""
     raw = str(text or "").strip().upper()
     if "MT:" in raw:
         body = ""
@@ -93,14 +105,18 @@ def parse(text):
         bits = int.from_bytes(data[:11], "little")
         vid, pid = (bits >> 3) & 0xFFFF, (bits >> 19) & 0xFFFF
         disc, passcode = (bits >> 45) & 0xFFF, (bits >> 57) & 0x7FFFFFF
-        if bits & 7 or not passcode:   # version 0 only
+        if bits & 7:   # version 0 only
             raise ValueError("format")
+        _check_passcode(passcode)
         return {"qr": "MT:" + body, "manual": manual_code(disc, passcode), "vid": vid, "pid": pid}
     digits = "".join(ch for ch in raw if ch.isdigit())
     if len(digits) not in (11, 21) or any(ch not in "0123456789 -." for ch in raw):
         raise ValueError("format")
     if verhoeff(digits[:-1]) != digits[-1]:
         raise ValueError("check")
+    if int(digits[0]) > 7:   # first digit: 3 bits
+        raise ValueError("format")
+    _check_passcode((int(digits[6:10]) << 14) | (int(digits[1:6]) & 0x3FFF))
     out = {"qr": None, "manual": digits, "vid": None, "pid": None}
     if len(digits) == 21:
         out["vid"], out["pid"] = int(digits[10:15]), int(digits[15:20])

@@ -157,6 +157,8 @@ FR = {
     "Sweep failed: {err}": "Balayage en erreur : {err}",
     "Cannot read the nodes from Home Assistant: {err}": "Lecture des nodes dans Home Assistant impossible : {err}",
     "Cannot rebuild statistics: {err}": "Reconstruction des statistiques impossible : {err}",
+    "Radio survey: parents not found ({err})": "Relevé radio : parents non trouvés ({err})",
+    "{node}: recovery attempt not started ({err})": "{node} : tentative de récupération non lancée ({err})",
     '{name}: no answer after {max} pings': '{name} : aucune réponse après {max} pings',
     "Recovery cycle failed: {err}": "Cycle de récupération en erreur : {err}",
     '{name} unavailable': '{name} indisponible',
@@ -317,6 +319,8 @@ FR = {
     "Active probes": "Sondage actif",
     "MQTT publishing": "Publication MQTT",
     "MQTT connection: {err}": "Connexion MQTT : {err}",
+    "MQTT connection refused: {err}": "Connexion MQTT refusée : {err}",
+    "MQTT settings read again from the Supervisor": "Réglages MQTT relus auprès du Supervisor",
     "MQTT message on {topic}: {err}": "Message MQTT sur {topic} : {err}",
     "Cannot read {file} ({err}): kept as {bad}, starting without it": "Lecture de {file} impossible ({err}) : fichier conservé sous {bad}, démarrage sans lui",
     # storm

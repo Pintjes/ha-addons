@@ -77,7 +77,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.26.0"
+VERSION = "2.27.0"
 
 _MQ = _load_mqtt()
 MQTT_HOST = _MQ.get("host") or os.environ.get("MQTT_HOST", "core-mosquitto")
@@ -1532,9 +1532,41 @@ class Watch:
     # that. Every callback is wrapped.
     def on_connect(self, client, userdata, flags, reason_code, properties=None):
         try:
+            if getattr(reason_code, "is_failure", False):
+                # refused (password changed in the Mosquitto add-on…): not connected, nothing to
+                # subscribe; the settings are read again for the next try
+                LOG.warning(t("MQTT connection refused: {err}", err=reason_code))
+                self._mqtt_refresh(client)
+                return
             self._on_connect(client, reason_code)
         except Exception as err:  # noqa: BLE001
             LOG.warning(t("MQTT connection: {err}", err=err))
+
+    def on_disconnect(self, client, userdata, flags, reason_code, properties=None):
+        try:
+            self._mqtt_refresh(client)
+        except Exception as err:  # noqa: BLE001
+            LOG.debug("mqtt refresh: %s", err)
+
+    def _mqtt_refresh(self, client):
+        """Read the MQTT service of the Supervisor again (at most once a minute): a broker moved,
+        or a user and password changed since the start, are used from the next reconnection on
+        without restarting the add-on. The password is never logged."""
+        if time.time() - getattr(self, "_mq_t", 0) < 60:
+            return
+        self._mq_t = time.time()
+        mq = _load_mqtt()
+        if not mq:
+            return
+        now = (mq.get("host") or MQTT_HOST, int(mq.get("port") or MQTT_PORT),
+               mq.get("username") or None, mq.get("password") or None)
+        if now == getattr(self, "_mq_now", None):
+            return
+        before, self._mq_now = getattr(self, "_mq_now", None), now
+        client.username_pw_set(now[2], now[3])
+        if before and before[:2] != now[:2]:
+            client.connect_async(now[0], now[1], keepalive=60)
+        LOG.info(t("MQTT settings read again from the Supervisor"))
 
     def on_message(self, client, userdata, msg):
         try:
@@ -1584,8 +1616,10 @@ class Watch:
         client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=BASE)
         if MQTT_USER:
             client.username_pw_set(MQTT_USER, MQTT_PASS)
+        self._mq_now, self._mq_t = (MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASS), time.time()
         client.will_set(f"{BASE}/status", "offline", retain=True)
         client.on_connect = self.on_connect
+        client.on_disconnect = self.on_disconnect
         client.on_message = self.on_message
         self.healer = Healer(self, OPTIONS)
         self.radio = Radio(self, self.healer, OPTIONS)

@@ -387,7 +387,7 @@ const T = {
     pc_auto:"Attached by itself after the reset: it was the only code of this product waiting. Replace it if this is another device.",
     pc_none_qr:"Typed code: no QR code to show (the digits do not hold everything a QR code needs)", pc_replace:"Replace", pc_delete:"Delete", pc_delete_confirm:"Delete this pairing code?",
     pc_saved:"Pairing code saved", pc_deleted:"Pairing code deleted", pc_reading:"Reading the photo…", pc_noqr:"No QR code found in this photo",
-    pc_e_format:"This is not a Matter pairing code", pc_e_check:"Wrong code: a digit is mistyped", pc_e_device:"This QR code is the one of another product",
+    pc_e_format:"This is not a Matter pairing code", pc_e_check:"Wrong code: a digit is mistyped", pc_e_passcode:"Not a valid code: a device never uses this one (reading or typing mistake?)", pc_e_device:"This QR code is the one of another product",
     pc_e_node:"Node not found", pc_e_error:"Error", pc_attach:"A code kept for a device that left the table: give it to this node if it is the same device", pc_attach_btn:"Attach",
     pc_list:"Pairing codes", pc_list_tip:"Codes of the devices that left the table (removed or reset): what is needed to pair them again",
     pc_list_none:"No code waiting: every code kept belongs to a node of the table.", pc_count:"Codes kept in all: {n}",
@@ -471,7 +471,7 @@ const T = {
     pc_auto:"Rattaché tout seul après la réinitialisation : c'était le seul code de ce produit en attente. À remplacer si c'est un autre appareil.",
     pc_none_qr:"Code saisi : pas de QR code à afficher (les chiffres ne contiennent pas tout ce qu'il faut à un QR code)", pc_replace:"Remplacer", pc_delete:"Supprimer", pc_delete_confirm:"Supprimer ce code d'appairage ?",
     pc_saved:"Code d'appairage enregistré", pc_deleted:"Code d'appairage supprimé", pc_reading:"Lecture de la photo…", pc_noqr:"Aucun QR code trouvé dans cette photo",
-    pc_e_format:"Ce n'est pas un code d'appairage Matter", pc_e_check:"Code erroné : un chiffre est mal saisi", pc_e_device:"Ce QR code est celui d'un autre produit",
+    pc_e_format:"Ce n'est pas un code d'appairage Matter", pc_e_check:"Code erroné : un chiffre est mal saisi", pc_e_passcode:"Code impossible : aucun appareil ne l'utilise (erreur de lecture ou de saisie ?)", pc_e_device:"Ce QR code est celui d'un autre produit",
     pc_e_node:"Node introuvable", pc_e_error:"Erreur", pc_attach:"Code conservé pour un appareil sorti du tableau : le rattacher à cette node si c'est le même appareil", pc_attach_btn:"Rattacher",
     pc_list:"Codes d'appairage", pc_list_tip:"Codes des appareils sortis du tableau (supprimés ou réinitialisés) : ce qu'il faut pour les appairer à nouveau",
     pc_list_none:"Aucun code en attente : chaque code conservé appartient à une node du tableau.", pc_count:"Codes conservés au total : {n}",
@@ -977,7 +977,8 @@ async function runAction(btn) {
     else if (a === "interview") msg = F("a_interview_ok", {n: r.name, s: res.s});
     else if (a === "remove") msg = res.result === "busy" ? L("rs_r_busy") : F("a_remove_ok", {n: r.name});
     else if (a === "recover") {   // sent in the background: the result comes with the table
-      msg = F("a_recover_" + (["unsupported", "busy"].includes(res.result) ? res.result : "pending"), {n: r.name});
+      msg = res.result === "failed" ? F("a_failed", {n: r.name})
+        : F("a_recover_" + (["unsupported", "busy"].includes(res.result) ? res.result : "pending"), {n: r.name});
       if (res.result === "pending") followSearch(id, 10);
     } else {
       const k = ["better", "worse", "similar"].includes(res.result) ? "new" : res.result || "unknown";
@@ -1610,7 +1611,7 @@ function renderAll() {
 }
 let follow = null;
 async function reread() {   // page opened or Refresh: the add-on reads every node again (at most every 5 min)
-  try { await fetch("api/reread", {method: "POST", cache: "no-store"}); } catch (e) { /* the table still loads */ }
+  try { await fetch("api/reread", {method: "POST", cache: "no-store", headers: {"Content-Type": "application/json"}, body: "{}"}); } catch (e) { /* the table still loads */ }
 }
 let busy = false;
 async function load(force) {

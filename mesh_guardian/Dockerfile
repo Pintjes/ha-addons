@@ -1,8 +1,10 @@
-FROM python:3.13-alpine
+# Exact versions: the same image at every install, a new version only when chosen and tested.
+# Every library is installed already built (--only-binary): no compiler in the image, nothing
+# compiled on the machine of Home Assistant (zeroconf exists built for Alpine, amd64 and aarch64).
+FROM python:3.13.18-alpine3.24
 
-RUN apk add --no-cache --virtual .build-deps gcc musl-dev \
-    && pip install --no-cache-dir "zeroconf>=0.136,<1" "paho-mqtt>=2.1,<3" "websocket-client>=1.8,<2" \
-    && apk del .build-deps
+RUN pip install --no-cache-dir --only-binary=:all: \
+    "zeroconf==0.154.0" "ifaddr==0.2.0" "paho-mqtt==2.2.0" "websocket-client==1.9.2"
 
 COPY *.py /
 COPY web /web

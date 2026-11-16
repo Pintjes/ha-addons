@@ -11,10 +11,12 @@ import json
 import time
 import logging
 import os
+import re
 import sys
 import threading
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlsplit
 
 from i18n import t
 from pairing import Pairing, identity
@@ -28,6 +30,27 @@ WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 PAGE = os.path.join(WEB, "index.html")
 NEW_NODE_S = 86400   # s: a node paired less than this ago is asked for its pairing code
 SCRIPTS = ("jsqr.js", "qrcode.js")   # QR code reader and writer, loaded by the page when a pairing code needs them
+MAX_BODY = 4096      # bytes: the largest request of the page is far below
+MAX_TEXT = 512       # characters: a pairing code, a name, a key of a kept code
+NODE_RE = re.compile(r"^(0x)?[0-9a-fA-F]{1,16}$")
+
+
+def node_hex(value):
+    """Node id sent by the page (hex, as the table shows it) -> 16 hex digits; ValueError("node") otherwise."""
+    s = str(value).strip()
+    if not NODE_RE.match(s):
+        raise ValueError("node")
+    return f"{int(s, 16):016X}"
+
+
+def text_of(body, key):
+    """A text field of a request, refused when it is not a short text."""
+    v = body.get(key)
+    if v is None:
+        return ""
+    if not isinstance(v, (str, int)) or len(str(v)) > MAX_TEXT:
+        raise ValueError("format")
+    return str(v)
 
 
 def _recent(added):
@@ -90,17 +113,17 @@ class WebUI:
 
     def pairing_post(self, body):
         if body.get("delete"):
-            return {"ok": self.pairing.delete(str(body["delete"]))}
+            return {"ok": self.pairing.delete(text_of(body, "delete"))}
         if body.get("scan"):   # scanned before the pairing: waits for the node it brings
             present = {f"{int(n.get('node_id', 0)):016X}" for n in self.table._nodes()}
-            return {"ok": True, "code": self.pairing.scan(str(body["scan"]), present)}
-        nid = f"{int(str(body.get('id')), 16):016X}"
+            return {"ok": True, "code": self.pairing.scan(text_of(body, "scan"), present)}
+        nid = node_hex(body.get("id"))
         present, attrs, name, area, model = self._node(nid)
         if nid not in present:
             raise ValueError("node")
         if body.get("attach"):
-            return {"ok": True, "code": self.pairing.attach(str(body["attach"]), nid, attrs, name, area, model)}
-        return {"ok": True, "code": self.pairing.set(nid, attrs, present, str(body.get("code") or ""), name, area, model)}
+            return {"ok": True, "code": self.pairing.attach(text_of(body, "attach"), nid, attrs, name, area, model)}
+        return {"ok": True, "code": self.pairing.set(nid, attrs, present, text_of(body, "code"), name, area, model)}
 
     def _handler(self):
         ui = self
@@ -123,6 +146,34 @@ class WebUI:
                     self._send(403, '{"error": "access restricted to the Home Assistant ingress"}')
                     return False
                 return True
+
+            def _same_site(self):
+                """A change asked by the page itself, not by another site the user has open: the
+                page always sends JSON (another site cannot, without the browser asking this
+                server first, which it never accepts), and its origin, when the browser gives
+                one, is the address of Home Assistant."""
+                ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+                if ctype != "application/json":
+                    self._send(415, '{"error": "JSON expected"}')
+                    return False
+                origin, fwd = self.headers.get("Origin"), self.headers.get("X-Forwarded-Host")
+                if origin and fwd:
+                    hosts = {h.strip().lower() for h in fwd.split(",")}
+                    if urlsplit(origin).netloc.lower() not in hosts:
+                        LOG.warning("request refused: origin %s, Home Assistant %s", origin, fwd)
+                        self._send(403, '{"error": "other site"}')
+                        return False
+                return True
+
+            def _body(self):
+                """The JSON object sent by the page; ValueError when too large or not an object."""
+                n = int(self.headers.get("Content-Length") or 0)
+                if n < 0 or n > MAX_BODY:
+                    raise ValueError("size")
+                body = json.loads(self.rfile.read(n) or b"{}")
+                if not isinstance(body, dict):
+                    raise ValueError("format")
+                return body
 
             def do_GET(self):
                 if not self._allowed():
@@ -200,9 +251,8 @@ class WebUI:
             def _action(self):
                 """Action on one node from the table: ping, parent search, recovery attempt, interview."""
                 try:
-                    n = int(self.headers.get("Content-Length") or 0)
-                    body = json.loads(self.rfile.read(min(n, 4096)) or b"{}")
-                    nid = f"{int(str(body.get('id')), 16):016X}"
+                    body = self._body()
+                    nid = node_hex(body.get("id"))
                     act = body.get("action")
                     h = ui.w.healer
                     t0 = time.time()
@@ -263,7 +313,7 @@ class WebUI:
                     self._send(200, json.dumps({"ok": False}, ensure_ascii=False))
 
             def do_POST(self):
-                if not self._allowed():
+                if not self._allowed() or not self._same_site():
                     return
                 path = self.path.partition("?")[0].rstrip("/")
                 if path == "/api/action":
@@ -274,20 +324,18 @@ class WebUI:
                     return self._send(200, json.dumps({"started": started}))
                 if path == "/api/pairing":   # keep, attach or delete a pairing code
                     try:
-                        n = int(self.headers.get("Content-Length") or 0)
-                        body = json.loads(self.rfile.read(min(n, 4096)) or b"{}")
+                        body = self._body()
                         return self._send(200, json.dumps(ui.pairing_post(body), ensure_ascii=False))
                     except ValueError as err:   # format, check, device or node: said to the user, the code is not logged
-                        why = str(err) if str(err) in ("format", "check", "device", "node", "typed") else "format"
+                        why = str(err) if str(err) in ("format", "check", "passcode", "device", "node", "typed") else "format"
                         return self._send(200, json.dumps({"ok": False, "error": why}))
                     except Exception as err:  # noqa: BLE001
                         LOG.warning("pairing code: %s", type(err).__name__)
                         return self._send(200, '{"ok": false, "error": "error"}')
                 if path == "/api/br_forget":   # remove an offline border router from the list
                     try:
-                        n = int(self.headers.get("Content-Length") or 0)
-                        body = json.loads(self.rfile.read(min(n, 4096)) or b"{}")
-                        ok = ui.w.forget_br(str(body.get("id") or ""))
+                        body = self._body()
+                        ok = ui.w.forget_br(text_of(body, "id"))
                         ui.table.cache_t = 0
                         return self._send(200, json.dumps({"ok": bool(ok)}))
                     except Exception as err:  # noqa: BLE001
@@ -296,9 +344,8 @@ class WebUI:
                 if path != "/api/ap_name":
                     return self._send(404, '{"error": "not found"}')
                 try:
-                    n = int(self.headers.get("Content-Length") or 0)
-                    body = json.loads(self.rfile.read(min(n, 4096)) or b"{}")
-                    ui.table.set_ap_name(str(body.get("bssid") or ""), str(body.get("name") or ""))
+                    body = self._body()
+                    ui.table.set_ap_name(text_of(body, "bssid"), text_of(body, "name"))
                     self._send(200, '{"ok": true}')
                 except Exception as err:  # noqa: BLE001
                     self._send(400, json.dumps({"error": str(err)}, ensure_ascii=False))

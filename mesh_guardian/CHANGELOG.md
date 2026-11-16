@@ -4,12 +4,26 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## Highlights of 2.9 to 2.26 (16 November 2026)
+## Highlights of 2.9 to 2.27 (16 November 2026)
 
 - **Act on a node from its panel**: recovery attempt on an unavailable node, reset from a distance, pairing codes kept by the add-on (photo or scan of the label), pairing and naming a new device without leaving the page.
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.27.0] - 2026-11-16
+
+### Changed
+
+- The image is the same at every install: exact versions of Python (3.13.18, Alpine 3.24) and of the libraries (zeroconf 0.154.0, paho-mqtt 2.2.0, websocket-client 1.9.2, ifaddr 0.2.0), all installed already built. No compiler in the image any more, nothing compiled on the machine of Home Assistant: a faster install that cannot fail at that step.
+- The MQTT settings (broker, user, password) are read again from the Supervisor when the connection is lost or refused: a password changed in the Mosquitto add-on is used without restarting Mesh Guardian. A refused connection no longer subscribes as if it were connected.
+
+### Fixed
+
+- Automatic recovery: the pings of one cycle stop after 100 seconds (a ping of a lost node can wait 90 seconds for its answer), so a new outage or a node back is seen within minutes instead of waiting for five pings in a row. The nodes not pinged are pinged in the next cycles.
+- Radio survey: a node, or one entry of a Thread table, described oddly (interview cut short, other firmware) is left out instead of making the whole survey fail.
+- Recovery attempt: when its thread cannot start, the node is no longer left "recovering" for good with a result that never comes; the page says the action failed.
+- Requests of the page: only JSON from the page itself is accepted (a form of another site open in the browser cannot act on the add-on), node ids and texts are checked, a request too large is refused instead of cut.
+- Pairing codes: a code holding a passcode the Matter specification forbids (00000000, 11111111… 12345678, 87654321) is refused with a message: it is a reading or typing mistake, no device uses one.
 ## [2.26.0] - 2026-11-16
 
 ### Changed

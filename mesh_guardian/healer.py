@@ -38,6 +38,7 @@ from store import load_json, save_json
 
 LOG = logging.getLogger("mg.healer")
 SHORT_LIST_S = 600   # s: a list of nodes far shorter than before is taken as the real one after this time
+PING_BUDGET_S = 100  # s: pings of one recovery cycle (a new ping is not started after this time)
 
 NODES_TEMPLATE = (
     "{% set ns = namespace(out=[]) %}"
@@ -768,8 +769,14 @@ class Healer:
         else:
             for kind, txt, data, _ in ups:
                 self.w.emit(kind, txt, **data)
-        # at most 5 pings per cycle (2 during a storm), one after the other
+        # at most 5 pings per cycle (2 during a storm), one after the other, and not more than
+        # PING_BUDGET_S in all: a ping of a lost node can wait 90 s for its answer, and five in a
+        # row kept the next cycle (new outages, nodes back) waiting for minutes. The nodes not
+        # pinged stay due: they are pinged in the next cycles.
+        start = time.monotonic()
         for node in due[:2 if self.storm and self.storm.active else 5]:
+            if time.monotonic() - start >= PING_BUDGET_S:
+                break
             self.ping(node)
         self.check_routing()
         self.w.dirty = True

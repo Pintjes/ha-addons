@@ -53,6 +53,13 @@ def _g(d, key, default=None):
     return default
 
 
+def clean_table(entries):
+    """Entries of a Thread table (neighbors 0/53/7, routes 0/53/8) as the Matter specification
+    gives them: every field a number or a flag. An odd entry is left out, not the whole survey."""
+    return [e for e in entries if isinstance(e, dict)
+            and all(v is None or isinstance(v, (int, bool)) for v in e.values())]
+
+
 def ext_from_b64(value):
     try:
         raw = base64.b64decode(value)
@@ -179,14 +186,30 @@ class Radio:
         ext_names = self._names()
         info = {}
         raw = {}
+        skipped = []
         for node in nodes:
-            nid = f"{int(node.get('node_id', 0)):016X}"
-            attrs = node.get("attributes") or {}
-            if attrs.get("0/53/1") is None:
-                continue  # not Thread (Wi-Fi, or not interviewed yet)
+            try:
+                nid = f"{int(node.get('node_id', 0)):016X}"
+                attrs = node.get("attributes") or {}
+                if not isinstance(attrs, dict):
+                    raise TypeError("attributes")
+                if attrs.get("0/53/1") is None:
+                    continue  # not Thread (Wi-Fi, or not interviewed yet)
+                nbs = attrs.get("0/53/7") or []
+                itfs = attrs.get("0/51/0") or []
+                routes = attrs.get("0/53/8") or []
+                if not isinstance(nbs, list) or not isinstance(itfs, list) or not isinstance(routes, list):
+                    raise TypeError("neighbors / interfaces / routes")
+                nbs = clean_table(nbs)
+                attrs = dict(attrs, **{"0/53/7": nbs, "0/53/8": clean_table(routes)})
+            except (AttributeError, TypeError, ValueError):
+                # one node described oddly (interview cut short, other firmware): left out of this
+                # survey, the others are surveyed
+                skipped.append(str(node.get("node_id") if isinstance(node, dict) else "?"))
+                continue
             name, area, battery, model, floor = meta.get(nid, (f"0x{nid.lstrip('0')}", "?", False, "?", "?"))
             ext = None
-            for itf in attrs.get("0/51/0") or []:
+            for itf in itfs:
                 if _g(itf, "7") == 4 or _g(itf, "0") == attrs.get("0/53/2"):
                     ext = ext_from_b64(_g(itf, "4"))
             info[nid] = {
@@ -196,32 +219,41 @@ class Radio:
                 "ext": ext, "uptime": attrs.get("0/51/2"), "ext_pan": attrs.get("0/53/4"),
                 "reboots": attrs.get("0/51/1"), "boot": attrs.get("0/51/4"),
                 "counters": {v: attrs.get(f"0/53/{k}") for k, v in COUNTERS.items()},
-                "neighbors": attrs.get("0/53/7") or [],
+                "neighbors": nbs,
             }
             raw[nid] = {"name": name, "attrs": attrs}
             if ext is not None:
                 ext_names[ext] = name
+        if skipped:
+            LOG.debug("radio survey: nodes left out (odd description): %s", ", ".join(skipped))
         # liens
         links = {}
         parents = {}
         heard = 0
         for nid, n in info.items():
             for nb in n["neighbors"]:
-                peer = self._match(_g(nb, "0"), ext_names) or f"unknown {(_g(nb, '2') or 0):04x}"
-                rssi = _g(nb, "6")
-                lqi = _g(nb, "5")
-                if rssi is None:
+                try:   # one odd entry of a table: that entry only is left out
+                    peer = self._match(_g(nb, "0"), ext_names) or f"unknown {(_g(nb, '2') or 0):04x}"
+                    rssi = _g(nb, "6")
+                    lqi = _g(nb, "5")
+                    if rssi is None:
+                        continue
+                    heard += 1
+                    # LQI 0 = neighbor only overheard, no link established: ignored
+                    if not (lqi or _g(nb, "13")):
+                        continue
+                    key = tuple(sorted((n["name"], peer)))
+                    cur = links.get(key)
+                    if cur is None or rssi < cur["rssi"]:
+                        links[key] = {"a": key[0], "b": key[1], "rssi": rssi, "lqi": lqi,
+                                      "errors_pct": round((_g(nb, "8") or 0) / 100, 1) if _g(nb, "8") else 0}
+                except (TypeError, ValueError):
                     continue
-                heard += 1
-                # LQI 0 = neighbor only overheard, no link established: ignored
-                if not (lqi or _g(nb, "13")):
-                    continue
-                key = tuple(sorted((n["name"], peer)))
-                cur = links.get(key)
-                if cur is None or rssi < cur["rssi"]:
-                    links[key] = {"a": key[0], "b": key[1], "rssi": rssi, "lqi": lqi,
-                                  "errors_pct": round((_g(nb, "8") or 0) / 100, 1) if _g(nb, "8") else 0}
-        found, rlocs = find_parents(raw, ext_names)
+        try:
+            found, rlocs = find_parents(raw, ext_names)
+        except Exception as err:  # noqa: BLE001 - the survey goes on without the parents
+            LOG.warning(t("Radio survey: parents not found ({err})", err=err))
+            found, rlocs = {}, {}
         try:   # routers: the link they send through (first hop to the border router), as in the table
             with self.w.lock:
                 br_exts = [b["xa"] for b in self.w.br.values() if b.get("xa") is not None]
