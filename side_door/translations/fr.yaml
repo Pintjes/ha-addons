@@ -5,7 +5,7 @@ configuration:
     description: "Pour une seule application : l'adresse par laquelle Home Assistant la joint, par exemple http://192.168.1.10:8000."
   apps:
     name: "Plusieurs applications"
-    description: "Une entrée par application, avec le nom affiché sur son onglet et son adresse. « start », facultatif : la page sur laquelle l'onglet s'ouvre, quand ce n'est pas la racine de l'application (web/index.html pour Plex). « headers », facultatif : en-têtes envoyés à l'application à chaque requête, écrits « Nom: valeur » et séparés par « | », pour une application placée derrière une passerelle qui laisse passer un jeton. À partir de deux applications, le panneau affiche une rangée d'onglets. Quand cette liste est remplie, l'adresse ci-dessus est ignorée."
+    description: "Une entrée par application, avec le nom affiché sur son onglet et son adresse. « start », facultatif : la page sur laquelle l'onglet s'ouvre, quand ce n'est pas la racine de l'application (web/index.html pour Plex). « headers », facultatif : en-têtes envoyés à l'application à chaque requête, écrits « Nom: valeur » et séparés par « | », pour une application placée derrière une passerelle qui laisse passer un jeton. « hidden », facultatif : l'application est mise de côté, elle n'a pas d'onglet et n'est pas chargée. À partir de deux applications, le panneau affiche une rangée d'onglets. Quand cette liste est remplie, l'adresse ci-dessus est ignorée."
   rewrite_paths:
     name: "Réécrire les chemins"
     description: "Nécessaire quand l'application utilise des chemins commençant par / (la plupart). À désactiver pour une application qui gère déjà l'en-tête X-Ingress-Path."

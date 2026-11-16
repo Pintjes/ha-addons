@@ -1,5 +1,5 @@
 name: Side Door
-version: "1.6.2"
+version: "1.7.0"
 slug: side_door
 url: https://github.com/Pintjes/ha-addons
 description: >-
@@ -31,6 +31,7 @@ schema:
       url: str
       start: str?
       headers: password?
+      hidden: bool?
   rewrite_paths: bool
   rewrite_prefixes:
     - str

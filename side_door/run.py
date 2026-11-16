@@ -293,6 +293,8 @@ SHELL = """\
     for (const key in frames) frames[key].hidden = key !== id;
     try { localStorage.setItem("side_door_app", id); } catch (error) { /* private window */ }
   }
+  // A single tab left (the others are hidden): no row, the app fills the panel
+  if (tabs.length < 2) document.querySelector("nav").style.display = "none";
   tabs.forEach((t) => t.addEventListener("click", () => show(t.dataset.app)));
   let last = null;
   try { last = localStorage.getItem("side_door_app"); } catch (error) { /* private window */ }
@@ -368,14 +370,15 @@ def read_apps(options):
     for entry in options.get("apps") or []:
         if isinstance(entry, dict):
             entries.append(((entry.get("name") or "").strip(), (entry.get("url") or "").strip(),
-                            (entry.get("start") or "").strip(), entry.get("headers") or ""))
+                            (entry.get("start") or "").strip(), entry.get("headers") or "",
+                            bool(entry.get("hidden"))))
     single = (options.get("target_url") or "").strip()
     if entries and single:
         log("apps is set: target_url is ignored")
     elif single:
-        entries = [("", single, "", "")]
+        entries = [("", single, "", "", False)]
     apps, used = [], set()
-    for name, url, start, headers in entries:
+    for name, url, start, headers, hidden in entries:
         label = name or url or "(empty)"
         if not url:
             log(f"app {label!r} ignored: no address")
@@ -390,9 +393,10 @@ def read_apps(options):
         if not re.fullmatch(r"[A-Za-z0-9._~/#?=&%!-]*", start) or ".." in start:
             log(f"app {label!r}: start page {start!r} ignored (only letters, digits and ._~/#?=&%!- are accepted)")
             start = ""
+        # A hidden app keeps its place: the paths of the others do not move
         apps.append({"name": name, "id": app_id(name, used), "target": target,
                      "origin": origin, "host": host, "base": base, "start": start,
-                     "headers": read_headers(label, headers)})
+                     "hidden": hidden, "headers": [] if hidden else read_headers(label, headers)})
     return apps
 
 
@@ -457,9 +461,13 @@ def build(options, mark="sd0", resolve=ipv4_servers):
     """Returns (nginx configuration, apps for njs/side_door.js, tabs page or
     None, message for the log)."""
     apps = read_apps(options)
-    if not apps:
+    shown = [app for app in apps if not app["hidden"]]
+    if not shown:
         head = HEAD % {"port": PORT, "web": WEB, "njs": NJS, "mark": mark, "maps": ""}
-        return head + NOT_SET, {}, None, "no valid app: set one in the add-on configuration"
+        why = "every app is hidden" if apps else "no valid app"
+        return head + NOT_SET, {}, None, f"{why}: set one in the add-on configuration"
+    # Tabs as soon as the list has two apps, hidden ones included: hiding an
+    # app does not move the others (they would ask for a new login)
     several = len(apps) > 1
     rewrite_on = bool(options.get("rewrite_paths", True))
     inject = bool(options.get("inject_script", False))
@@ -468,6 +476,9 @@ def build(options, mark="sd0", resolve=ipv4_servers):
     timeout = int(options.get("timeout", 120))
     maps, locations, script_apps = "", "", {}
     for n, app in enumerate(apps, 1):
+        if app["hidden"]:
+            # Not relayed at all: no tab, and its address answers "not found"
+            continue
         path = f"/app/{app['id']}/" if several else "/"
         maps += MAPS % {"n": n, "origin": app["origin"]}
         rewrite = redirect_rules(app["origin"], app["base"], "$http_x_ingress_path" + path) if rewrite_on else ""
@@ -498,8 +509,11 @@ def build(options, mark="sd0", resolve=ipv4_servers):
     paths = "paths rewritten" if rewrite_on else "paths not rewritten"
     if inject:
         paths += ", script injected"
-    listed = ", ".join(f"{app['name']} -> {app['target']}" for app in apps)
-    return conf, script_apps, shell_page(apps) if several else None, f"{len(apps)} app(s), {paths}: {listed}"
+    listed = ", ".join(f"{app['name']} -> {app['target']}" for app in shown)
+    hidden = [app["name"] for app in apps if app["hidden"]]
+    if hidden:
+        listed += f" (hidden: {', '.join(hidden)})"
+    return conf, script_apps, shell_page(shown) if several else None, f"{len(shown)} app(s), {paths}: {listed}"
 
 
 def script(source, script_apps, mark="sd0"):

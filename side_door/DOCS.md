@@ -89,6 +89,10 @@ gate that lets a token in, such as a service token of Cloudflare Access:
 The gate then lets the add-on in on its own: everyone who can open the panel
 goes through it without logging in there.
 
+An entry can be `hidden`: the app is put aside without losing its settings.
+It has no tab, is not loaded, and its address under the panel answers
+"not found". The other apps keep their place.
+
 With two apps or more, the panel shows a row of tabs with the names you
 chose. An app is loaded the first time its tab is opened and keeps its page
 when you switch tabs. The panel opens on the tab you used last.
