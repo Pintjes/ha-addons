@@ -22,6 +22,10 @@ link is weak when read just before (same rule as the table and the advice: link
 quality 1): a node with a good link can end up on a weaker parent, and there is
 no way back to the previous one. Nothing is sent
 until the "Find better parents" button is pressed.
+
+Recovery attempt (recover_node): the same connect command, sent to a Thread node
+that is unavailable, router or end device. Its last known network id is used
+(it cannot be read). Nothing to lose: the node is already out.
 """
 import logging
 import threading
@@ -37,7 +41,8 @@ FAILSAFE_S = 120      # s: the node goes back to its configuration by itself aft
 SETTLE_S = 25         # s: time left to the node to attach before its new link is read
 FOLLOW_EVERY_S = 30   # s: result not known yet: the node and its parent are read again this often...
 FOLLOW_FOR_S = 300    # s: ...for this long
-RESULT_KEEP_S = 900   # s: a result stays in the table this long (the page shows it when it arrives)
+RECOVER_WAIT_S = 120  # s: recovery attempt: time left to the Matter Server to reach an unavailable node
+RESULT_KEEP_S = 900  # s: a result stays in the table this long (the page shows it when it arrives)
 END_DEVICE_ROLES = (2, 3, 4)   # sleepy end device, end device, REED (a full end device attached as a child)
 CONNECT_NETWORK = 6   # Network Commissioning command id
 # PROVISIONAL (2.12.0, trial asked by the user): the same command on a router. A router has no
@@ -111,6 +116,7 @@ class Reattach:
         self.busy = threading.Lock()
         self.last = {"date": None, "checked": 0, "poor": 0, "better": 0, "nodes": []}
         self.results = {}         # node hex -> {"state": "pending" | "done", "text", "at"} of the last search
+        self.recovering = set()   # node hex of the recovery attempts still followed
 
     def result_of(self, nid):
         """Last parent search of a node for the table, while it is recent."""
@@ -442,6 +448,135 @@ class Reattach:
             return row or {"result": "router"}
         finally:
             self.busy.release()
+
+    # ------------------------------------------------------------ recovery attempt (unavailable node)
+    def _cached(self, nid):
+        """Attributes of a node as last known (it cannot be read: it is unavailable)."""
+        if self.live:
+            with self.live.lock:
+                n = self.live.nodes.get(nid)
+                if n:
+                    return dict(n["attributes"])
+        res = self.h.matter_command("get_node", {"node_id": int(nid, 16)}, timeout=60)
+        return (res.get("attributes") or {}) if isinstance(res, dict) else {}
+
+    def _is_back(self, nid):
+        if self.live and self.live.connected:
+            with self.live.lock:
+                n = self.live.nodes.get(nid)
+            return bool(n) and n.get("available") is True
+        with self.h.lock:
+            return bool((self.h.nodes.get(nid) or {}).get("available"))
+
+    def _recover_result(self, nid, name, res, text, state="done"):
+        self.results[nid] = {"state": state, "result": res, "text": text, "at": time.time()}
+        if self.table:
+            self.table.cache_t = 0
+        if state == "done":
+            self.w.emit("recover_result", text, node=name, result=res)
+
+    def recover_node(self, nid):
+        """Recovery attempt for an unavailable Thread node, asked from the node table: the
+        connect command of the parent search is sent although the node is unavailable.
+        "Unavailable" means the Matter Server could not set up its subscription again (a long
+        exchange); one command only needs a session and one answer, which can get through a
+        link that loses most messages. The node then restarts its Thread interface and picks
+        its neighbors again. Returns at once ({"result": "pending" | "unsupported" | "busy"});
+        the result comes in the table (results) and in the recover_result event."""
+        if nid in self.recovering or not self.busy.acquire(timeout=1):
+            return {"result": "busy"}
+        started = False
+        try:
+            with self.h.lock:
+                n = dict(self.h.nodes.get(nid) or {})
+            name, area = n.get("name") or f"0x{nid.lstrip('0')}", n.get("area", "?")
+            try:
+                attrs = self._cached(nid)
+            except Exception as err:  # noqa: BLE001
+                LOG.debug("recovery of %s, last known values: %s", name, err)
+                attrs = {}
+            network = connected_network(attrs.get("0/49/1"))
+            if network is None or CONNECT_NETWORK not in (attrs.get("0/49/65529") or []):
+                return {"result": "unsupported"}
+            self.recovering.add(nid)
+            self.results[nid] = {"state": "pending", "text": t("{node}: recovery attempt", node=name, area=area),
+                                 "at": time.time()}
+            threading.Thread(target=self._recover, args=(nid, name, area, network), daemon=True, name="recover").start()
+            started = True
+            return {"result": "pending"}
+        finally:
+            if not started:
+                self.busy.release()
+
+    def _recover(self, nid, name, area, network):
+        node_id = int(nid, 16)
+        try:
+            try:
+                sent = self._recover_send(node_id, name, area, network)
+            finally:
+                self.busy.release()
+            if not sent:
+                return
+            self._recover_result(nid, name, "sent", t("{node}: Thread restarted, waiting for it to come back", node=name),
+                                 state="pending")
+            closed = False
+            end = time.time() + FOLLOW_FOR_S
+            wait = SETTLE_S
+            while time.time() < end:
+                if self.w.stop.wait(wait):
+                    return
+                wait = FOLLOW_EVERY_S
+                if not closed:
+                    try:   # attached again: close the fail-safe (it reverts by itself otherwise)
+                        self._command(node_id, 48, "CommissioningComplete", {}, timeout=60)
+                        closed = True
+                    except Exception as err:  # noqa: BLE001
+                        LOG.debug("commissioning complete of %s after recovery: %s", name, err)
+                if self._is_back(nid):
+                    self._recover_result(nid, name, "back", t("{node}: back after the recovery attempt", node=name))
+                    return
+            self._recover_result(nid, name, "noanswer", t("{node}: still unavailable after the recovery attempt", node=name))
+        except Exception as err:  # noqa: BLE001
+            LOG.warning("recovery of %s: %s", name, err)
+            self._recover_result(nid, name, "noanswer", t("{node}: still unavailable after the recovery attempt", node=name))
+        finally:
+            self.recovering.discard(nid)
+
+    def _recover_send(self, node_id, name, area, network):
+        """Ping, then ArmFailSafe and ConnectNetwork. True when the connect command left under
+        an armed fail-safe (answered or not: a node that attaches again may not answer)."""
+        nid = f"{node_id:016X}"
+        self.w.emit("recover_node", t("{node}: recovery attempt", node=name, area=area), node=name)
+        try:   # makes the Matter Server look for the address of the node again
+            self.h.matter_command("ping_node", {"node_id": node_id}, timeout=60)
+        except Exception as err:  # noqa: BLE001
+            LOG.debug("ping of %s before recovery: %s", name, err)
+        try:
+            res = self._command(node_id, 48, "ArmFailSafe", {"expiryLengthSeconds": FAILSAFE_S, "breadcrumb": 1},
+                                timeout=RECOVER_WAIT_S)
+        except Exception as err:  # noqa: BLE001 - no session: nothing reaches the node
+            LOG.info("recovery of %s, no answer to ArmFailSafe: %s", name, err)
+            self._recover_result(nid, name, "unreachable",
+                                 t("{node}: out of reach, the recovery attempt could not be sent", node=name))
+            return False
+        if _field(res, "errorCode", "0") != 0:
+            LOG.info("recovery of %s, ArmFailSafe refused: %s", name, res)
+            self._recover_result(nid, name, "failed", t("{node}: recovery attempt refused", node=name))
+            return False
+        try:
+            res = self._command(node_id, 49, "ConnectNetwork", {"networkID": network, "breadcrumb": 2})
+        except Exception as err:  # noqa: BLE001 - silence is not a refusal: the node may be attaching
+            LOG.debug("recovery of %s, no answer to ConnectNetwork: %s", name, err)
+            return True
+        if _field(res, "networkingStatus", "0") != 0:
+            LOG.info("recovery of %s, ConnectNetwork refused: %s", name, res)
+            try:
+                self._command(node_id, 48, "ArmFailSafe", {"expiryLengthSeconds": 0, "breadcrumb": 0}, timeout=30)
+            except Exception as err:  # noqa: BLE001
+                LOG.debug("disarm fail-safe of %s: %s", name, err)
+            self._recover_result(nid, name, "failed", t("{node}: recovery attempt refused", node=name))
+            return False
+        return True
 
     def run_now(self, origin):
         """Read the parent link of every end device and move those whose link is poor (button)."""

@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.13.0] - 2026-11-16
+
+### Added
+
+- Recovery attempt on an unavailable Thread node (node table and node panel, in place of "Find a new link"): the node is pinged, then asked to connect again to its own network, which restarts its Thread connection if the command gets through. One command is much shorter than the subscription the Matter Server needs to call a node available, so it can pass on a link that loses most messages. Result in the table and in the `recover_result` event. Needs the Matter Server based on matter.js (add-on 9 and later).
+
 ## [2.12.1] - 2026-11-16
 
 ### Changed

@@ -344,6 +344,14 @@ FR = {
     'Parent search: {n} poor link, {better} better now': "Recherche de parents : {better}/{n} lien amélioré",
     'Parent search: {n} poor links, {better} better now': "Recherche de parents : {better}/{n} liens améliorés",
     'Parent search: no poor link among {n} end devices': "Recherche de parents : aucun lien à améliorer",
+    # recovery attempt
+    "{node}: recovery attempt": "{node} : tentative de récupération",
+    "{node}: Thread restarted, waiting for it to come back": "{node} : Thread relancé, en attente de son retour",
+    "{node}: back after the recovery attempt": "{node} : de retour après la tentative de récupération",
+    "{node}: still unavailable after the recovery attempt": "{node} : toujours indisponible après la tentative de récupération",
+    "{node}: out of reach, the recovery attempt could not be sent":
+        "{node} : hors de portée, la tentative de récupération n'a pas pu être envoyée",
+    "{node}: recovery attempt refused": "{node} : tentative de récupération refusée",
     # storm
     "Thread storm": "Tempête Thread",
     "Thread storm: {why}": "Tempête Thread : {why}",

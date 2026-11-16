@@ -76,7 +76,7 @@ from matterlog import MatterLog  # noqa: E402
 from suplog import SupervisorLog  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.12.1"
+VERSION = "2.13.0"
 
 _MQ = _load_mqtt()
 MQTT_HOST = _MQ.get("host") or os.environ.get("MQTT_HOST", "core-mosquitto")
@@ -134,7 +134,7 @@ STYLE = {  # event kind -> (icon, color)
     "radio_survey": ("📡", "blue"), "statistics": ("📊", "blue"), "startup": ("🚀", "blue"),
     "auto_recovery": ("🔧", "blue"), "name": ("🏷️ ", "blue"),
     "parent_change": ("🔀", "cyan"), "advice": ("💡", "yellow"),
-    "ping_all": ("📣", "yellow"), "reattach": ("🧲", "cyan"),
+    "ping_all": ("📣", "yellow"), "reattach": ("🧲", "cyan"), "recover_": ("🛟", "cyan"),
     "storm_start": ("⛈️ ", "magenta"), "storm_end": ("🌤️ ", "green"),
     "routing_problem": ("🚧", "red"), "routing_ok": ("🟢", "green"), "addon_stop": ("⏹️ ", "blue"),
     "server_restart": ("🔄", "yellow"),

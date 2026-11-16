@@ -188,6 +188,7 @@ Every event is written to the add-on log, published on the MQTT topic
 | `radio_survey`, `radio_advice`, `parent_change` | radio quality and advice (also shown in the node table) |
 | `names`, `name_synced` | names Home Assistant → Matter (Rename nodes button) |
 | `reattach`, `reattach_node`, `reattach_result`, `reattach_done` | parent search (Find better parents button): start, node asked to attach again, its link before and after (`result`: `better`, `worse`, `similar`, `same`, `unknown`, then `noanswer` if the node never answered), summary |
+| `recover_node`, `recover_result` | recovery attempt on an unavailable node (button of the node table): start, then `result`: `back`, `noanswer` (command sent, node still unavailable), `unreachable` (nothing got through), `failed` (refused by the node) |
 | `statistics`, `auto_recovery` | statistics rebuilt, recovery switched on / off (with who switched it) |
 
 You can trigger automations on them, for example a notification when a node
@@ -404,6 +405,16 @@ names, areas, addresses or prefixes) to copy or download and paste in an issue.
   warning (stronger for the leader: the network elects a new one); its end devices drop and attach elsewhere, and no better link is
   expected since a router picks its routes by itself. The result comes 3
   minutes later.
+- **Recovery attempt** — replaces "Find a new link" on a Thread node that is
+  unavailable (router or end device). The add-on pings the node, then sends it
+  the same command: if it gets through, the node restarts its
+  Thread connection and picks its neighbors again. "Unavailable" means the
+  Matter Server could not set up its subscription again, a long exchange; one
+  command is much shorter and can get through a link that loses most messages.
+  The result comes within a few minutes: back, still unavailable, or out of
+  reach (nothing got through: cut its power for 10 s). Needs the Matter Server
+  based on matter.js (add-on 9 and later): the older one refuses any command
+  to an unavailable node, and the result is then "out of reach".
 - **Interview** — the Matter Server reads again everything the node describes
   (endpoints, clusters, attributes); useful after a firmware update.
 

@@ -107,7 +107,7 @@ class WebUI:
                     self._send(404, '{"error": "not found"}')
 
             def _action(self):
-                """Action on one node from the table: ping, parent search, interview."""
+                """Action on one node from the table: ping, parent search, recovery attempt, interview."""
                 try:
                     n = int(self.headers.get("Content-Length") or 0)
                     body = json.loads(self.rfile.read(min(n, 4096)) or b"{}")
@@ -125,6 +125,10 @@ class WebUI:
                         if not getattr(ui.w, "reattach", None):
                             raise RuntimeError("parent search unavailable")
                         out = {"ok": True, **ui.w.reattach.run_node(nid)}
+                    elif act == "recover":
+                        if not getattr(ui.w, "reattach", None):
+                            raise RuntimeError("recovery attempt unavailable")
+                        out = {"ok": True, **ui.w.reattach.recover_node(nid)}
                     elif act == "remove":
                         h.matter_command("remove_node", {"node_id": int(nid, 16)}, timeout=120)
                         out = {"ok": True}
