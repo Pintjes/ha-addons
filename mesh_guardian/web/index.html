@@ -86,7 +86,7 @@
 
   .todo { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
   .issue { display: flex; gap: 12px; padding: 12px 14px; text-align: left; width: 100%; border-left-width: 4px; }
-  button.issue { cursor: pointer; }
+  button.issue, .issue[data-id] { cursor: pointer; }
   .issue.bad { border-left-color: var(--bad); } .issue.warn { border-left-color: var(--warn); } .issue.info { border-left-color: var(--acc); }
   .issue .ic { margin-top: 1px; }
   .issue .seen { align-self: flex-start; background: none; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font: inherit; font-size: 12px; color: var(--mut); cursor: pointer; }
@@ -548,18 +548,30 @@ function todoGroups(issues) {
   }
   return groups;
 }
+// what a card says, to remember it was hidden: the same card stays hidden, a new one shows
+let CARD_KEYS = new Set();
+function cardKey(g) {
+  const r = g.rows[0];
+  if (g.rows.length > 1) return "adv|" + r.advice + "|" + g.rows.map(x => x.id).join(",");
+  if (!r.available) return "down|" + r.id + "|" + (r.since || "");
+  return "adv|" + r.id + "|" + (r.silent_s ? "silent" : r.advice);
+}
 function renderTodo() {
   const n = D.network || {};
   const issues = (D.rows || []).filter(r => sev(r) < 3 && !r.after_restart).sort((a, b) => sev(a) - sev(b) || a.name.localeCompare(b.name));
   const net = [];
-  if (n.storm) net.push(["warn", L("storm")]);
-  if (n.routing_problem) net.push(["bad", n.routing_problem]);
+  if (n.storm) net.push(["warn", L("storm"), true]);
+  if (n.routing_problem) net.push(["bad", n.routing_problem, true]);
   // notes about the network itself (border routers, unknown nodes); "info" is not something to handle
-  for (const [k, txt] of n.notes || []) net.push([k, txt, true]);   // true: a note, can be hidden with "Seen"
-  const groups = todoGroups(issues);
-  // one section, "good to know" notes included (those hidden with "Seen" not counted)
+  for (const [k, txt] of n.notes || []) net.push([k, txt, true]);
+  // every card can be hidden with "Seen" (kept in this browser); it comes back when it changes:
+  // another text, another advice, the node unavailable again
   const seenSet = new Set(P.seen || []);
-  const total = groups.length + net.filter(x => !x[2] || !seenSet.has(x[1])).length;
+  const all = todoGroups(issues);
+  CARD_KEYS = new Set([...net.map(x => x[1]), ...all.map(cardKey)]);
+  const groups = all.filter(g => !seenSet.has(cardKey(g)));
+  const seenBtn = key => `<button class="seen" data-seen="${esc(key)}" title="${esc(L("seen_tip"))}">${esc(L("seen"))}</button>`;
+  const total = groups.length + net.filter(x => !seenSet.has(x[1])).length;
   $("#todoTitle").textContent = total ? F("todo", {n: total}) : L("todo_none");
   net.sort((a, b) => (a[0] === "info") - (b[0] === "info"));
   // notes can be hidden ("seen"), the orange ones too; a note that changes comes back
@@ -570,17 +582,17 @@ function renderTodo() {
   $("#todo").innerHTML = net.filter(x => x[0] !== "info" && !(x[2] && seen.has(x[1]))).map(([k, txt, note]) => `<div class="card issue ${k}"><span class="ic">${k === "bad" ? IC.bad : IC.warn}</span>
       <span style="flex:1"><span class="what" style="display:block">${L("w_net")}</span><span>${esc(txt)}</span></span>${note
       ? `<button class="seen" data-seen="${esc(txt)}" title="${esc(L("seen_tip"))}">${esc(L("seen"))}</button>` : ""}</div>`).join("") +
-    groups.map(({rows}) => {
-      const r = rows[0];
-      if (rows.length > 1) return `<button class="card issue info" data-id="${esc(r.id)}" title="${esc(r.advice_detail || "")}"><span class="ic">${IC.bulb}</span>
-        <span><span class="what">${L("w_warn")}</span><b>${esc(r.advice)}</b><span class="mut">${rows.map(x => esc(x.name)).join(", ")}</span></span></button>`;
+    groups.map(g => {
+      const {rows} = g, r = rows[0];
+      if (rows.length > 1) return `<div class="card issue info" data-id="${esc(r.id)}" role="button" tabindex="0" title="${esc(r.advice_detail || "")}"><span class="ic">${IC.bulb}</span>
+        <span style="flex:1"><span class="what">${L("w_warn")}</span><b>${esc(r.advice)}</b><span class="mut">${rows.map(x => esc(x.name)).join(", ")}</span></span>${seenBtn(cardKey(g))}</div>`;
       // every advice is an action: one kind, in blue (orange looked like a serious problem)
       const k = !r.available ? "bad" : "info";
       const what = !r.available ? L("w_down") : L("w_warn");
       const txt = !r.available ? esc(F("down_since", {t: since(r)}) + " " + (r.advice || L(r.battery ? "check_bat" : "check_power")) + ".")
         : r.silent_s ? esc(silentTip(r)) : esc(r.advice);
-      return `<button class="card issue ${k}" data-id="${esc(r.id)}" title="${esc(r.advice_detail || "")}"><span class="ic">${k === "bad" ? IC.bad : IC.bulb}</span>
-        <span><span class="what">${what}</span><b>${esc(r.name)} <span class="mut" style="font-weight:400">${r.area ? "· " + esc(r.area) : ""}</span></b><span>${txt}</span></span></button>`;
+      return `<div class="card issue ${k}" data-id="${esc(r.id)}" role="button" tabindex="0" title="${esc(r.advice_detail || "")}"><span class="ic">${k === "bad" ? IC.bad : IC.bulb}</span>
+        <span style="flex:1"><span class="what">${what}</span><b>${esc(r.name)} <span class="mut" style="font-weight:400">${r.area ? "· " + esc(r.area) : ""}</span></b><span>${txt}</span></span>${seenBtn(cardKey(g))}</div>`;
     }).join("") + infoCards;
 }
 
@@ -996,8 +1008,7 @@ document.addEventListener("click", e => {
   if (act) { e.stopPropagation(); if (!act.disabled) runAction(act); return; }
   const sn = e.target.closest("button[data-seen]");
   if (sn) {   // hide a note; the list only keeps the notes still shown
-    const shown = new Set(((D.network || {}).notes || []).map(x => x[1]));
-    P.seen = [...new Set([...(P.seen || []).filter(x => shown.has(x)), sn.dataset.seen])];
+    P.seen = [...new Set([...(P.seen || []).filter(x => CARD_KEYS.has(x)), sn.dataset.seen])];
     save(); return renderTodo();
   }
   const t = e.target.closest("[data-id],[data-f],[data-sort],.x");
@@ -1030,7 +1041,7 @@ $("#sheet").addEventListener("submit", async e => {   // name of a Wi-Fi access 
 });
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") closeSheet();
-  if ((e.key === "Enter" || e.key === " ") && e.target.classList && e.target.classList.contains("row")) { e.preventDefault(); openNode(e.target.dataset.id); }
+  if ((e.key === "Enter" || e.key === " ") && e.target.classList && (e.target.classList.contains("row") || e.target.matches(".issue[data-id]"))) { e.preventDefault(); openNode(e.target.dataset.id); }
 });
 $("#q").value = P.q;
 $("#q").addEventListener("input", () => { P.q = $("#q").value; save(); if (D) renderList(); });

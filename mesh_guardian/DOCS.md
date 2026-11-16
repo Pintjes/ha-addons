@@ -260,8 +260,10 @@ times or more in 24h (with the number of nodes going through it). As
 information (*Good to know*): border routers that
 detached once or twice in 24h — the border router cards only show the state
 now — and a node announced on the fabric but unknown to the Matter Server.
-Every note has a *Seen* button that hides it in this browser; it comes back
-when it changes (e.g. one more detach).
+Every card (notes, advice, unavailable nodes) has a *Seen* button that hides
+it in this browser; it comes back when it changes (one more detach, another
+advice, the node unavailable again). The table and the summary still show
+everything.
 
 Every parent change is then reported with the signal before / after (✅ better,
 ≈ similar, ⚠️ worse, ? when a signal is unknown) and its probable cause. Over time, the add-on also learns

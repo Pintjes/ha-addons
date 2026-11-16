@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.9.9] - 2026-11-16
+
+### Added
+
+- Every card has the "Seen" button: advice, unavailable node, network. A hidden card comes back when it changes (another advice, the node unavailable again). The table and the summary at the top still show everything.
+
 ## [2.9.8] - 2026-11-16
 
 ### Added
