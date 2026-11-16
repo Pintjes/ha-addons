@@ -481,7 +481,8 @@ class NodeTable:
         leader = None
         if self.radio and self.radio.leader_name and time.time() - self.radio.leader_t < 2400:
             leader = self.radio.leader_name   # Home Assistant names loaded: parent history can start
-        ref = (self.radio.reference(now, min_age=3600) or {}).get("nodes", {}) if self.radio else {}
+        ref_snap = (self.radio.reference(now, min_age=3600) or {}) if self.radio else {}
+        ref, ref_t = ref_snap.get("nodes", {}), ref_snap.get("t")
         rows = []
         for nid, v in thread.items():
             a, m = v["attrs"], v["meta"]
@@ -537,7 +538,10 @@ class NodeTable:
             diff = {}
             for key, path in COUNTERS.items():
                 cur, before = a.get(path), ((old or {}).get("c") or {}).get(key)
-                if cur is None or before is None:
+                # the value of 24h ago must be the node's own too: one taken from the Matter Server
+                # cache can be days old, and the difference would count all those days
+                known = self.live.known_since(nid, path)
+                if cur is None or before is None or known is None or ref_t is None or ref_t < known:
                     diff[key] = None
                 else:
                     diff[key] = cur if rebooted else max(0, cur - before)

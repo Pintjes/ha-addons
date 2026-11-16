@@ -40,6 +40,7 @@ STAMPS_FILE = "/data/value_times.json"
 STAMP_KEEP_S = 7 * 86400  # times kept across a restart
 # values whose age is shown: role, tables, addresses, uptime, counters, Wi-Fi signal
 STAMP_PATHS = FRESH_PATHS + ("0/51/2", "0/53/14", "0/53/19", "0/53/21", "0/54/4")
+FIRST = "#first"          # suffix: first time the node gave that value (never forgotten)
 RHYTHM_MIN_GAP_S = 30     # shorter silences are bursts of traffic, not the rhythm of the node
 RHYTHM_KEEP = 40          # silences kept per node
 RHYTHM_MIN_SAMPLES = 8    # silences needed before the rhythm is trusted
@@ -83,7 +84,9 @@ class MatterLive:
                 now = time.time()
                 for key, t0 in json.load(f).items():
                     nid, path = key.split("|", 1)
-                    if now - t0 < STAMP_KEEP_S:
+                    if path.endswith(FIRST):
+                        self.stamps[(nid, path)] = t0
+                    elif now - t0 < STAMP_KEEP_S:
                         self.stamps[(nid, path)] = max(t0, self.stamps.get((nid, path), 0))
         except Exception:  # noqa: BLE001
             pass
@@ -204,7 +207,7 @@ class MatterLive:
                 n = self.nodes.setdefault(nid, {"available": None, "attributes": {}, "last": None, "radio": None})
                 n["attributes"][data[1]] = data[2]
                 getattr(self, "fresh", {}).pop((nid, data[1]), None)   # a real report: it is the current value
-                self.stamps[(nid, data[1])] = now
+                self._mark(nid, data[1], now)
                 if str(data[1]).startswith("0/53/"):
                     n["radio"] = now
             self.note_contact(nid, now, src="report")
@@ -227,7 +230,7 @@ class MatterLive:
             if nid in self.nodes:
                 self.nodes[nid]["attributes"][path] = value
             self.fresh[(nid, path)] = (time.time(), value)
-            self.stamps[(nid, path)] = time.time()
+            self._mark(nid, path, time.time())
         if time.time() - self._fresh_saved >= 30:
             self.save_fresh()
 
@@ -241,13 +244,24 @@ class MatterLive:
             data = {f"{k}|{p}": v for (k, p), v in self.fresh.items()
                     if p in FRESH_PATHS and now - v[0] < FRESH_KEEP_S}
             times = {f"{k}|{p}": round(t0) for (k, p), t0 in self.stamps.items()
-                     if p in STAMP_PATHS and now - t0 < STAMP_KEEP_S and k in self.nodes}
+                     if k in self.nodes and (p.endswith(FIRST) or (p in STAMP_PATHS and now - t0 < STAMP_KEEP_S))}
         for name, content in ((FRESH_FILE, data), (STAMPS_FILE, times)):
             try:
                 with open(name, "w") as f:
                     json.dump(content, f)
             except OSError as err:
                 LOG.warning(t("Cannot write {file}: {err}", file=name, err=err))
+
+    def _mark(self, nid, path, now):
+        """The node gave this value now. The first time is kept too: a difference with an
+        older value (24h counters) only means something from then on."""
+        self.stamps[(nid, path)] = now
+        self.stamps.setdefault((nid, path + FIRST), now)
+
+    def known_since(self, nid, path):
+        """Since when the value of this attribute is known to be the node's own, or None."""
+        with self.lock:
+            return self.stamps.get((nid, path + FIRST))
 
     def stamp(self, nid, path):
         """When the node last gave this value, or None: age not known (Matter Server cache)."""

@@ -133,6 +133,16 @@ class Radio:
                     break
         return ref
 
+    def _own_value(self, nid, counter, when):
+        """True when the counter of this node was already its own value at that time (reported
+        or read), not one of the Matter Server cache, which can be days old: a difference
+        with such a value would count all those days."""
+        if not self.live:
+            return True
+        num = next(k for k, v in COUNTERS.items() if v == counter)
+        known = self.live.known_since(nid, "0/53/" + num)
+        return known is not None and when >= known
+
     def own_detaches(self, ref):
         """Detaches per node since `ref`, without the survey intervals where many nodes
         detached together (one network episode: border router restart, storm...)."""
@@ -145,7 +155,7 @@ class Radio:
                 if not p:
                     continue
                 a, b = (c.get("c") or {}).get("detached"), (p.get("c") or {}).get("detached")
-                if a is None or b is None:
+                if a is None or b is None or not self._own_value(nid, "detached", prev["t"]):
                     continue
                 d = a if (c.get("u") or 0) < (p.get("u") or 0) else max(0, a - b)
                 if d:
@@ -252,7 +262,7 @@ class Radio:
                 d = {}
                 for k in ("detached", "parent_changes", "partition_changes", "attach_attempts"):
                     a, b = n["counters"].get(k), (old["c"] or {}).get(k)
-                    if a is None or b is None:
+                    if a is None or b is None or not self._own_value(nid, k, ref["t"]):
                         continue
                     d[k] = a if rebooted else max(0, a - b)
                 score = d.get("detached", 0) * 3 + d.get("partition_changes", 0) * 2 + d.get("parent_changes", 0)

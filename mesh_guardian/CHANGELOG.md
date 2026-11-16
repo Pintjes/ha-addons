@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.10.1] - 2026-11-16
+
+### Fixed
+
+- 24h counters (detaches, parent and partition changes, "most unstable" of the radio survey): 2.10.0 read the counters from the nodes for the first time and compared them with yesterday's values of the Matter Server cache, which can be days old, so the difference counted all those days (e.g. 261 detaches "in 24h"). A difference is now only shown once both values are the node's own; until then the counter shows "—" (about 24 hours after the first read).
+
 ## [2.10.0] - 2026-11-16
 
 ### Added
