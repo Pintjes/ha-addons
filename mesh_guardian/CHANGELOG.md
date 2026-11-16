@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.22.1] - 2026-11-16
+
+### Changed
+
+- Node panel: the three everyday actions sit under the facts without a section of their own; "Signal and response" comes before "Pairing"; outages and parent changes have their own section, "History", before the technical details; the groups of the technical details are plain sub-titles again.
+
 ## [2.22.0] - 2026-11-16
 
 ### Changed
