@@ -426,10 +426,17 @@ does not keep it: after a factory reset the label of the device is the only
 way back, and the device may be in a wall box or on a ceiling. The node panel
 has a **Pairing code** block to keep it:
 
-- drop a photo of the QR code on the panel (or choose one, or paste it): the
-  QR code is read in your browser, the photo is not sent anywhere;
+- take a photo of the QR code from your phone (the button opens its camera),
+  or drop a photo on the panel (or choose one, or paste it): the QR code is
+  read in your browser, the photo is not sent anywhere;
 - or type the code (11 or 21 digits, or the `MT:…` text of the QR code). A
   mistyped digit is refused, and so is the QR code of another product.
+
+A node paired in the last 24 hours whose code is not kept is shown first under
+**To handle**, as "New node": the moment to photograph its label is while you
+are still in front of it. "Seen" hides the card. The code cannot be picked up
+during the pairing itself: the phone keeps it and only hands a temporary code
+to Home Assistant.
 
 The panel then shows the QR code and the code in digits, with a Copy button.
 From a typed code only the digits are shown: they do not hold what a QR code
@@ -476,7 +483,10 @@ first (Google Home, Apple Home…), Home Assistant last.
   Assistant), it stayed paired with the phone only. Remove it there, which
   resets it again, then pair it once more: on Android, Settings → Google →
   Devices & sharing → Matter devices; on iPhone, Settings → General → Matter
-  Accessories.
+  Accessories. **Remove only the entry of that device**: this list holds every
+  device ever paired with the phone, and each entry removed makes its device
+  leave every ecosystem, Home Assistant included. If you cannot tell which
+  entry it is, use the button of the device instead.
 - For some days the border routers still announce the old identity of the
   node. Mesh Guardian does not report it as unknown; nothing can withdraw it
   but time. Its code follows the node: when it comes back, the only code of

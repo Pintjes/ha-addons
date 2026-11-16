@@ -213,7 +213,8 @@
   .kv div:has(.apf) { grid-column: 1 / -1; }
   .pcdrop { margin-top: 10px; border: 2px dashed var(--line); border-radius: 10px; padding: 14px; text-align: center; color: var(--mut); }
   .pcdrop.over { border-color: var(--acc); background: var(--acc-soft); }
-  .pcdrop .btn { display: inline-flex; align-items: center; min-height: 32px; padding: 0 10px; cursor: pointer; }
+  .pcdrop .btn { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px; cursor: pointer; }
+  .pcdrop .pccam { min-height: 40px; margin-bottom: 10px; color: var(--txt); }
   .pcf, .pca { display: flex; gap: 6px; margin-top: 8px; }
   .pcf input, .pca select { flex: 1; min-width: 0; min-height: 36px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--txt); padding: 0 8px; }
   .pcf .btn, .pca .btn, .pcbtns .btn, .pccard .btn { min-height: 36px; padding: 0 10px; }
@@ -334,6 +335,7 @@ const T = {
     t_partch:"Partition changes 24h", t_out:"Outages 24h · 7d", t_down:"Downtime 7d", t_reb:"Reboots total · 24h", t_boot:"Last boot reason", t_up:"Uptime",
     t_src:"Last contact source", t_gap:"Longest silence", copy:"Copy", copied:"Copied", download:"Download", report_tip:"Anonymized report (no names, areas or addresses) to paste in an issue",
     pc_t:"Pairing code", pc_tip:"Kept by the add-on: the device can be paired again after a reset without reaching its label",
+    pc_cam:"Take a photo of the QR code", pc_new_what:"New node", pc_new:"Its pairing code is not kept yet: photograph its label now, while you are in front of it.",
     pc_drop:"Drop a photo of the QR code here, or", pc_pick:"choose a photo", pc_ph:"or type the code: 1234-567-8901 or MT:…",
     pc_auto:"Attached by itself after the reset: it was the only code of this product waiting. Replace it if this is another device.",
     pc_none_qr:"Typed code: no QR code to show (the digits do not hold everything a QR code needs)", pc_replace:"Replace", pc_delete:"Delete", pc_delete_confirm:"Delete this pairing code?",
@@ -406,6 +408,7 @@ const T = {
     t_partch:"Chgt de partition 24 h", t_out:"Coupures 24 h · 7 j", t_down:"Indisponibilité 7 j", t_reb:"Redémarrages total · 24 h", t_boot:"Raison du dernier démarrage", t_up:"En marche depuis",
     t_src:"Source du dernier contact", t_gap:"Plus long silence", copy:"Copier", copied:"Copié", download:"Télécharger", report_tip:"Rapport anonymisé (sans noms, pièces ni adresses) à coller dans une issue",
     pc_t:"Code d'appairage", pc_tip:"Conservé par l'add-on : l'appareil peut être appairé à nouveau après une réinitialisation sans accéder à son étiquette",
+    pc_cam:"Photographier le QR code", pc_new_what:"Nouvelle node", pc_new:"Son code d'appairage n'est pas encore conservé : photographier son étiquette maintenant, tant que tu es devant elle.",
     pc_drop:"Déposer ici une photo du QR code, ou", pc_pick:"choisir une photo", pc_ph:"ou saisir le code : 1234-567-8901 ou MT:…",
     pc_auto:"Rattaché tout seul après la réinitialisation : c'était le seul code de ce produit en attente. À remplacer si c'est un autre appareil.",
     pc_none_qr:"Code saisi : pas de QR code à afficher (les chiffres ne contiennent pas tout ce qu'il faut à un QR code)", pc_replace:"Remplacer", pc_delete:"Supprimer", pc_delete_confirm:"Supprimer ce code d'appairage ?",
@@ -650,10 +653,13 @@ function renderTodo() {
   // another text, another advice, the node unavailable again
   const seenSet = new Set(P.seen || []);
   const all = todoGroups(issues);
-  CARD_KEYS = new Set([...net.map(x => x[1]), ...all.map(cardKey)]);
+  // nodes paired in the last day whose pairing code is not kept: asked first, while the user
+  // still stands in front of the device ("Seen" hides the card for good: the key is the node)
+  const fresh = (D.pair_new || []).filter(x => !seenSet.has("pcnew:" + x.id));
+  CARD_KEYS = new Set([...net.map(x => x[1]), ...all.map(cardKey), ...(D.pair_new || []).map(x => "pcnew:" + x.id)]);
   const groups = all.filter(g => !seenSet.has(cardKey(g)));
   const seenBtn = key => `<button class="seen" data-seen="${esc(key)}" title="${esc(L("seen_tip"))}">${esc(L("seen"))}</button>`;
-  const total = groups.length + net.filter(x => !seenSet.has(x[1])).length;
+  const total = groups.length + net.filter(x => !seenSet.has(x[1])).length + fresh.length;
   $("#todoTitle").textContent = total ? F("todo", {n: total}) : L("todo_none");
   net.sort((a, b) => (a[0] === "info") - (b[0] === "info"));
   // notes can be hidden ("seen"), the orange ones too; a note that changes comes back
@@ -661,7 +667,9 @@ function renderTodo() {
   const infoCards = net.filter(x => x[0] === "info" && !seen.has(x[1])).map(([k, txt]) => `<div class="card issue info"><span class="ic">${IC.info}</span>
       <span style="flex:1"><span class="what" style="display:block">${L("w_info")}</span><span>${esc(txt)}</span></span>
       <button class="seen" data-seen="${esc(txt)}" title="${esc(L("seen_tip"))}">${esc(L("seen"))}</button></div>`).join("");
-  $("#todo").innerHTML = net.filter(x => x[0] !== "info" && !(x[2] && seen.has(x[1]))).map(([k, txt, note]) => `<div class="card issue ${k}"><span class="ic">${k === "bad" ? IC.bad : IC.warn}</span>
+  $("#todo").innerHTML = fresh.map(x => `<div class="card issue info" data-id="${esc(x.id)}" role="button" tabindex="0"><span class="ic">${IC.info}</span>
+      <span style="flex:1"><span class="what">${L("pc_new_what")}</span><b>${esc(x.name)} <span class="mut" style="font-weight:400">${x.area ? "· " + esc(x.area) : ""}</span></b><span>${esc(L("pc_new"))}</span></span>${seenBtn("pcnew:" + x.id)}</div>`).join("") +
+    net.filter(x => x[0] !== "info" && !(x[2] && seen.has(x[1]))).map(([k, txt, note]) => `<div class="card issue ${k}"><span class="ic">${k === "bad" ? IC.bad : IC.warn}</span>
       <span style="flex:1"><span class="what" style="display:block">${L("w_net")}</span><span>${esc(txt)}</span></span>${note
       ? `<button class="seen" data-seen="${esc(txt)}" title="${esc(L("seen_tip"))}">${esc(L("seen"))}</button>` : ""}</div>`).join("") +
     groups.map(g => {
@@ -1106,13 +1114,15 @@ async function fillQr() {   // draws the QR codes of the cards shown
   if (!boxes.length) return;
   try { await needScript("qrcode.js"); boxes.forEach(b => { b.innerHTML = qrSvg(b.dataset.qr); }); } catch (e) { /* the typed code is shown anyway */ }
 }
+const IC_CAM = '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
 let pair = {id: null, data: null, edit: false};
 function renderPair() {
   const el = $("#pair"); if (!el || !pair.data || pair.id !== openId) return;
   const c = pair.data.code, free = pair.data.free || [];
   el.innerHTML = c && !pair.edit
     ? codeCard(c) + (c.auto ? `<small class="mut">${L("pc_auto")}</small>` : "") + `<p class="pcbtns"><button class="btn" data-pc="replace">${L("pc_replace")}</button><button class="btn" data-pc="delete" data-key="${esc(c.key)}">${L("pc_delete")}</button></p>`
-    : `<div class="pcdrop">${L("pc_drop")} <label class="btn">${L("pc_pick")}<input type="file" accept="image/*" hidden></label></div>
+    : `<div class="pcdrop"><label class="btn pccam">${IC_CAM}${L("pc_cam")}<input type="file" accept="image/*" capture="environment" hidden></label>
+         <div>${L("pc_drop")} <label class="btn">${L("pc_pick")}<input type="file" accept="image/*" hidden></label></div></div>
        <form class="pcf"><input name="c" placeholder="${esc(L("pc_ph"))}" autocomplete="off" spellcheck="false" maxlength="80"><button class="btn">${L("save")}</button></form>` +
       (free.length ? `<form class="pca"><select name="k" aria-label="${esc(L("pc_attach"))}">${free.map(f =>
         `<option value="${esc(f.key)}">${esc([f.name || "?", f.area, manualFmt(f.manual)].filter(Boolean).join(" · "))}</option>`).join("")}</select><button class="btn">${L("pc_attach_btn")}</button></form>

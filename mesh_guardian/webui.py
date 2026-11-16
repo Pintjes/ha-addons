@@ -13,6 +13,7 @@ import logging
 import os
 import sys
 import threading
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from i18n import t
@@ -23,7 +24,20 @@ PORT = 8790
 ALLOWED = {"172.30.32.2", "127.0.0.1", "::1"}
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 PAGE = os.path.join(WEB, "index.html")
+NEW_NODE_S = 86400   # s: a node paired less than this ago is asked for its pairing code
 SCRIPTS = ("jsqr.js", "qrcode.js")   # QR code reader and writer, loaded by the page when a pairing code needs them
+
+
+def _recent(added):
+    """True for a commissioning date (ISO text of the Matter Server) less than NEW_NODE_S old.
+    A date without time zone is read as local time and as UTC: either may be meant."""
+    try:
+        when = datetime.fromisoformat(str(added).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return False
+    if when.tzinfo:
+        return abs((datetime.now(timezone.utc) - when).total_seconds()) < NEW_NODE_S
+    return min(abs((now - when).total_seconds()) for now in (datetime.now(), datetime.now(timezone.utc).replace(tzinfo=None))) < NEW_NODE_S
 
 
 class WebUI:
@@ -53,6 +67,24 @@ class WebUI:
         if code:
             self.pairing.refresh(nid, attrs, name, area, model)
         return {"code": code, "free": [] if code else self.pairing.free(present, ident["vid"], ident["pid"])}
+
+    def pairing_new(self, rows):
+        """Nodes paired in the last day whose pairing code is not kept: [{"id", "name", "area"}].
+        The moment to give it is now, while the user still stands in front of the device.
+        (Looking a code up also attaches the one that waits for a node since its reset.)"""
+        out, nodes = [], None
+        for r in rows or []:
+            if not _recent(r.get("added")):
+                continue
+            try:
+                if nodes is None:
+                    nodes = {f"{int(n.get('node_id', 0)):016X}": n.get("attributes") or {} for n in self.table._nodes()}
+                nid = f"{int(str(r.get('id')), 16):016X}"
+                if nid in nodes and not self.pairing.of(nid, nodes[nid], set(nodes)):
+                    out.append({"id": r.get("id"), "name": r.get("name") or "", "area": r.get("area") or ""})
+            except Exception as err:  # noqa: BLE001
+                LOG.debug("new node without pairing code: %s", type(err).__name__)
+        return out
 
     def pairing_post(self, body):
         if body.get("delete"):
@@ -116,6 +148,7 @@ class WebUI:
                 elif path == "/api/table":
                     try:
                         data = ui.table.get(force="force=1" in query)
+                        data = dict(data, pair_new=ui.pairing_new(data.get("rows")))   # a copy: the table keeps its own
                         self._send(200, json.dumps(data, ensure_ascii=False))
                     except Exception as err:  # noqa: BLE001
                         self._send(503, json.dumps({"error": str(err)}, ensure_ascii=False))

@@ -4,6 +4,17 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.16.0] - 2026-11-16
+
+### Added
+
+- Pairing code: a "Take a photo of the QR code" button opens the camera of the phone, straight from the node panel.
+- A node paired in the last 24 hours whose pairing code is not kept is shown first under "To handle", as "New node", while you are still in front of it ("Seen" hides it).
+
+### Changed
+
+- Documentation: in the list of Matter devices of the phone, remove only the entry of the device that is stuck; each entry removed makes its device leave every ecosystem.
+
 ## [2.15.1] - 2026-11-16
 
 ### Changed
