@@ -6,7 +6,6 @@ python side_door/tests/upstream.py   (listens on 127.0.0.1:8000)
 """
 import gzip
 import json
-import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # Fixed: test_live.py imports this file to compare what it receives
