@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.19.2] - 2026-11-16
+
+### Fixed
+
+- A border router whose Thread restarted announces itself anew under another id while its old announcement stays on the network: it was shown twice. The new announcement now takes over its card (name and history kept) and the old one is ignored; a card that goes offline while another, online, has the same addresses is folded into it.
+
 ## [2.19.1] - 2026-11-16
 
 ### Changed

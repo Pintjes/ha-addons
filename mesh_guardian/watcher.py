@@ -76,7 +76,7 @@ from matterlog import MatterLog  # noqa: E402
 from suplog import SupervisorLog  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.19.1"
+VERSION = "2.19.2"
 
 _MQ = _load_mqtt()
 MQTT_HOST = _MQ.get("host") or os.environ.get("MQTT_HOST", "core-mosquitto")
@@ -538,6 +538,16 @@ class Watch:
                     self._clear_br_entity(prev)
                 else:
                     self._drop_br(prev)
+            # A border router whose Thread restarted announces itself anew, under another
+            # border agent id and another instance name, while its old announcement stays on
+            # the network until it expires: same addresses, same network, so the same device.
+            # The new announcement takes the entry over; the old one is then ignored.
+            if self._br_replaced(key):
+                return
+            if key not in self.br:
+                twin = self._br_twin(key, new)
+                if twin:
+                    self._br_take_over(twin, key)
             old = self.br.get(key)
             now = time.time()
             if old is None:
@@ -604,6 +614,60 @@ class Watch:
             self.dirty = True
         self.check_global()
 
+    @staticmethod
+    def _br_addrs(b):
+        """Addresses that tell a device (link-local ones are the same on every network)."""
+        return {a for a in b.get("addrs") or [] if not str(a).lower().startswith("fe80")}
+
+    def _br_twin(self, key, new):
+        """Key of the entry that is the same device as this announcement (lock held)."""
+        addrs = self._br_addrs(new)
+        if not addrs:
+            return None
+        for other, b in self.br.items():
+            if other != key and b.get("ext_pan") == new.get("ext_pan") and self._br_addrs(b) & addrs:
+                return other
+        return None
+
+    def _br_replaced(self, key):
+        """True for the key of an old announcement whose device announces itself under another
+        key, as long as that one is online (lock held)."""
+        return any(key in (saved.get("replaces") or []) and (self.br.get(k) or {}).get("online")
+                   for k, saved in self.br_names.items())
+
+    def _br_take_over(self, old_key, key):
+        """The entry of old_key goes on under key: its name and its history follow (lock held)."""
+        self.br[key] = self.br.pop(old_key)
+        saved = self.br_names.pop(old_key, None) or {"name": None, "detached": []}
+        gone = self.br_names.pop(key, None) or {}
+        saved["replaces"] = sorted((set(saved.get("replaces") or []) | set(gone.get("replaces") or []) | {old_key}) - {key})[-6:]
+        self.br_names[key] = saved
+        self._save_br_names()
+        self._clear_br_entity(old_key)
+        LOG.debug("border router %s announces itself anew: %s -> %s", self.br_label(self.br[key]), old_key[:8], key[:8])
+
+    def _br_fold_stale(self):
+        """An entry that went offline while another one, online, has its addresses on the same
+        network was the old announcement of that border router: its name and its detaches go
+        to the online one and it leaves the list (lock held). Returns True when one left."""
+        done = False
+        for key, b in list(self.br.items()):
+            if b.get("online"):
+                continue
+            twin = self._br_twin(key, b)
+            if not twin or not self.br[twin].get("online"):
+                continue
+            gone = self.br_names.get(key) or {}
+            kept = self.br_names.setdefault(twin, {"name": None, "detached": []})
+            if not kept.get("name") and gone.get("name"):
+                kept["name"] = gone["name"]
+                self.br[twin]["label"] = gone["name"]
+            kept["detached"] = sorted(set(kept.get("detached") or []) | set(gone.get("detached") or []))
+            kept["replaces"] = sorted((set(kept.get("replaces") or []) | set(gone.get("replaces") or []) | {key}) - {twin})[-6:]
+            self._drop_br(key)
+            done = True
+        return done
+
     def _remember_br(self, key, name, b):
         """Keep the last announcement of a border router, restored at the next start."""
         saved = self.br_names.setdefault(key, {"name": None, "detached": []})
@@ -621,6 +685,8 @@ class Watch:
         """Role change of a border router reported once the new role held ROLE_SETTLE_S."""
         now = time.time()
         with self.lock:
+            if self._br_fold_stale():
+                self.dirty = True
             for b in self.br.values():
                 if "_role_from" not in b or now - b["_role_t"] < ROLE_SETTLE_S:
                     continue
