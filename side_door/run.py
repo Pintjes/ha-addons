@@ -277,10 +277,18 @@ SHELL = """\
     + "6.11,13.65L5.64,14.12C4.46,15.29 4.46,17.19 5.64,18.36C6.81,19.54 8.71,19.54 9.88,18.36L13.41,14.83C14.59,13.66 "
     + "14.59,11.76 13.41,10.59C13,10.2 13,9.56 13.41,9.17Z";
   // The path a dashboard button needs to open an app ("Navigate" action):
-  // the address of this panel in Home Assistant, then "?app=" and the app
+  // the address of this panel in Home Assistant, then "?app=" and the app.
+  // When Home Assistant has the "/app/<add-on>" page, that address is given:
+  // it works whether or not the add-on is shown in the sidebar, while the
+  // sidebar address ("/<add-on>") disappears with the sidebar entry.
   function linkOf(id) {
     let panel = "/";
-    try { panel = window.parent.location.pathname.replace(/[/]+$/, ""); } catch (error) { /* not the same site */ }
+    try {
+      panel = window.parent.location.pathname.replace(/[/]+$/, "");
+      const ha = window.parent.document.querySelector("home-assistant");
+      const addon = panel.split("/").pop();
+      if (ha && ha.hass && ha.hass.panels && ha.hass.panels.app && addon) panel = "/app/" + addon;
+    } catch (error) { /* not the same site */ }
     return panel + "?app=" + id;
   }
   let toastTimer = null;

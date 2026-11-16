@@ -4,6 +4,14 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.9.1] - 2026-11-16
+
+### Fixed
+
+- The link icon gives the `/app/<add-on>?app=<app>` path when Home Assistant
+  has it: it keeps working when the add-on is not shown in the sidebar, while
+  the sidebar address goes away with the sidebar entry.
+
 ## [1.9.0] - 2026-11-16
 
 ### Added

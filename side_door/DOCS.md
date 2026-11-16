@@ -121,11 +121,13 @@ type: button
 name: Printer
 tap_action:
   action: navigate
-  navigation_path: /<slug of the add-on>?app=Printer
+  navigation_path: /app/<slug of the add-on>?app=Printer
 ```
 
 The slug is in the address bar when the panel is open (for example
-`/4f047962_side_door`). Upper and lower case do not matter.
+`4f047962_side_door`). The `/app/…` path works whether or not the add-on is
+shown in the sidebar; the sidebar address (`/4f047962_side_door`) only works
+while it is. Upper and lower case do not matter.
 
 The sidebar keeps one entry, named Side Door: Home Assistant gives one panel
 to an add-on and takes its title from the add-on itself. The names you choose
