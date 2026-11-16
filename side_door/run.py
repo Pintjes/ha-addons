@@ -229,8 +229,11 @@ SHELL = """\
   .toast { position: fixed; left: 50%%; bottom: 1rem; transform: translateX(-50%%); max-width: 90vw; z-index: 9;
            padding: .6rem .9rem; border-radius: 8px; background: #1c2733; color: #e3e8ee;
            box-shadow: 0 2px 10px rgba(0, 0, 0, .35); font-size: .9rem; }
-  .toast input { font: inherit; width: 34rem; max-width: 70vw; margin-left: .4rem; padding: .2rem .4rem;
+  .toast { padding-right: 2.2rem; }
+  .toast input { font: inherit; width: 28rem; max-width: 55vw; margin-left: .4rem; padding: .2rem .4rem;
                  border: 1px solid #2b3947; border-radius: 4px; background: #111a22; color: inherit; }
+  .toast button { font: inherit; margin-left: .4rem; padding: .2rem .6rem; border: 1px solid #2b3947;
+                  border-radius: 4px; background: #2b3947; color: inherit; cursor: pointer; }
   body.editing nav .tabs button.off { opacity: .45; text-decoration: line-through; }
   main { flex: 1; position: relative; }
   iframe { position: absolute; inset: 0; width: 100%%; height: 100%%; border: 0; background: #fff; }
@@ -291,35 +294,49 @@ SHELL = """\
     } catch (error) { /* not the same site */ }
     return panel + "?app=" + id;
   }
-  let toastTimer = null;
-  function toast(text, link) {
-    let box = document.querySelector(".toast");
-    if (!box) { box = document.createElement("div"); box.className = "toast"; document.body.appendChild(box); }
-    box.textContent = text;
-    if (link) {
-      const field = document.createElement("input");
-      field.readOnly = true;
-      field.value = link;
-      box.append(field);
-      field.select();
-    }
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => box.remove(), link ? 15000 : 4000);
-  }
-  // Copied when the browser lets it (on plain HTTP it may not): the path is
-  // shown in any case, selected, ready to be copied by hand
-  function copyLink(tab) {
-    const link = linkOf(tab.dataset.app);
-    const field = document.createElement("textarea");
-    field.value = link;
-    field.style.cssText = "position:fixed;left:-9999px";
-    document.body.appendChild(field);
+  // Copied when the browser lets it (on plain HTTP it may not): the field
+  // stays selected, ready to be copied by hand
+  function copyField(field, button) {
+    field.focus();
     field.select();
     let copied = false;
     try { copied = document.execCommand("copy"); } catch (error) { /* not allowed */ }
-    field.remove();
-    if (copied) toast("Link copied / Lien copié : " + link);
-    else toast("Copy this link / Copiez ce lien :", link);
+    button.textContent = copied ? "Copied / Copié" : "Ctrl+C";
+  }
+  // The two links of an app: with the row of tabs, or the app alone
+  function copyLink(tab) {
+    document.querySelectorAll(".toast").forEach((old) => old.remove());
+    const box = document.createElement("div");
+    box.className = "toast";
+    const title = document.createElement("div");
+    title.textContent = tab.dataset.name + " : path for a dashboard button / chemin pour un bouton (Naviguer)";
+    box.append(title);
+    const base = linkOf(tab.dataset.app);
+    [["With the tabs / Avec les onglets", base], ["Alone / Seule", base + "&only=1"]].forEach(([label, link]) => {
+      const row = document.createElement("div");
+      row.style.marginTop = ".4rem";
+      const name = document.createElement("span");
+      name.textContent = label;
+      name.style.cssText = "display:inline-block;min-width:11rem";
+      const field = document.createElement("input");
+      field.readOnly = true;
+      field.value = link;
+      field.addEventListener("focus", () => field.select());
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = "Copy / Copier";
+      button.addEventListener("click", () => copyField(field, button));
+      row.append(name, field, button);
+      box.append(row);
+    });
+    const close = document.createElement("button");
+    close.type = "button";
+    close.textContent = "✕";
+    close.title = "Close / Fermer";
+    close.style.cssText = "position:absolute;top:.3rem;right:.4rem";
+    close.addEventListener("click", () => box.remove());
+    box.append(close);
+    document.body.appendChild(box);
   }
   function icon(path) {
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + path + '"/></svg>';
@@ -333,14 +350,20 @@ SHELL = """\
     try { localStorage.setItem("side_door_hidden", JSON.stringify(hiddenApps)); } catch (error) { /* private window */ }
   }
   // "?app=<name>" in the address of the panel: a dashboard button opens a given app
-  function asked() {
+  function param(name) {
     for (const place of [window.parent, window]) {
       try {
-        const app = new URLSearchParams(place.location.search).get("app");
-        if (app) return app;
+        const value = new URLSearchParams(place.location.search).get(name);
+        if (value) return value;
       } catch (error) { /* not the same site */ }
     }
     return null;
+  }
+  function asked() { return param("app"); }
+  // "&only=1" with "?app=": the app alone, without the row of tabs
+  function alone() { return !!find(asked()) && /^(1|true|yes)$/i.test(param("only") || ""); }
+  function placeRow() {
+    document.querySelector("nav").style.display = tabs.length < 2 || alone() ? "none" : "";
   }
   // Between two pages of an app the frame shows its own background: it takes
   // the colour of the page, so that a dark app does not flash white.
@@ -440,8 +463,8 @@ SHELL = """\
     if (editing) setHidden(t.dataset.app, !isHidden(t.dataset.app));
     else show(t.dataset.app);
   }));
-  // A single app in the list: no row at all, the app fills the panel
-  if (tabs.length < 2) document.querySelector("nav").style.display = "none";
+  // A single app in the list, or an app asked alone: no row, the app fills the panel
+  placeRow();
   let last = null;
   try { last = localStorage.getItem("side_door_app"); } catch (error) { /* private window */ }
   const first = find(asked()) ? asked() : null;
@@ -450,6 +473,7 @@ SHELL = """\
   try {
     window.parent.addEventListener("location-changed", () => {
       if (find(asked())) { show(asked(), "", true); draw(); }
+      placeRow();
     });
   } catch (error) { /* not the same site */ }
 </script>
