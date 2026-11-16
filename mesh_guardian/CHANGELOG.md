@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.13.1] - 2026-11-16
+
+### Fixed
+
+- Recovery attempt: when the node is back before the fail-safe could be closed, the closing command is sent again (3 tries). Left armed, the fail-safe expired 2 minutes later and the node reverted its configuration, which on some devices restarts Thread once more.
+
 ## [2.13.0] - 2026-11-16
 
 ### Added

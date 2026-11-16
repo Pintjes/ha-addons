@@ -42,7 +42,9 @@ SETTLE_S = 25         # s: time left to the node to attach before its new link i
 FOLLOW_EVERY_S = 30   # s: result not known yet: the node and its parent are read again this often...
 FOLLOW_FOR_S = 300    # s: ...for this long
 RECOVER_WAIT_S = 120  # s: recovery attempt: time left to the Matter Server to reach an unavailable node
-RESULT_KEEP_S = 900  # s: a result stays in the table this long (the page shows it when it arrives)
+CLOSE_TRIES = 3       # recovery attempt: tries to close the fail-safe of a node that is back...
+CLOSE_EVERY_S = 10    # s: ...this far apart
+RESULT_KEEP_S = 900 # s: a result stays in the table this long (the page shows it when it arrives)
 END_DEVICE_ROLES = (2, 3, 4)   # sleepy end device, end device, REED (a full end device attached as a child)
 CONNECT_NETWORK = 6   # Network Commissioning command id
 # PROVISIONAL (2.12.0, trial asked by the user): the same command on a router. A router has no
@@ -533,6 +535,18 @@ class Reattach:
                     except Exception as err:  # noqa: BLE001
                         LOG.debug("commissioning complete of %s after recovery: %s", name, err)
                 if self._is_back(nid):
+                    # back but the fail-safe is still armed: when it expires the node reverts its
+                    # configuration and may restart Thread once more. It answers now: close it
+                    for _ in range(CLOSE_TRIES):
+                        if closed or self.w.stop.wait(CLOSE_EVERY_S):
+                            break
+                        try:
+                            self._command(node_id, 48, "CommissioningComplete", {}, timeout=60)
+                            closed = True
+                        except Exception as err:  # noqa: BLE001
+                            LOG.debug("commissioning complete of %s, back: %s", name, err)
+                    if not closed:
+                        LOG.info("recovery of %s: back, fail-safe not closed (it expires by itself)", name)
                     self._recover_result(nid, name, "back", t("{node}: back after the recovery attempt", node=name))
                     return
             self._recover_result(nid, name, "noanswer", t("{node}: still unavailable after the recovery attempt", node=name))
