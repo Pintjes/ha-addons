@@ -132,6 +132,9 @@ class Healer:
             m = st.get("mass")
             self.mass = m if m and time.time() - m.get("t", 0) < 86400 else None
             self.gave_up_saved = {k: v for k, v in (st.get("gave_up_nodes") or {}).items() if time.time() - v < 7 * 86400}
+            # recovery pings already sent to the nodes still unavailable: the count goes on after a restart
+            self.pings_saved = {k: v for k, v in (st.get("ping_counts") or {}).items()
+                                if v and v[1] and time.time() - v[1] < 86400}
         except Exception:  # noqa: BLE001
             pass
 
@@ -143,7 +146,9 @@ class Healer:
                            "pings_sent": self.pings_sent, "last_result": self.last_result,
                            "recent": self.recent, "history_done": self.history_done, "mass": self.mass,
                            "gave_up_nodes": {k: n.get("gave_up_t") or time.time() for k, n in self.nodes.items()
-                                             if n.get("gave_up") and not n.get("available")}}, f)
+                                             if n.get("gave_up") and not n.get("available")},
+                           "ping_counts": {k: [n["pings"], n.get("last_ping")] for k, n in self.nodes.items()
+                                           if n.get("pings") and not n.get("gave_up") and not n.get("available")}}, f)
         except Exception as err:  # noqa: BLE001
             LOG.warning(t("Cannot save state: {err}", err=err))
 
@@ -322,7 +327,7 @@ class Healer:
                     if not n.get("available", True):
                         n["last_ping"] = time.time()   # a return right after counts as recovered by ping
                 else:
-                    bad.append(n.get("name", short_id(node)) + (t(", battery") if n.get("battery") else ""))
+                    bad.append(n.get("name", short_id(node)) + (t(" (battery)") if n.get("battery") else ""))
             self.last_result = t("{time} ping of all nodes: {ok}/{total}", time=hhmm(time.time()), ok=ok, total=len(targets))
             self.w.emit("ping_all_done", t("Ping of all nodes: {ok}/{total} answer", m=int((time.time() - started) // 60),
                                            ok=ok, total=len(targets))
@@ -621,6 +626,9 @@ class Healer:
                     saved = getattr(self, "gave_up_saved", {}).get(node)
                     if saved and not avail:   # still unavailable after a restart: the pings already gave up
                         n.update({"gave_up": True, "gave_up_t": saved, "pings": 0})
+                    sent = getattr(self, "pings_saved", {}).get(node)
+                    if sent and not avail and not n["gave_up"]:   # same outage: go on counting
+                        n.update({"pings": min(int(sent[0]), self.max_attempts), "last_ping": sent[1]})
                     self.nodes[node] = n
                     first = True
                 else:

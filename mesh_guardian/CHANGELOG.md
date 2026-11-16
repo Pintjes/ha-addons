@@ -4,6 +4,15 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.10.5] - 2026-11-16
+
+### Fixed
+
+- The count of recovery pings sent to an unavailable node goes on after a restart of the add-on instead of starting again at 1.
+- When the Thread partition is replaced by a new one, the log says "New Thread partition" instead of "Thread partitions: 1 → 1".
+- Result of "Ping all nodes": "X (battery), Y (battery)" instead of "X, battery, Y, battery".
+- Log texts: "becomes primary" / "no longer primary" for a border router instead of "True", node prefixes written as a plain list, correct singular and plural in the hourly summary and the radio survey, French spacing before a colon.
+
 ## [2.10.4] - 2026-11-16
 
 ### Fixed

@@ -812,11 +812,11 @@ class NodeTable:
         if waiting and now - m["t"] < RESTART_GRACE_S:
             for r in waiting:
                 r["after_restart"] = True
-            return [("warn", who + ": " + t("{n} of {total} nodes are reconnecting, nothing to do",
+            return [("warn", who + t(": ") + t("{n} of {total} nodes are reconnecting, nothing to do",
                                              n=len(waiting), total=len(ids)))]
         if waiting:
-            return [("info", who + ": " + t("{n} of {total} nodes did not come back", n=len(waiting), total=len(ids)))]
-        return [("info", who + ": " + t("all {total} nodes came back", total=len(ids)))]
+            return [("info", who + t(": ") + t("{n} of {total} nodes did not come back", n=len(waiting), total=len(ids)))]
+        return [("info", who + t(": ") + t("all {total} nodes came back", total=len(ids)))]
 
     def _advise(self, rows):
         """Advice of every row, from what is known right now (advice.py). Returns the notes

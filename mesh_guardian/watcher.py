@@ -75,7 +75,7 @@ from storm import Storm  # noqa: E402
 from suplog import SupervisorLog  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.10.4"
+VERSION = "2.10.5"
 
 _MQ = _load_mqtt()
 MQTT_HOST = _MQ.get("host") or os.environ.get("MQTT_HOST", "core-mosquitto")
@@ -571,6 +571,9 @@ class Watch:
                                    ("bbr_primary", t("primary BBR"))):
                     if old.get(field) != new[field]:
                         before, after = old.get(field), new[field]
+                        if field == "bbr_primary":
+                            changes.append(t("becomes primary") if after else t("no longer primary"))
+                            continue
                         if field in ("role", "interface"):
                             before, after = t(str(before)), t(str(after))
                         changes.append(f"{txt} {before or '-'} → {after or '-'}")
@@ -1040,8 +1043,10 @@ class Watch:
             self.emit("leader_change", t("Thread leader: {before} → {after}", before=self.prev_leaders[1], after=leaders[1]),
                       before=self.prev_leaders[1], after=leaders[1])
         if self.prev_partitions is not None and parts != self.prev_partitions:
-            self.emit("partition_change", t("Thread partitions: {before} → {after}",
-                                              before=len(self.prev_partitions), after=len(parts)),
+            # same count: the partition itself was replaced (new leader)
+            self.emit("partition_change",
+                      t("New Thread partition") if len(parts) == len(self.prev_partitions)
+                      else t("Thread partitions: {before} → {after}", before=len(self.prev_partitions), after=len(parts)),
                       before=list(self.prev_partitions), after=list(parts))
         if self.prev_omr is not None and omr != self.prev_omr:
             self.emit("omr_change", t("OMR prefix: {before} → {after}", before=", ".join(self.prev_omr) or t("none"),
@@ -1059,8 +1064,9 @@ class Watch:
             return
         if self.prev_node_prefixes is not None and keys != self.prev_node_prefixes:
             self.emit("node_prefix_change",
-                      t("Node prefixes: {before} → {after}", before=list(self.prev_node_prefixes),
-                        after=s["node_prefixes"]),
+                      t("Node prefixes: {before} → {after}", before=", ".join(self.prev_node_prefixes) or t("none"),
+                        after=", ".join(tn("{p} ({n} node)", "{p} ({n} nodes)", n, p=p)
+                                        for p, n in sorted(s["node_prefixes"].items())) or t("none")),
                       before=list(self.prev_node_prefixes), after=s["node_prefixes"])
             if self.healer:
                 self.healer.prefix_changed()
@@ -1357,11 +1363,14 @@ class Watch:
         s = self.summary()
         h = self.healer.summary() if self.healer else {}
         r = self.radio.summary() if self.radio else {}
-        LOG.info("🕐 %s%s%s: %s", COLORS["bold"], t("Summary"), RESET,
-                 t("{br} border routers, leader {leader}, {down} unavailable, {rec} recoveries, {weak} weak links",
-                   br=s["br_online"], leader=s["leader"], on=s["matter_online"], known=s["matter_known"],
-                   down=h.get("unavailable", "?"), rec=h.get("recovered_by_ping", "?"), bursts=s["bursts_count"],
-                   weak=r.get("weak_links", "?"), unstable=r.get("unstable", "?")))
+        def count(one, many, n):
+            return tn(one, many, n) if isinstance(n, int) else t(many, n=n)
+        LOG.info("🕐 %s%s%s%s%s", COLORS["bold"], t("Summary"), RESET, t(": "),
+                 ", ".join((count("{n} border router", "{n} border routers", s["br_online"]),
+                            t("leader {leader}", leader=s["leader"]),
+                            count("{n} node unavailable", "{n} nodes unavailable", h.get("unavailable", "?")),
+                            count("{n} recovery", "{n} recoveries", h.get("recovered_by_ping", "?")),
+                            count("{n} weak link", "{n} weak links", r.get("weak_links", "?")))))
 
     def publisher(self):
         last_full = 0

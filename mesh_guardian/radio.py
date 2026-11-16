@@ -307,8 +307,8 @@ class Radio:
                     t("Radio survey: {n} nodes, {weak}",
                       n=len(info), weak=tn("{n} weak link", "{n} weak links", len(weak)))
                     + (t(" (worst: {a} ↔ {b} {rssi}dBm)", a=worst["a"], b=worst["b"], rssi="?" if worst["rssi"] is None else worst["rssi"]) if worst else "")
-                    + (t(", most unstable: {name} ({d} detach)" if top["detaches"] == 1 else ", most unstable: {name} ({d} detaches)",
-                         name=top["name"], d=top["detaches"]) if top else ""),
+                    + (t(", most unstable: {name} ({d})", name=top["name"],
+                         d=tn("{n} detach", "{n} detaches", top["detaches"])) if top else ""),
                     weak=len(weak), links=len(links), unstable=len(unstable))
         self.w.dirty = True
 
