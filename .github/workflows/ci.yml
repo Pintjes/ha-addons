@@ -83,7 +83,7 @@ jobs:
           mkdir -p /tmp/sd-data
           echo '{"target_url": "http://192.168.1.10:8000", "rewrite_prefixes": ["data-url=\""], "max_body_mb": 100, "timeout": 120}' > /tmp/sd-data/options.json
           docker run --rm -v /tmp/sd-data:/data sd-test python3 /run.py --check
-          echo '{"apps": [{"name": "First app", "url": "http://192.168.1.10:8000"}, {"name": "Second", "url": "https://192.168.1.20/app/", "inject_script": true, "hide_proxy": true}, {"name": "Third", "url": "https://app.example.com", "verify_tls": "on"}], "rewrite_prefixes": [], "max_body_mb": 100, "timeout": 120}' > /tmp/sd-data/options.json
+          echo '{"apps": [{"name": "First app", "url": "http://192.168.1.10:8000"}, {"name": "Second", "url": "https://192.168.1.20/app/", "inject_script": true, "hide_proxy": true}, {"name": "Third", "url": "https://192.168.1.30", "verify_tls": "on"}], "rewrite_prefixes": [], "max_body_mb": 100, "timeout": 120}' > /tmp/sd-data/options.json
           docker run --rm -v /tmp/sd-data:/data sd-test python3 /run.py --check
       - name: Live test (Side Door)
         if: matrix.arch == 'amd64' && matrix.addon == 'side_door'
