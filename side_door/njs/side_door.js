@@ -44,6 +44,20 @@ function textKind(r) {
     return TEXTS[type.split(';')[0].trim().toLowerCase()] || null;
 }
 
+// The kind of text of an answer the add-on may rewrite, or null. Left alone:
+// an answer the app compressed anyway (its bytes are not text), and a piece
+// of an answer (206), whose addresses may be cut in two.
+function rewritable(r, a) {
+    if (!a || !(a.rewrite || a.inject) || r.status === 206) {
+        return null;
+    }
+    var encoding = String(r.headersOut['Content-Encoding'] || '').trim().toLowerCase();
+    if (encoding && encoding !== 'identity') {
+        return null;
+    }
+    return textKind(r);
+}
+
 function escapeRegExp(text) {
     return text.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&');
 }
@@ -160,8 +174,8 @@ function headers(r) {
         if (etag) {
             r.headersOut['ETag'] = 'W/"' + MARK + '-' + etag.replace(/^W\//, '').replace(/^"|"$/g, '') + '"';
         }
-        var type = textKind(r);
-        if (!a || !type || !(a.rewrite || a.inject)) {
+        var type = rewritable(r, a);
+        if (!type) {
             return;
         }
         // The text will change: so will its length, and its date says nothing
@@ -181,7 +195,7 @@ function headers(r) {
 function body(r, data, flags) {
     var a = app(r);
     if (kind === null) {
-        kind = (a && (a.rewrite || a.inject) && textKind(r)) || 'as it is';
+        kind = rewritable(r, a) || 'as it is';
     }
     if (kind === 'as it is') {
         r.sendBuffer(data, flags);
@@ -202,7 +216,16 @@ function body(r, data, flags) {
     var whole = Buffer.concat(chunks);
     chunks = [];
     try {
-        r.sendBuffer(rewrite(r, a, kind, whole.toString('utf8')), flags);
+        // Only a text in UTF-8 is rewritten. A page in another encoding
+        // (ISO-8859-1, Windows-1252...) read as UTF-8 would lose its accented
+        // letters: it is relayed as it is. Read then written back, a UTF-8
+        // text gives the same bytes; any other does not.
+        var text = whole.toString('utf8');
+        if (Buffer.compare(Buffer.from(text, 'utf8'), whole) !== 0) {
+            r.sendBuffer(whole, flags);
+            return;
+        }
+        r.sendBuffer(rewrite(r, a, kind, text), flags);
     } catch (error) {
         r.error('side_door body: ' + error);
         r.sendBuffer(whole, flags);

@@ -4,6 +4,23 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.10.1] - 2026-11-17
+
+### Fixed
+
+- An answer the app compressed although nobody asked for it was damaged: it
+  is relayed as it is.
+- A page that is not in UTF-8 (ISO-8859-1, Windows-1252…) lost its accented
+  letters: it is relayed as it is.
+- A piece of an answer (a download that resumes) is no longer rewritten.
+- The log no longer shows the user name and password of a refused address
+  written `http://user:password@host/`.
+
+### Changed
+
+- Tests are part of the repository and of the CI: what the add-on writes from
+  the options, and the add-on at work in front of a test app.
+
 ## [1.10.0] - 2026-11-16
 
 ### Added

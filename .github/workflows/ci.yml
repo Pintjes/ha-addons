@@ -21,6 +21,8 @@ jobs:
         run: ruff check --select E9,F63,F7,F82,F401,F811 mesh_guardian voice_agent_bridge side_door
       - name: Tests (Mesh Guardian)
         run: python tests/mesh_guardian/run_all.py
+      - name: Unit tests (Side Door)
+        run: python -m unittest discover -s side_door/tests -p "test_build.py" -v
       - name: YAML
         run: >-
           yamllint -d "{extends: relaxed, rules: {line-length: disable}}"
@@ -83,3 +85,14 @@ jobs:
           docker run --rm -v /tmp/sd-data:/data sd-test python3 /run.py --check
           echo '{"apps": [{"name": "First app", "url": "http://192.168.1.10:8000"}, {"name": "Second", "url": "https://192.168.1.20/app/"}], "rewrite_paths": true, "rewrite_prefixes": [], "inject_script": true, "max_body_mb": 100, "timeout": 120}' > /tmp/sd-data/options.json
           docker run --rm -v /tmp/sd-data:/data sd-test python3 /run.py --check
+      - name: Live test (Side Door)
+        if: matrix.arch == 'amd64' && matrix.addon == 'side_door'
+        run: |
+          python3 side_door/tests/upstream.py 8000 &
+          mkdir -p /tmp/sd-live
+          cp side_door/tests/options_live.json /tmp/sd-live/options.json
+          docker run -d --name sd-live --network host -v /tmp/sd-live:/data sd-test
+          sleep 4
+          python3 side_door/tests/test_live.py -v || { docker logs sd-live; exit 1; }
+          docker logs sd-live
+          docker rm -f sd-live

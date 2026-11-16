@@ -536,6 +536,12 @@ def app_id(name, used):
     return candidate
 
 
+def discreet(url):
+    """An address as the log may show it: without the user name and password
+    someone may have written in it ("http://user:password@host/")."""
+    return re.sub(r"//[^/@]*@", "//***@", url)
+
+
 def read_apps(options):
     """Valid apps of the options: a list of dicts name, id, target, origin,
     host, base. 'apps' wins over the single 'target_url'."""
@@ -552,14 +558,14 @@ def read_apps(options):
         entries = [("", single, "", "", False)]
     apps, used = [], set()
     for name, url, start, headers, hidden in entries:
-        label = name or url or "(empty)"
+        label = name or discreet(url) or "(empty)"
         if not url:
             log(f"app {label!r} ignored: no address")
             continue
         try:
             target, origin, host, base = parse_target(url)
         except ValueError as error:
-            log(f"app {label!r} ignored: {error} (got {url!r})")
+            log(f"app {label!r} ignored: {error} (got {discreet(url)!r})")
             continue
         name = name[:40] or host
         start = start.lstrip("/")
