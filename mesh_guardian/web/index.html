@@ -667,7 +667,8 @@ if (!P.cols.includes("br") && !P.br_added) { P.cols.push("br"); P.br_added = tru
 if (!P.cols.includes("act") && !P.act_added) { P.cols.push("act"); P.act_added = true; }
 const ordered = () => {
   const o = Array.isArray(P.order) ? P.order : [];
-  return [...COLS].sort((a, b) => {
+  // option "advice" off: the advice column does not exist (neither in the table nor in the column menu)
+  return COLS.filter(c => c.k !== "adv" || !D || D.advice_on !== false).sort((a, b) => {
     const i = o.indexOf(a.k), j = o.indexOf(b.k);
     return (i < 0 ? 1000 + COLS.indexOf(a) : i) - (j < 0 ? 1000 + COLS.indexOf(b) : j);
   });

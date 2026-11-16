@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.10.3] - 2026-11-16
+
+### Fixed
+
+- With the option "Advice" off, the advice column could still be ticked in the column menu.
+
 ## [2.10.2] - 2026-11-16
 
 ### Added
