@@ -59,6 +59,7 @@ class MatterLog:
         self.hours = {}        # hour (epoch // 3600) -> {node hex: [sub, session, offline, offline_s, unreachable, ping]}
         self.down = {}         # node hex -> since when the Matter Server sees it offline
         self.addr = {}         # node hex -> last address of a new session
+        self.opened = {}       # node hex -> times of the sessions opened in the last hour
         self.since = None      # counts are known from this time on
         self.gaps = []         # [start, end] when the log was not read (the counts miss those times)
         self.status = {"ok": False, "since": None, "lines": 0, "used": 0, "error": None, "level": None}
@@ -73,6 +74,7 @@ class MatterLog:
             now_h = int(time.time() // 3600)
             self.hours = {int(h): v for h, v in (st.get("hours") or {}).items() if now_h - int(h) < KEEP_H}
             self.addr = st.get("addr") or {}
+            self.opened = {k: [x for x in v if time.time() - x < 3600] for k, v in (st.get("opened") or {}).items()}
             self.since = st.get("since")
             self.gaps = [g for g in (st.get("gaps") or []) if time.time() - g[1] < KEEP_H * 3600]
             if st.get("saved"):       # not read while the add-on was stopped
@@ -84,7 +86,7 @@ class MatterLog:
 
     def save(self):
         with self.lock:
-            data = {"hours": self.hours, "addr": self.addr, "since": self.since, "gaps": self.gaps[-20:],
+            data = {"hours": self.hours, "addr": self.addr, "opened": self.opened, "since": self.since, "gaps": self.gaps[-20:],
                     "saved": time.time()}
         try:
             with open(STATE_FILE, "w") as f:
@@ -132,6 +134,7 @@ class MatterLog:
                 self._add(node_key(m), "ping", now=now)
             elif (m := P_ADDR.search(line)):
                 self.addr[node_key(m)] = m.group(3).lower()
+                self.opened[node_key(m)] = [x for x in self.opened.get(node_key(m), []) if now - x < 3600][-19:] + [now]
             else:
                 return
         self.status["used"] += 1
@@ -154,6 +157,9 @@ class MatterLog:
                 out["offline_s"] += max(0, round(now - t0))
                 out["offline_since"] = t0
             out["address"] = self.addr.get(nid)
+            # sessions opened in the last hour: several of them for a node that is unavailable means
+            # that it answers now and then
+            out["opened_1h"] = sum(1 for x in self.opened.get(nid, []) if now - x < 3600)
             # the counts only cover the time the log was read
             out["since"] = max(self.since, now - 86400)
             out["missed_s"] = round(sum(max(0, min(e, now) - max(s, now - 86400)) for s, e in self.gaps))

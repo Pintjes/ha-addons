@@ -267,7 +267,7 @@
 "use strict";
 // ------------------------------------------------------------ texts
 const T = {
-  en: {todo_info:"Good to know ({n})", np_before:"Before: {p}, {r} dBm", a_parent_noanswer:"{n}: no answer (asleep?)", a_parent_new:"{n}: new parent {l}", a_failed:"{n}: action failed", check_bat:"Check its batteries", check_power:"Check its power", down_since:"Since {t}.", down_do_bat:"Since {t}. Check its batteries.", more:"+{n}", refresh:"Refresh", reading:"Reading the nodes again… {d}/{n}", reading0:"Reading the nodes again…", report:"Report", classic:"Classic view", loading:"loading…", error:"error", live:"live", polling:"live link down: values read on demand", updated:"updated at {t}", connecting:"connecting to the Matter Server…", updating:"reading the nodes…", updating_n:"reading the nodes… {d}/{n}",
+  en: {todo_info:"Good to know ({n})", np_before:"Before: {p}, {r} dBm", a_parent_noanswer:"{n}: no answer (asleep?)", a_parent_new:"{n}: new parent {l}", a_failed:"{n}: action failed", check_bat:"Check its batteries", check_power:"Check its power", flap_power:"Answers now and then. Cut its power for 10 s", flap_bat:"Answers now and then. Remove its battery for 10 s", down_since:"Since {t}.", down_do_bat:"Since {t}. Check its batteries.", more:"+{n}", refresh:"Refresh", reading:"Reading the nodes again… {d}/{n}", reading0:"Reading the nodes again…", report:"Report", classic:"Classic view", loading:"loading…", error:"error", live:"live", polling:"live link down: values read on demand", updated:"updated at {t}", connecting:"connecting to the Matter Server…", updating:"reading the nodes…", updating_n:"reading the nodes… {d}/{n}",
     silent:"silent", w_silent:"Silent", n_silent:"{n} silent node", n_silent_pl:"{n} silent nodes", silent_sub:"{name}: probably without power.",
     silent_tip:"No sign of life for {t} (usually every {u}): probably without power.",
     t_rhythm:"Sign of life", rhythm_v:"every {u} at most · silence flagged after {l}", rhythm_wait:"being measured",
@@ -318,7 +318,7 @@ const T = {
     roles:{leader:"Leader router", router:"Router", reed:"End", end_device:"End", sleepy_end_device:"Sleepy end", unassigned:"unassigned", unspecified:"unspecified", detached:"detached", child:"End device", offline:"offline"},
     boot:{unspecified:"unspecified", power_on:"power on", brown_out:"brown-out", software_watchdog:"software watchdog", hardware_watchdog:"hardware watchdog", software_update:"software update", software_reset:"software reset"},
     csrc:{report:"report", event:"event", read:"read", ping:"ping", passive:"packet"}},
-  fr: {todo_info:"À savoir ({n})", np_before:"Avant : {p}, {r} dBm", a_parent_noanswer:"{n} : pas de réponse (endormie ?)", a_parent_new:"{n} : nouveau parent {l}", a_failed:"{n} : action impossible", check_bat:"Vérifier les piles", check_power:"Vérifier l'alimentation", down_since:"Depuis {t}.", down_do_bat:"Depuis {t}. Vérifier les piles.", more:"+{n}", refresh:"Actualiser", reading:"Relecture des nodes… {d}/{n}", reading0:"Relecture des nodes…", report:"Rapport", classic:"Vue classique", loading:"chargement…", error:"erreur", live:"en direct", polling:"lien direct coupé : valeurs lues à la demande", updated:"mis à jour à {t}", connecting:"connexion au Matter Server…", updating:"lecture des nodes…", updating_n:"lecture des nodes… {d}/{n}",
+  fr: {todo_info:"À savoir ({n})", np_before:"Avant : {p}, {r} dBm", a_parent_noanswer:"{n} : pas de réponse (endormie ?)", a_parent_new:"{n} : nouveau parent {l}", a_failed:"{n} : action impossible", check_bat:"Vérifier les piles", check_power:"Vérifier l'alimentation", flap_power:"Répond par intermittence. Couper son alimentation 10 s", flap_bat:"Répond par intermittence. Retirer la pile 10 s", down_since:"Depuis {t}.", down_do_bat:"Depuis {t}. Vérifier les piles.", more:"+{n}", refresh:"Actualiser", reading:"Relecture des nodes… {d}/{n}", reading0:"Relecture des nodes…", report:"Rapport", classic:"Vue classique", loading:"chargement…", error:"erreur", live:"en direct", polling:"lien direct coupé : valeurs lues à la demande", updated:"mis à jour à {t}", connecting:"connexion au Matter Server…", updating:"lecture des nodes…", updating_n:"lecture des nodes… {d}/{n}",
     silent:"silencieuse", w_silent:"Silencieuse", n_silent:"{n} node silencieuse", n_silent_pl:"{n} nodes silencieuses", silent_sub:"{name} : probablement sans courant.",
     silent_tip:"Aucun signe de vie depuis {t} (d'habitude toutes les {u}) : probablement sans courant.",
     t_rhythm:"Signe de vie", rhythm_v:"toutes les {u} au plus · silence signalé après {l}", rhythm_wait:"mesure en cours",
@@ -462,6 +462,10 @@ const isNew = r => { if (!r.added) return false; const t = Date.parse(/Z|[+-]\d\
 const sev = r => !r.available ? 0 : r.advice ? (lvl(r) === "warn" ? 1 : 2) : 3;
 const silentTip = r => F("silent_tip", {t: dur1(r.silent_s), u: dur1(r.rhythm_s)});
 const since = r => !r.since ? "?" : (Date.now() / 1000 - r.since > 86400 ? dt(r.since) : hm(r.since)) + " (" + ago(r.since) + ")";
+// what to do for an unavailable node: one that answers now and then (a ping answered, or the Matter
+// Server opened several sessions within the hour) has power, so "check its power" would be wrong
+const flaps = r => r.ping_ok === true || (r.server && r.server.opened_1h >= 2);
+const downDo = r => L(flaps(r) ? (r.battery ? "flap_bat" : "flap_power") : (r.battery ? "check_bat" : "check_power"));
 const status = r => r.available && r.silent_s ? `<span class="st warn" title="${esc(silentTip(r))}">${IC.warn}${L("silent")}</span>`
   : r.available ? `<span class="st ok">${IC.ok}${L("available")}</span>`
   : `<span class="st bad" title="${esc(F("unav_since", {t: since(r)}))}">${IC.bad}${L("unavailable")}</span>`;
@@ -611,7 +615,7 @@ function renderTodo() {
       // every advice is an action: one kind, in blue (orange looked like a serious problem)
       const k = !r.available ? "bad" : "info";
       const what = !r.available ? L("w_down") : L("w_warn");
-      const txt = !r.available ? esc(F("down_since", {t: since(r)}) + " " + (r.advice || L(r.battery ? "check_bat" : "check_power")) + ".")
+      const txt = !r.available ? esc(F("down_since", {t: since(r)}) + " " + (r.advice || downDo(r)) + ".")
         : r.silent_s ? esc(silentTip(r)) : esc(r.advice);
       return `<div class="card issue ${k}" data-id="${esc(r.id)}" role="button" tabindex="0" title="${esc(r.advice_detail || "")}"><span class="ic">${k === "bad" ? IC.bad : IC.bulb}</span>
         <span style="flex:1"><span class="what">${what}</span><b>${esc(r.name)} <span class="mut" style="font-weight:400">${r.area ? "· " + esc(r.area) : ""}</span></b><span>${txt}</span></span>${seenBtn(cardKey(g))}</div>`;
@@ -921,7 +925,7 @@ async function openNode(id) {
   const r = (D.rows || []).find(x => x.id === id);
   if (!r) return;
   const adv = r.available && r.silent_s ? `<div class="advice warn">${IC.warn}<div><b>${L("w_silent")}</b><br>${esc(silentTip(r))}</div></div>`
-    : !r.available ? `<div class="advice bad">${IC.bad}<div><b>${esc(F("unav_since", {t: since(r)}).replace(/^./, c => c.toUpperCase()))}</b><br>${esc(r.advice ? r.advice + (r.advice_detail && r.advice_detail !== r.advice ? " — " + r.advice_detail : "") : L(r.battery ? "check_bat" : "check_power"))}</div></div>`
+    : !r.available ? `<div class="advice bad">${IC.bad}<div><b>${esc(F("unav_since", {t: since(r)}).replace(/^./, c => c.toUpperCase()))}</b><br>${esc(r.advice ? r.advice + (r.advice_detail && r.advice_detail !== r.advice ? " — " + r.advice_detail : "") : downDo(r))}</div></div>`
     : r.advice ? `<div class="advice ${lvl(r)}">${lvl(r) === "warn" ? IC.bulb : IC.info}<div><b>${esc(r.advice)}</b>${r.advice_detail && r.advice_detail !== r.advice ? "<br>" + esc(r.advice_detail) : ""}</div></div>` : "";
   const best = !r.parent && isRouter(r);
   const power = r.battery ? L("battery") + (r.battery_pct != null ? " " + r.battery_pct + " %" : r.battery_level != null ? " · " + L("bat_level")[r.battery_level] : "") : L("mains");

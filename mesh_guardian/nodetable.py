@@ -569,6 +569,7 @@ class NodeTable:
             rows.append({
                 "network": "thread",
                 "server": ml.node(nid, now) if ml else None,   # what the Matter Server log says of the node (24h)
+                "ping_ok": (self.h.nodes.get(nid) or {}).get("last_ping_ok") if self.h else None,
                 "link_t": link_t, "link_old": bool(p or bl) and is_old(link_t),
                 "counters_t": cnt_t, "counters_old": is_old(cnt_t),
                 "uptime_t": up_t, "uptime_old": uptime is not None and is_old(up_t),
@@ -720,6 +721,7 @@ class NodeTable:
         ml = getattr(self.w, "matterlog", None)
         return {
             "server": ml.node(nid, now) if ml else None,
+            "ping_ok": (self.h.nodes.get(nid) or {}).get("last_ping_ok") if self.h else None,
             "link_t": link_t, "link_old": wifi and a.get("0/54/4") is not None and old(link_t),
             "counters_t": None, "counters_old": False,
             "uptime_t": up_t, "uptime_old": uptime is not None and old(up_t),
