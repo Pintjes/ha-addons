@@ -78,7 +78,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.30.0"
+VERSION = "2.31.0"
 OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
 OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
@@ -103,6 +103,7 @@ BR_NAMES_FILE = "/data/br_names.json"
 PREFIXES_FILE = "/data/prefixes.json"
 PROXY_HOST = "mg-proxy-"   # host name of the announcements made in a node's place
 USB_LINK_TOPIC = "usbip_link/state"   # state published by the USB/IP Link add-on
+OMR_FIXED_GRACE_S = 60   # fixed OMR prefix off without an error: a restart of the border router, said after this time
 RENAME_CONFIRM = 5   # announcements in a row giving the same new name before a border router is renamed
 MESHCOP_REBROWSE = 5 * 60
 BR_FIELDS = ("instance", "network", "ext_pan", "vendor", "model", "role", "interface", "bbr_primary",
@@ -137,6 +138,7 @@ STYLE = {  # event kind -> (icon, color)
     "ping": ("🟠", "yellow"), "sweep": ("🟠", "yellow"),
     "burst": ("⚡", "magenta"),
     "stale_prefix": ("🧭", "yellow"), "usb_link_lost": ("🔌", "red"), "usb_link_back": ("🔌", "green"),
+    "omr_fixed_lost": ("🧭", "yellow"), "omr_fixed_back": ("🧭", "green"),
     "leader": ("👑", "cyan"), "partition": ("🧩", "cyan"), "omr": ("🧭", "cyan"), "prefix": ("🧭", "cyan"),
     "br_change": ("🔁", "cyan"), "br_detach": ("🔁", "yellow"), "renamed": ("🏷️ ", "cyan"),
     "radio_survey": ("📡", "blue"), "statistics": ("📊", "blue"), "startup": ("🚀", "blue"),
@@ -267,6 +269,8 @@ class Watch:
         self._prefixes_dirty = False   # a node prefix changed: prefixes.json to write again
         self.proxies = {}              # node hex -> ServiceInfo announced in its place (proxy_announce)
         self.usb_links = None          # last state of the USB/IP Link add-on (usbip_link/state), if any
+        self.omr_fixed_off = None      # time the OMR prefix fixed by USB/IP Link was seen no longer in place
+        self.omr_fixed_said = False    # its loss was said in the log (omr_fixed_lost)
         self.dirty = True
         self.discovered_br = set()
         self.mqtt = None
@@ -1637,6 +1641,12 @@ class Watch:
                 self.check_global()
                 self.check_node_prefixes()
                 self.cleanup_discovery()
+            if self.omr_fixed_off is not None and not self.omr_fixed_said:
+                # USB/IP Link publishes on a change only: the grace time ends here
+                try:
+                    self.omr_fixed((self.usb_links or {}).get("omr"))
+                except Exception as err:  # noqa: BLE001
+                    LOG.warning("omr_fixed: %s", err)
             if time.time() - last_hourly >= 3600:
                 last_hourly = time.time()
                 try:
@@ -1743,7 +1753,29 @@ class Watch:
             else:
                 self.emit("usb_link_lost", t("{name}: USB/IP link cut ({server})", name=name, server=data.get("server")),
                           device=name, server=data.get("server"), error=d.get("error"))
+        self.omr_fixed(data.get("omr"))
         self.dirty = True
+
+    def omr_fixed(self, omr, now=None):
+        """OMR prefix the OpenThread border router is kept on by USB/IP Link (option omr_prefix).
+        Lost: said at once with an error, else once off for OMR_FIXED_GRACE_S (a restart of the
+        border router is followed by a new setting within the minute). Back: said if the loss was."""
+        now = time.time() if now is None else now
+        if not isinstance(omr, dict) or omr.get("enforced"):
+            if self.omr_fixed_said and isinstance(omr, dict):
+                self.emit("omr_fixed_back", t("Fixed OMR prefix {p} back in place on the border router", p=omr.get("wanted")),
+                          prefix=omr.get("wanted"))
+            self.omr_fixed_off, self.omr_fixed_said = None, False
+            return
+        if self.omr_fixed_off is None:
+            self.omr_fixed_off = now
+        if self.omr_fixed_said or (not omr.get("error") and now - self.omr_fixed_off < OMR_FIXED_GRACE_S):
+            return
+        self.omr_fixed_said = True
+        cur = omr.get("current") or omr.get("mode") or t("unknown")
+        self.emit("omr_fixed_lost", t("Fixed OMR prefix {p} no longer in place on the border router (now: {cur})",
+                                      p=omr.get("wanted"), cur=cur) + (f" ({omr['error']})" if omr.get("error") else ""),
+                  prefix=omr.get("wanted"), current=omr.get("current"), mode=omr.get("mode"), error=omr.get("error"))
 
     def _on_message(self, msg):
         if msg.topic.startswith(f"{DISCOVERY}/"):

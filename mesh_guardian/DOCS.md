@@ -177,6 +177,7 @@ Every event is written to the add-on log, published on the MQTT topic
 | `leader_change`, `partition_change`, `omr_change`, `node_prefix_change` | network-wide changes — the usual cause of lost nodes; leader and partitions once the new state held 30s |
 | `matter_offline`, `matter_back`, `matter_appeared` | Matter node missing from / back in mDNS (not reported for a battery node still available in Home Assistant) |
 | `usb_link_lost`, `usb_link_back` | the USB/IP Link add-on lost / attached again a device (a radio plugged into another computer) |
+| `omr_fixed_lost`, `omr_fixed_back` | the OMR prefix USB/IP Link keeps the OpenThread border router on (option `omr_prefix`) is no longer / again in place: at once with an error (border router stopped, no Docker access…), else after 60s (a restart of the border router is set again within the minute) (`prefix`, `current`, `mode`, `error`) |
 | `node_stale_prefix` | a node missing from mDNS is still on an OMR prefix the border routers no longer publish: it did not take the new prefix, its address is not known (`prefix`, `br`) |
 | `mdns_burst` | services withdrawn then re-announced within seconds (no real absence); only in the event file and on MQTT, counted in `mdns_bursts` |
 | `speaker_appeared`, `speaker_back`, `speaker_offline` | smart speaker / hub online state (restart detection) |

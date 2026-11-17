@@ -319,6 +319,14 @@ FR = {
     "{name}: USB/IP link back ({server})": "{name} : lien USB/IP rétabli ({server})",
     "{name}: USB/IP link cut ({server})": "{name} : lien USB/IP coupé ({server})",
     "{server} does not answer": "{server} ne répond pas",
+    "Fixed OMR prefix {p} back in place on the border router":
+        "Préfixe OMR imposé {p} de nouveau en place sur le border router",
+    "Fixed OMR prefix {p} no longer in place on the border router (now: {cur})":
+        "Préfixe OMR imposé {p} plus en place sur le border router (actuellement : {cur})",
+    "Fixed OMR prefix {p} no longer in place on the border router (now: {cur}): the other border "
+    "routers (Google TV…) can publish their prefixes again and the network change its prefix":
+        "Préfixe OMR imposé {p} plus en place sur le border router (actuellement : {cur}) : les autres border "
+        "routers (Google TV…) peuvent republier leurs préfixes et le réseau changer de préfixe",
     "{name}: USB/IP link cut since {at}, the radio it carries is out":
         "{name} : lien USB/IP coupé depuis {at}, la radio qu'il porte est hors service",
     # alive test of the recovery attempt, announcement in a node's place (trial)

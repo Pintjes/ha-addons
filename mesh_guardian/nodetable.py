@@ -877,7 +877,8 @@ class NodeTable:
                    "unstable": adv.unstable if adv else {}, "history": points, "gave_up": gave_up,
                    "ghosts": ["0x" + (k.lstrip("0") or "0") for k in getattr(self.w, "ghosts", [])],
                    "omr_changes": self.w.omr_episodes_24h() if hasattr(self.w, "omr_episodes_24h") else 0,
-                   "usb_links": getattr(self.w, "usb_links", None)}
+                   "usb_links": getattr(self.w, "usb_links", None),
+                   "omr_fixed_off": getattr(self.w, "omr_fixed_off", None)}
             notes = advise(rows, self.header()["border_routers"], ctx)
             if not getattr(self.w, "advice_on", True):
                 # option "advice" off: nothing for the available nodes (an unavailable node keeps

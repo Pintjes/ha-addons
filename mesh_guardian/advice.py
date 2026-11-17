@@ -35,6 +35,7 @@ WEAK_RSSI = -90        # dBm: weak link when the link quality is not known
 GOOD_GAIN = 6          # dB: gain from which a change counts as "better"
 UNSTABLE_DETACHES = 3  # detaches over about 24h from which a parent counts as unstable
 OMR_CHANGES_WARN = 2   # OMR prefix changes (episodes) over 24h from which the network gets a note
+OMR_FIXED_GRACE_S = 60   # fixed OMR prefix (USB/IP Link) off without an error: a note after this time
 UNSTABLE_REBOOTS = 2   # crashes over 24h from which a node counts as unstable (power cuts never count)
 UNKNOWN_REBOOTS = 3    # restarts of unknown cause over 24h from which the power of the node is to check
 CRASH_BOOT = ("brown_out", "software_watchdog", "hardware_watchdog", "software_reset")
@@ -312,6 +313,15 @@ def advise(rows, brs, ctx):
                else d.get("error") or "")
         notes.append(("bad", t("{name}: USB/IP link cut since {at}, the radio it carries is out", name=d.get("name") or "?",
                                at=since) + (f" ({why})" if why else "")))
+    omr = links.get("omr")
+    off = ctx.get("omr_fixed_off")
+    if isinstance(omr, dict) and not omr.get("enforced") and (
+            omr.get("error") or (off is not None and ctx["now"] - off >= OMR_FIXED_GRACE_S)):
+        cur = omr.get("current") or omr.get("mode") or t("unknown")
+        notes.append(("bad" if omr.get("error") else "warn",
+                      t("Fixed OMR prefix {p} no longer in place on the border router (now: {cur}): the other border "
+                        "routers (Google TV…) can publish their prefixes again and the network change its prefix",
+                        p=omr.get("wanted"), cur=cur) + (f" ({omr['error']})" if omr.get("error") else "")))
     n_omr = ctx.get("omr_changes") or 0
     if n_omr >= OMR_CHANGES_WARN:
         notes.append(("warn", t("The border routers changed the address prefix {n}× in 24h: each time every node must "

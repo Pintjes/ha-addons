@@ -24,12 +24,13 @@ from i18n import t  # noqa: E402
 src = open(os.path.join(MG, "watcher.py"), encoding="utf-8").read()
 tree = ast.parse(src)
 cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Watch")
-want = ("_omr_now", "stale_prefix", "omr_episodes_24h", "_load_prefixes", "_save_prefixes", "matter_gone", "usb_link")
+want = ("_omr_now", "stale_prefix", "omr_episodes_24h", "_load_prefixes", "_save_prefixes", "matter_gone", "usb_link",
+        "omr_fixed")
 body = [m for m in cls.body if isinstance(m, ast.FunctionDef) and m.name in want]
 assert len(body) == len(want), [m.name for m in body]
 consts = [n for n in tree.body if isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name)
-          and n.targets[0].id in ("OMR_LEFT_KEEP_S", "OMR_EPISODE_S")]
-assert len(consts) == 2
+          and n.targets[0].id in ("OMR_LEFT_KEEP_S", "OMR_EPISODE_S", "OMR_FIXED_GRACE_S")]
+assert len(consts) == 3
 import json  # noqa: E402
 
 TMP = tempfile.mkdtemp()
@@ -64,6 +65,7 @@ class W(ns["W"]):
                        "0000000000000036": {"online": True, "prefix": NEW},
                        "00000000000000AA": {"online": True, "prefix": "fd59:30d4:9210:dc15::/64"}}   # Wi-Fi
         self.omr_left, self.omr_changes, self.usb_links = {}, [], None
+        self.omr_fixed_off, self.omr_fixed_said = None, False
 
     def emit(self, kind, text, **data):
         self.events.append((kind, text))
@@ -208,6 +210,47 @@ assert [k for k, _ in wu.events] == ["usb_link_lost", "usb_link_back"], wu.event
 wu2 = W()
 wu2.usb_link(st_off)   # premier etat deja coupe : dit tout de suite
 assert [k for k, _ in wu2.events] == ["usb_link_lost"]
+
+# prefixe OMR impose par USB/IP Link (cle "omr" de usbip_link/state)
+P = "fdd7:20e4:8187:1::/64"
+ok = {"wanted": P, "preference": "high", "mode": "custom", "current": P, "enforced": True, "error": None}
+gap = dict(ok, mode="auto", current=None, enforced=False)              # creux sans erreur (OTBR qui redemarre)
+err = dict(gap, mode=None, error="404 No such container")              # OTBR arrete
+wo = W()
+wo.omr_fixed(ok, now=1000)
+assert wo.events == []                                   # premier etat en place : rien
+wo.omr_fixed(gap, now=1010)
+wo.omr_fixed(gap, now=1050)
+assert wo.events == []                                   # creux court : rien
+wo.omr_fixed(ok, now=1060)
+assert wo.events == [] and wo.omr_fixed_off is None      # reimpose dans la minute : toujours rien
+wo.omr_fixed(gap, now=2000)
+wo.omr_fixed(gap, now=2061)                              # toujours absent apres 60 s : dit une fois
+wo.omr_fixed(gap, now=2100)
+assert [k for k, _ in wo.events] == ["omr_fixed_lost"], wo.events
+assert "auto" in wo.events[0][1]
+wo.omr_fixed(ok, now=2200)
+assert [k for k, _ in wo.events] == ["omr_fixed_lost", "omr_fixed_back"]
+wo2 = W()
+wo2.omr_fixed(err, now=10)                               # erreur : dit tout de suite, avec la cause
+assert [k for k, _ in wo2.events] == ["omr_fixed_lost"] and "404" in wo2.events[0][1]
+wo3 = W()
+wo3.usb_link(json.dumps({"server": "s", "devices": [], "omr": err}))   # lu depuis usbip_link/state
+assert [k for k, _ in wo3.events] == ["omr_fixed_lost"]
+wo3.usb_link(json.dumps({"server": "s", "devices": []}))               # option videe : plus rien a surveiller
+assert wo3.omr_fixed_off is None and len(wo3.events) == 1
+# note A faire : rouge avec erreur, orange apres 60 s sans erreur, rien pendant le creux ou en place
+ctx = {"now": 5000, "tried": {}, "forced": {}, "weak_since": {}, "unstable": {}, "history": lambda rid: [],
+       "gave_up": set(), "ghosts": [], "omr_changes": 0, "usb_links": {"server": "s", "devices": [], "omr": err},
+       "omr_fixed_off": 4990}
+notes = advice.advise([], [], ctx)
+assert len(notes) == 1 and notes[0][0] == "bad" and "404" in notes[0][1] and P in notes[0][1], notes
+ctx["usb_links"]["omr"] = gap
+assert advice.advise([], [], ctx) == []
+ctx["omr_fixed_off"] = 4900
+assert [n[0] for n in advice.advise([], [], ctx)] == ["warn"]
+ctx["usb_links"]["omr"] = ok
+assert advice.advise([], [], ctx) == []
 
 # ecritures simultanees du meme fichier (2.28.0 : « No such file » au demarrage) : aucune ne perd
 import store  # noqa: E402
