@@ -257,4 +257,40 @@ mq.client.sent.clear()
 mq.on_connect(mq.client, None, None, 0)   # reconnexion apres le premier passage : etat publie, attache
 states = [ul.json.loads(p) for tp, p in mq.client.sent if tp == "usbip_link/state"]
 assert len(states) == 1 and states[0]["devices"][0]["attached"] is True
+
+# remontage de /sys : un refus (profil AppArmor, droit manquant) est dit dans le journal, sans arreter l'add-on
+calls = []
+assert ul.remount_sys(lambda args, timeout=20: calls.append((args, timeout))) is True
+assert calls == [(["mount", "-o", "remount,rw", "/sys"], 10)]
+def refused(args, timeout=20):
+    raise RuntimeError("mount: /sys: permission denied")
+import logging  # noqa: E402
+class _Cap(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.messages = []
+    def emit(self, record):
+        self.messages.append(record.getMessage())
+cap = _Cap()
+ul.LOG.addHandler(cap)
+try:
+    assert ul.remount_sys(refused) is False
+finally:
+    ul.LOG.removeHandler(cap)
+assert any("Cannot remount /sys" in m and "permission denied" in m for m in cap.messages), cap.messages
+
+# configuration de l'add-on : plus de full_access (la note de securite forcee a 1), profil AppArmor dedie
+import re  # noqa: E402
+ADDON = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "usbip_link")
+conf = open(os.path.join(ADDON, "config.yaml"), encoding="utf-8").read()
+assert not re.search(r"^\s*full_access\s*:\s*true", conf, re.M) and not re.search(r"^\s*docker_api\s*:\s*true", conf, re.M)
+assert re.search(r"^apparmor:\s*true\s*$", conf, re.M) and re.search(r'^version:\s*"%s"' % re.escape(ul.VERSION), conf, re.M)
+assert re.search(r"^\s*-\s*SYS_ADMIN\s*$", conf, re.M) and re.search(r"^kernel_modules:\s*true\s*$", conf, re.M)
+profile = open(os.path.join(ADDON, "apparmor.txt"), encoding="utf-8").read()
+names = re.findall(r"^profile ([^ ]+)", profile, re.M)   # le Supervisor exige exactement un profil
+assert len(names) == 1, names
+assert re.search(r"capability sys_admin,", profile) and re.search(r"capability sys_module,", profile)
+assert "remount, rw" in profile and "vhci_hcd.0" in profile
+changelog = open(os.path.join(ADDON, "CHANGELOG.md"), encoding="utf-8").read()
+assert changelog.startswith("# Changelog\n\n## [%s]" % ul.VERSION)
 print("OK")

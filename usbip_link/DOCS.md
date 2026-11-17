@@ -6,8 +6,10 @@ device is attached again by itself as soon as it is back. Made for Home Assistan
 virtual machine that has no USB (Hyper-V on Windows 11 Pro), with a radio such as the
 Home Assistant Connect ZBT-2 plugged into the host.
 
-> **Beta.** The add-on runs privileged (it loads a kernel module and writes to `/sys`):
-> **Protection mode** must be turned off in its Info tab.
+> **Beta.** The add-on loads a kernel module and writes to `/sys`: it keeps the `SYS_ADMIN` and
+> `SYS_MODULE` rights, but no longer asks for full access to the devices, so **Protection mode
+> can stay on** (0.4.0). It has its own AppArmor profile, `apparmor.txt`, in *complain* mode for
+> now: it only logs what it would refuse, nothing is blocked.
 
 ## How it works
 
@@ -70,7 +72,10 @@ password.
 
 `omr_prefix`, `omr_preference` and `otbr_addon` of 0.2.x are no longer used: see below.
 
-Turn **Protection mode** off, start the add-on: the log says `ZBT-2: attached (… 2-3)`.
+Start the add-on: the log says `ZBT-2: attached (… 2-3)`. If it says `Cannot remount /sys
+writable`, turn **Protection mode** off in the Info tab and start it again, then tell us.
+An add-on installed before 0.4.0 keeps the Protection mode it had (off): turn it on in the Info
+tab when you want to try it.
 
 ## 3. The radio: OpenThread Border Router
 

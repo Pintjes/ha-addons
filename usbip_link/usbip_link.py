@@ -39,7 +39,7 @@ import time
 import urllib.request
 from datetime import datetime
 
-VERSION = "0.3.1"
+VERSION = "0.4.0"
 LOG = logging.getLogger("usbip_link")
 STATE_TOPIC = "usbip_link/state"
 DISCOVERY = "homeassistant"
@@ -56,6 +56,7 @@ TEXTS = {
         "USB/IP Link {v} starting": "Démarrage de USB/IP Link {v}",
         "vhci-hcd module loaded": "Module vhci-hcd chargé",
         "Cannot load the vhci-hcd module: {err}": "Impossible de charger le module vhci-hcd : {err}",
+        "Cannot remount /sys writable, attaching will fail (AppArmor profile?): {err}": "Impossible de remonter /sys en écriture, l'attache échouera (profil AppArmor ?) : {err}",
         "{name}: attached ({server} {busid})": "{name} : attaché ({server} {busid})",
         "{name}: attached again after {d} ({server} {busid})": "{name} : rattaché après {d} ({server} {busid})",
         "{name}: server {server} silent, device detached (it will be attached again when the server is back)":
@@ -335,6 +336,17 @@ def supervisor(path, method="GET", timeout=30):
     return json.loads(body).get("data", {}) if body else {}
 
 
+def remount_sys(runner=run):
+    """Attaching writes to sysfs, read-only in a container until mounted again.
+    A refusal (AppArmor profile, missing SYS_ADMIN) is said in the log: the attach would fail."""
+    try:
+        runner(["mount", "-o", "remount,rw", "/sys"], timeout=10)
+        return True
+    except Exception as err:  # noqa: BLE001
+        LOG.warning(t("Cannot remount /sys writable, attaching will fail (AppArmor profile?): {err}", err=err))
+        return False
+
+
 def load_module():
     """vhci-hcd: the virtual USB controller the devices are attached to."""
     if os.path.isdir("/sys/devices/platform/vhci_hcd.0"):
@@ -461,10 +473,7 @@ def main():
     if options.get("debug"):
         logging.getLogger().setLevel(logging.DEBUG)
     LOG.info(t("USB/IP Link {v} starting", v=VERSION))
-    try:   # attaching writes to sysfs, read-only in a container until mounted again
-        subprocess.run(["mount", "-o", "remount,rw", "/sys"], capture_output=True, timeout=10, check=False)
-    except Exception as err:  # noqa: BLE001
-        LOG.debug("remount /sys: %s", err)
+    remount_sys()
     load_module()
     link = Link(options)
     if str(options.get("omr_prefix") or "").strip():

@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.0] - 2026-11-17
+
+### Changed
+
+- `full_access` removed: the add-on opens no device node, it only needs `SYS_ADMIN` (remount
+  `/sys` read-write, attach through sysfs) and `SYS_MODULE` (`modprobe vhci-hcd`), which stay.
+  **Protection mode can now stay on.** An add-on installed before keeps the Protection mode it
+  had (off) until it is turned on in the Info tab.
+- A dedicated AppArmor profile, `apparmor.txt`, replaces `apparmor: false`. It starts in
+  *complain* mode (a denied access is only logged, nothing is blocked), so that a gap in the
+  profile cannot cut the radio; it will be enforced after a run on the real Home Assistant.
+  Security rating shown by Home Assistant: 1 → 3 (the Supervisor forces 1 with `full_access`).
+- `NET_ADMIN` and `SYS_RAWIO` are kept for now (probably unused: to try without, later; the
+  rating does not change).
+
+### Added
+
+- `Cannot remount /sys writable, attaching will fail (AppArmor profile?)` warning in the log
+  when the remount of `/sys` is refused (it used to be ignored silently).
+
 ## [0.3.1] - 2026-11-17
 
 ### Fixed

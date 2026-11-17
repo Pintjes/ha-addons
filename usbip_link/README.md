@@ -11,8 +11,9 @@
   <a href="https://github.com/Pintjes/ha-addons/blob/main/usbip_link/LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg" alt="License: GPL-3.0"></a>
 </p>
 
-> **Beta.** The add-on runs privileged (it loads a kernel module and attaches
-> devices): **Protection mode** must be turned off.
+> **Beta.** The add-on loads a kernel module and attaches devices (`SYS_ADMIN`, `SYS_MODULE`),
+> with its own AppArmor profile and without full access to the devices: **Protection mode can
+> stay on** (0.4.0).
 
 **USB/IP Link plugs the USB devices of another computer into Home Assistant,
 and keeps them plugged in.** Made for Home Assistant in a virtual machine

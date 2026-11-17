@@ -1,5 +1,5 @@
 name: USB/IP Link
-version: "0.3.1"
+version: "0.4.0"
 slug: usbip_link
 url: https://github.com/Pintjes/ha-addons
 description: >-
@@ -13,9 +13,10 @@ init: false
 startup: system
 boot: auto
 host_network: true
-# attaching a device writes to /sys and loads the vhci-hcd module: a privileged container
-full_access: true
-apparmor: false
+# attaching a device writes to /sys and loads the vhci-hcd module: SYS_ADMIN and SYS_MODULE.
+# No full_access (the add-on opens no device node), so Protection mode can stay on; the
+# dedicated AppArmor profile is apparmor.txt next to this file.
+apparmor: true
 kernel_modules: true
 privileged:
   - NET_ADMIN

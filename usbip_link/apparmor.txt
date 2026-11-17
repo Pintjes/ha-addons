@@ -1,0 +1,76 @@
+#include <tunables/global>
+
+# AppArmor profile of USB/IP Link. In complain mode (flags=(complain)): a denied access is only
+# written to the kernel log, nothing is blocked, so a gap in this profile cannot cut the link
+# (and the radio behind it). Once a run on the real Home Assistant shows no more "ALLOWED" lines
+# for this profile, remove "complain" to enforce it.
+# Only one "profile" line, at the start of a line: the Supervisor renames it to the add-on's own.
+
+profile usbip_link flags=(attach_disconnected,mediate_deleted,complain) {
+  #include <abstractions/base>
+
+  # SYS_ADMIN: remount /sys read-write (attaching writes to sysfs). SYS_MODULE: modprobe vhci-hcd.
+  # NET_ADMIN and SYS_RAWIO are still asked in config.yaml and kept here until tried without.
+  capability sys_admin,
+  capability sys_module,
+  capability net_admin,
+  capability sys_rawio,
+  capability dac_override,
+  capability dac_read_search,
+  capability setuid,
+  capability setgid,
+  capability chown,
+  capability fowner,
+  capability kill,
+
+  # TCP to the USB/IP server (3240), to the Supervisor and to the MQTT broker; names resolved by UDP.
+  network inet stream,
+  network inet6 stream,
+  network inet dgram,
+  network inet6 dgram,
+  network netlink raw,
+
+  # remount /sys read-write
+  mount options=(remount, rw) -> /sys/,
+  mount options=(remount, rw) -> /sys,
+
+  # sysfs: the vhci_hcd controller (attach, detach, status) and what usbip reads
+  /sys/** r,
+  /sys/devices/platform/vhci_hcd.0/** rw,
+  /sys/bus/platform/drivers/vhci_hcd/** rw,
+  /sys/module/** r,
+  /proc/** r,
+  /proc/sys/** r,
+
+  # vhci-hcd module and its dependencies
+  /lib/modules/** mr,
+  /etc/modprobe.d/** r,
+  /usr/lib/modprobe.d/** r,
+  /run/modprobe.d/** r,
+
+  # options of the add-on, the script, Python and its libraries, usbip and the USB names list
+  /data/options.json r,
+  /data/** rw,
+  /usbip_link.py r,
+  /usr/local/bin/python3* ix,
+  /usr/local/lib/** mr,
+  /usr/lib/** mr,
+  /lib/** mr,
+  /usr/bin/usbip ix,
+  /usr/sbin/usbip ix,
+  /usr/share/hwdata/** r,
+  /sbin/modprobe ix,
+  /sbin/mount ix,
+  /bin/mount ix,
+  /bin/busybox ix,
+  /bin/kmod ix,
+  /usr/bin/kmod ix,
+  /etc/** r,
+  /tmp/** rw,
+  /run/** rw,
+
+  /dev/null rw,
+  /dev/zero r,
+  /dev/urandom r,
+  /dev/tty rw,
+}
