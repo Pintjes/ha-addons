@@ -1,0 +1,23 @@
+---
+configuration:
+  language:
+    name: "Langue"
+    description: "Langue du journal."
+  server:
+    name: "Serveur USB/IP"
+    description: "Adresse de l'ordinateur qui partage les périphériques (usbipd-win sous Windows)."
+  server_port:
+    name: "Port du serveur"
+    description: "Laisser vide : 3240."
+  devices:
+    name: "Périphériques"
+    description: "Une entrée par périphérique : nom, et hardware_id (VID:PID, comme usbipd list l'affiche) ou bus_id."
+  check_interval:
+    name: "Vérifier toutes les (s)"
+    description: "Secondes entre deux vérifications du lien."
+  restart_addons:
+    name: "Add-ons à redémarrer"
+    description: "Redémarrés après un nouvel attachement, p. ex. core_openthread_border_router."
+  debug:
+    name: "Débogage"
+    description: "Plus de détails dans le journal."

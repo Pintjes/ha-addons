@@ -1,0 +1,23 @@
+---
+configuration:
+  language:
+    name: "Language"
+    description: "Language of the log."
+  server:
+    name: "USB/IP server"
+    description: "Address of the computer that shares the devices (usbipd-win on Windows)."
+  server_port:
+    name: "Server port"
+    description: "Leave empty: 3240."
+  devices:
+    name: "Devices"
+    description: "One entry per device: name, and hardware_id (VID:PID, as usbipd list shows it) or bus_id."
+  check_interval:
+    name: "Check every (s)"
+    description: "Seconds between two checks of the link."
+  restart_addons:
+    name: "Add-ons to restart"
+    description: "Restarted after the device is attached again, e.g. core_openthread_border_router."
+  debug:
+    name: "Debug"
+    description: "More details in the log."

@@ -876,7 +876,8 @@ class NodeTable:
                    "weak_since": adv.weak_since if adv else self.__dict__.setdefault("_weak_since", {}),
                    "unstable": adv.unstable if adv else {}, "history": points, "gave_up": gave_up,
                    "ghosts": ["0x" + (k.lstrip("0") or "0") for k in getattr(self.w, "ghosts", [])],
-                   "omr_changes": self.w.omr_episodes_24h() if hasattr(self.w, "omr_episodes_24h") else 0}
+                   "omr_changes": self.w.omr_episodes_24h() if hasattr(self.w, "omr_episodes_24h") else 0,
+                   "usb_links": getattr(self.w, "usb_links", None)}
             notes = advise(rows, self.header()["border_routers"], ctx)
             if not getattr(self.w, "advice_on", True):
                 # option "advice" off: nothing for the available nodes (an unavailable node keeps

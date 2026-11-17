@@ -1,0 +1,49 @@
+name: USB/IP Link
+version: "0.1.0"
+slug: usbip_link
+url: https://github.com/Pintjes/ha-addons
+description: >-
+  Uses the USB devices of another computer (USB/IP: usbipd-win on Windows) and keeps
+  them attached: again by itself after a restart of that computer. For Home Assistant
+  in a virtual machine without USB (Hyper-V). Beta.
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: system
+boot: auto
+host_network: true
+# attaching a device writes to /sys and loads the vhci-hcd module: a privileged container
+full_access: true
+apparmor: false
+kernel_modules: true
+privileged:
+  - NET_ADMIN
+  - SYS_ADMIN
+  - SYS_MODULE
+  - SYS_RAWIO
+hassio_api: true
+hassio_role: manager
+services:
+  - mqtt:want
+options:
+  language: en
+  server: ""
+  devices:
+    - name: ZBT-2
+      hardware_id: ""
+  check_interval: 10
+  restart_addons: []
+  debug: false
+schema:
+  language: list(en|fr)
+  server: str
+  server_port: port?
+  devices:
+    - name: str
+      hardware_id: match(^([0-9a-fA-F]{4}:[0-9a-fA-F]{4})?$)?
+      bus_id: str?
+  check_interval: int(3,300)
+  restart_addons:
+    - str
+  debug: bool

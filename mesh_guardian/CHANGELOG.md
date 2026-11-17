@@ -4,11 +4,17 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## Highlights of 2.9 to 2.29 (16 November 2026)
+## Highlights of 2.9 to 2.30 (16 November 2026)
 
 - **Act on a node from its panel**: recovery attempt on an unavailable node, reset from a distance, pairing codes kept by the add-on (photo or scan of the label), pairing and naming a new device without leaving the page.
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
+
+## [2.30.0] - 2026-11-17
+
+### Added
+
+- **USB/IP Link**: when the new **USB/IP Link** add-on of this repository carries a radio plugged into another computer (Home Assistant in a virtual machine without USB, a ZBT-2 on the Windows host), Mesh Guardian reads its state (`usbip_link/state`): a red note in *To do* while the link is cut ("the radio it carries is out", with the reason: server silent, device not found…), events `usb_link_lost` and `usb_link_back` in the log.
 
 ## [2.29.0] - 2026-11-17
 

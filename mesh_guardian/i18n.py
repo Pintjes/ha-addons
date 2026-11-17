@@ -315,6 +315,12 @@ FR = {
     "{node}: recovery attempt refused": "{node} : tentative de récupération refusée",
     "{node}: no longer announced on the network, its address is not known: the recovery attempt could not be sent":
         "{node} : ne s'annonce plus sur le réseau, son adresse n'est pas connue : la tentative de récupération n'a pas pu être envoyée",
+    # USB/IP Link add-on (radio plugged into another computer)
+    "{name}: USB/IP link back ({server})": "{name} : lien USB/IP rétabli ({server})",
+    "{name}: USB/IP link cut ({server})": "{name} : lien USB/IP coupé ({server})",
+    "{server} does not answer": "{server} ne répond pas",
+    "{name}: USB/IP link cut since {at}, the radio it carries is out":
+        "{name} : lien USB/IP coupé depuis {at}, la radio qu'il porte est hors service",
     # alive test of the recovery attempt, announcement in a node's place (trial)
     "{node}: alive test: {radio}; {ping}": "{node} : test de vie : {radio} ; {ping}",
     "heard on the radio by {who} {ago} ago": "entendue à la radio par {who} il y a {ago}",

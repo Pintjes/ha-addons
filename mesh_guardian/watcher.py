@@ -78,7 +78,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.29.0"
+VERSION = "2.30.0"
 OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
 OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
@@ -102,6 +102,7 @@ KNOWN_FILE = "/data/known_nodes.json"
 BR_NAMES_FILE = "/data/br_names.json"
 PREFIXES_FILE = "/data/prefixes.json"
 PROXY_HOST = "mg-proxy-"   # host name of the announcements made in a node's place
+USB_LINK_TOPIC = "usbip_link/state"   # state published by the USB/IP Link add-on
 RENAME_CONFIRM = 5   # announcements in a row giving the same new name before a border router is renamed
 MESHCOP_REBROWSE = 5 * 60
 BR_FIELDS = ("instance", "network", "ext_pan", "vendor", "model", "role", "interface", "bbr_primary",
@@ -135,7 +136,7 @@ STYLE = {  # event kind -> (icon, color)
     "global_return": ("🟢", "green"),
     "ping": ("🟠", "yellow"), "sweep": ("🟠", "yellow"),
     "burst": ("⚡", "magenta"),
-    "stale_prefix": ("🧭", "yellow"),
+    "stale_prefix": ("🧭", "yellow"), "usb_link_lost": ("🔌", "red"), "usb_link_back": ("🔌", "green"),
     "leader": ("👑", "cyan"), "partition": ("🧩", "cyan"), "omr": ("🧭", "cyan"), "prefix": ("🧭", "cyan"),
     "br_change": ("🔁", "cyan"), "br_detach": ("🔁", "yellow"), "renamed": ("🏷️ ", "cyan"),
     "radio_survey": ("📡", "blue"), "statistics": ("📊", "blue"), "startup": ("🚀", "blue"),
@@ -265,6 +266,7 @@ class Watch:
         self.omr_changes = []   # times of the OMR prefix changes (24h)
         self._prefixes_dirty = False   # a node prefix changed: prefixes.json to write again
         self.proxies = {}              # node hex -> ServiceInfo announced in its place (proxy_announce)
+        self.usb_links = None          # last state of the USB/IP Link add-on (usbip_link/state), if any
         self.dirty = True
         self.discovered_br = set()
         self.mqtt = None
@@ -1717,13 +1719,39 @@ class Watch:
         client.subscribe(f"{BASE}/reattach/set")
         client.subscribe(f"{BASE}/reset/set")
         client.subscribe(f"{DISCOVERY}/+/{BASE}/+/config")
+        client.subscribe(USB_LINK_TOPIC)   # USB/IP Link add-on: a radio plugged into another computer
         self.publish_discovery()
+        self.dirty = True
+
+    def usb_link(self, payload):
+        """State of the USB/IP Link add-on (usbip_link/state): a device that is no longer
+        attached is the radio of a border router cut off. Events when it is lost and back."""
+        data = json.loads(payload) if payload else None
+        if not isinstance(data, dict):
+            return
+        prev = {d.get("name"): d for d in (self.usb_links or {}).get("devices") or []}
+        self.usb_links = data
+        for d in data.get("devices") or []:
+            name, was = d.get("name") or "?", prev.get(d.get("name"))
+            if was is None and d.get("attached"):
+                continue   # first state read, attached: nothing to say
+            if was is not None and bool(was.get("attached")) == bool(d.get("attached")):
+                continue
+            if d.get("attached"):
+                self.emit("usb_link_back", t("{name}: USB/IP link back ({server})", name=name, server=data.get("server")),
+                          device=name, server=data.get("server"))
+            else:
+                self.emit("usb_link_lost", t("{name}: USB/IP link cut ({server})", name=name, server=data.get("server")),
+                          device=name, server=data.get("server"), error=d.get("error"))
         self.dirty = True
 
     def _on_message(self, msg):
         if msg.topic.startswith(f"{DISCOVERY}/"):
             if msg.retain and msg.payload:
                 self.retained.add(msg.topic)
+            return
+        if msg.topic == USB_LINK_TOPIC:
+            self.usb_link(msg.payload)
             return
         if msg.topic == f"{BASE}/rename/set" and getattr(self, "labels", None) and msg.payload:
             threading.Thread(target=self.labels.rename, args=(t("the button in Home Assistant"),),

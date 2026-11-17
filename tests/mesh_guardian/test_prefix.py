@@ -24,7 +24,7 @@ from i18n import t  # noqa: E402
 src = open(os.path.join(MG, "watcher.py"), encoding="utf-8").read()
 tree = ast.parse(src)
 cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Watch")
-want = ("_omr_now", "stale_prefix", "omr_episodes_24h", "_load_prefixes", "_save_prefixes", "matter_gone")
+want = ("_omr_now", "stale_prefix", "omr_episodes_24h", "_load_prefixes", "_save_prefixes", "matter_gone", "usb_link")
 body = [m for m in cls.body if isinstance(m, ast.FunctionDef) and m.name in want]
 assert len(body) == len(want), [m.name for m in body]
 consts = [n for n in tree.body if isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name)
@@ -49,7 +49,7 @@ def save_json(path, data, **kw):
 
 
 mod = ast.Module(body=consts + [ast.ClassDef(name="W", bases=[], keywords=[], body=body, decorator_list=[])], type_ignores=[])
-ns = {"LOG": logging.getLogger("x"), "time": time, "t": t, "load_json": load_json, "save_json": save_json,
+ns = {"LOG": logging.getLogger("x"), "time": time, "t": t, "load_json": load_json, "save_json": save_json, "json": json,
       "PREFIXES_FILE": os.path.join(TMP, "prefixes.json")}
 exec(compile(ast.fix_missing_locations(mod), "watcher_extrait", "exec"), ns)
 
@@ -63,7 +63,7 @@ class W(ns["W"]):
         self.matter = {"000000000000005A": {"online": True, "prefix": OLD},
                        "0000000000000036": {"online": True, "prefix": NEW},
                        "00000000000000AA": {"online": True, "prefix": "fd59:30d4:9210:dc15::/64"}}   # Wi-Fi
-        self.omr_left, self.omr_changes = {}, []
+        self.omr_left, self.omr_changes, self.usb_links = {}, [], None
 
     def emit(self, kind, text, **data):
         self.events.append((kind, text))
@@ -184,6 +184,30 @@ while r.recovering and time.time() < deadline:
 assert calls == [("announce", "000000000000005A", ["fdc0::1"]), ("withdraw", "000000000000005A")], calls
 assert sent == ["ArmFailSafe"] and "recover_proxy" in [k for k, _ in w.events]
 assert r.results["000000000000005A"]["result"] == "unreachable"
+
+# lien USB/IP coupe (add-on USB/IP Link) : note reseau rouge avec la raison ; rien quand il est attache
+ctx = {"now": now, "tried": {}, "forced": {}, "weak_since": {}, "unstable": {}, "history": lambda rid: [],
+       "gave_up": set(), "ghosts": [], "omr_changes": 0,
+       "usb_links": {"server": "192.168.1.10", "server_ok": False,
+                     "devices": [{"name": "ZBT-2", "attached": False, "since": at, "error": None}]}}
+notes = advice.advise([], [], ctx)
+assert notes == [("bad", t("{name}: USB/IP link cut since {at}, the radio it carries is out", name="ZBT-2", at="06:17")
+                  + " (" + t("{server} does not answer", server="192.168.1.10") + ")")], notes
+ctx["usb_links"]["devices"][0]["attached"] = True
+assert advice.advise([], [], ctx) == []
+# evenements : rien au premier etat attache, puis coupe, puis retabli
+wu = W()
+st_on = json.dumps({"server": "192.168.1.10", "devices": [{"name": "ZBT-2", "attached": True}]})
+st_off = json.dumps({"server": "192.168.1.10", "devices": [{"name": "ZBT-2", "attached": False, "error": "x"}]})
+wu.usb_link(st_on)
+wu.usb_link(st_on)
+wu.usb_link(st_off)
+wu.usb_link(st_off)
+wu.usb_link(st_on)
+assert [k for k, _ in wu.events] == ["usb_link_lost", "usb_link_back"], wu.events
+wu2 = W()
+wu2.usb_link(st_off)   # premier etat deja coupe : dit tout de suite
+assert [k for k, _ in wu2.events] == ["usb_link_lost"]
 
 # ecritures simultanees du meme fichier (2.28.0 : « No such file » au demarrage) : aucune ne perd
 import store  # noqa: E402

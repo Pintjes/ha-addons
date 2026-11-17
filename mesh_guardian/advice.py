@@ -303,6 +303,15 @@ def advise(rows, brs, ctx):
         when = last[11:16] if last else None
         notes.append(("info", t("{names} detached in the last 24h, the last time at {t}", names=names, t=when)
                       if when else t("{names} detached in the last 24h", names=names)))
+    links = ctx.get("usb_links") or {}
+    for d in links.get("devices") or []:
+        if d.get("attached"):
+            continue
+        since = time.strftime("%H:%M", time.localtime(d["since"])) if isinstance(d.get("since"), (int, float)) else "?"
+        why = (t("{server} does not answer", server=links.get("server")) if links.get("server_ok") is False
+               else d.get("error") or "")
+        notes.append(("bad", t("{name}: USB/IP link cut since {at}, the radio it carries is out", name=d.get("name") or "?",
+                               at=since) + (f" ({why})" if why else "")))
     n_omr = ctx.get("omr_changes") or 0
     if n_omr >= OMR_CHANGES_WARN:
         notes.append(("warn", t("The border routers changed the address prefix {n}× in 24h: each time every node must "

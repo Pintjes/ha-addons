@@ -176,6 +176,7 @@ Every event is written to the add-on log, published on the MQTT topic
 | `br_detach` | a border router left the network and came back within 30s (alone in its own partition): reported as a short detach of that border router, counted in its `detached_24h` and as a partition split for storms |
 | `leader_change`, `partition_change`, `omr_change`, `node_prefix_change` | network-wide changes — the usual cause of lost nodes; leader and partitions once the new state held 30s |
 | `matter_offline`, `matter_back`, `matter_appeared` | Matter node missing from / back in mDNS (not reported for a battery node still available in Home Assistant) |
+| `usb_link_lost`, `usb_link_back` | the USB/IP Link add-on lost / attached again a device (a radio plugged into another computer) |
 | `node_stale_prefix` | a node missing from mDNS is still on an OMR prefix the border routers no longer publish: it did not take the new prefix, its address is not known (`prefix`, `br`) |
 | `mdns_burst` | services withdrawn then re-announced within seconds (no real absence); only in the event file and on MQTT, counted in `mdns_bursts` |
 | `speaker_appeared`, `speaker_back`, `speaker_offline` | smart speaker / hub online state (restart detection) |
