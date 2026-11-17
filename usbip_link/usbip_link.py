@@ -41,7 +41,7 @@ import time
 import urllib.request
 from datetime import datetime
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 LOG = logging.getLogger("usbip_link")
 STATE_TOPIC = "usbip_link/state"
 DISCOVERY = "homeassistant"
@@ -377,7 +377,10 @@ class OmrKeeper:
             if self.preference not in OMR_PREFERENCES:
                 self.config_error = t("Invalid omr_preference {p}: high, med or low", p=self.preference)
                 self.prefix = None
-        self.container = "addon_" + (str(options.get("otbr_addon") or "").strip() or OTBR_ADDON)
+        slug = str(options.get("otbr_addon") or "").strip() or OTBR_ADDON
+        # container of an add-on: app_<slug> since add-ons became apps (2026), addon_<slug> before
+        self.containers = [f"app_{slug}", f"addon_{slug}"]
+        self.container = self.containers[0]
         self.exec, self.clock = executor, clock
         self.mode = self.current = self.current_prf = self.error = self.applied_at = None
         self.applied = 0
@@ -396,7 +399,15 @@ class OmrKeeper:
         self.events.append((kind, text))
 
     def _otctl(self, *args):
-        code, out = self.exec(self.container, ["ot-ctl", *args])
+        try:
+            code, out = self.exec(self.container, ["ot-ctl", *args])
+        except DockerError as err:
+            if not str(err).startswith("404"):
+                raise
+            # no such container: the other naming, kept once it answers
+            other = next(c for c in self.containers if c != self.container)
+            code, out = self.exec(other, ["ot-ctl", *args])
+            self.container = other
         if code not in (0, None) and "Done" not in out:
             raise RuntimeError((out.strip().splitlines() or [f"exit {code}"])[-1])
         return out

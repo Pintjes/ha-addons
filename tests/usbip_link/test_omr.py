@@ -31,8 +31,11 @@ class FakeOtbr:
     def __init__(self):
         self.running, self.config, self.calls, self.old, self.now = True, "auto", [], False, 1000.0
 
+    name = "app_core_openthread_border_router"
+
     def exec(self, container, cmd):
-        assert container == "addon_core_openthread_border_router", container
+        if container != self.name:
+            raise ul.DockerError(f"404 No such container: {container}")
         assert cmd[:3] == ["ot-ctl", "br", "omrconfig"], cmd
         self.calls.append(" ".join(cmd[1:]))
         if not self.running:
@@ -124,10 +127,35 @@ seen = []
 
 def exec4(container, cmd):
     seen.append(container)
-    return f4.exec("addon_core_openthread_border_router", cmd)
+    return f4.exec(f4.name, cmd)
 
 
 k4 = ul.OmrKeeper({"omr_prefix": "fdd7:20e4:8187:1::/64", "otbr_addon": "abc_otbr"}, executor=exec4)
 k4.check()
-assert k4.public()["enforced"] and set(seen) == {"addon_abc_otbr"}
+assert k4.public()["enforced"] and set(seen) == {"app_abc_otbr"}
+
+# Supervisor d'avant les apps : conteneur addon_<slug>, trouve au premier refus puis garde
+f5 = FakeOtbr()
+f5.name = "addon_core_openthread_border_router"
+tried = []
+
+
+def exec5(container, cmd):
+    tried.append(container)
+    return f5.exec(container, cmd)
+
+
+k5 = ul.OmrKeeper({"omr_prefix": "fdd7:20e4:8187:1::/64"}, executor=exec5, clock=f5.clock)
+k5.check()
+assert k5.public()["enforced"] and tried[0] == "app_core_openthread_border_router" and tried[1] == f5.name
+tried.clear()
+f5.now += ul.OMR_CHECK_S
+k5.check()
+assert tried == [f5.name], tried
+# aucun des deux noms : erreur claire
+f6 = FakeOtbr()
+f6.name = "autre"
+k6 = ul.OmrKeeper({"omr_prefix": "fdd7:20e4:8187:1::/64"}, executor=f6.exec)
+k6.check()
+assert "404" in k6.public()["error"] and not k6.public()["enforced"]
 print("OK")

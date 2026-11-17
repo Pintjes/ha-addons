@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2] - 2026-11-17
+
+### Fixed
+
+- `omr_prefix`: the border router container is `app_<slug>` since add-ons became apps (it was
+  looked for as `addon_<slug>`, the name of older Supervisors, still tried after it).
+
 ## [0.2.1] - 2026-11-17
 
 ### Changed
