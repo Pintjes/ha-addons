@@ -189,8 +189,12 @@ app stays blank or leaves the panel. With `inject_script` on (the default), the 
 
 - loads a small script before the app. It moves under the ingress path the
   requests of the app (`fetch`, `XMLHttpRequest`, WebSocket), its internal
-  navigation, the addresses it puts on the elements it creates and the cookies
-  it writes itself;
+  navigation, the addresses it puts on the elements it creates (forms
+  included), the HTML it inserts, the windows it opens and the cookies it writes
+  itself;
+- puts the addresses back as the app wrote them in what the app sends
+  (`fetch`, `XMLHttpRequest`): a page or settings it edits and saves never keep
+  the address of Home Assistant;
 - gives the app its own part of the storage of the browser (`localStorage`,
   `sessionStorage`): it only sees what it wrote, and an app that empties it at
   log out no longer logs you out of Home Assistant;
@@ -203,7 +207,8 @@ the whole window (login pages refuse to be shown inside another page). Once
 logged in, the browser comes back to the Side Door panel, which opens the app
 on the page it expects. This needs the app to be a tab (two apps or more).
 
-It is on by default: an app that does not need it is not disturbed by it. It
+It is on by default: an app that does not need it is not disturbed by it. A
+form sent by the browser itself, without JavaScript, is not put back. It
 cannot work with every app: a script that reads
 `location` without `window.` in front is not caught, and neither is an
 address built inside a web worker. Turn it off for an app that behaves badly

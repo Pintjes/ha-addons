@@ -67,7 +67,8 @@ class Live(unittest.TestCase):
         # Upper and lower case are told apart: these are not paths after 'url(' or 'href='
         self.assertIn('r.resolveUrl("/web");e.baseHref="/";', text)
         self.assertIn("var h=window.__sd_loc.href;", text)
-        self.assertIn(f'<head><script src="{INGRESS}/side_door_shim.js" data-base="{APP}"></script>', text)
+        self.assertIn(f'<head><script src="{INGRESS}/side_door_shim.js" data-base="{APP}" '
+                      f'data-own="http://127.0.0.1:8000/"></script>', text)
         self.assertIsNone(headers.get("X-Frame-Options"))
         self.assertEqual(headers.get("Content-Security-Policy"), "default-src 'self' 'unsafe-inline'")
         self.assertTrue(headers.get("ETag").startswith('W/"sd'))

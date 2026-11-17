@@ -387,7 +387,10 @@ SHELL = """\
       const page = (where.search.slice(at + 8) + where.hash).replace(/^[/]+/, "");
       window.parent.history.replaceState(window.parent.history.state, "",
         where.pathname + where.search.slice(0, at).replace(/[?&]$/, ""));
-      return /^[a-z][a-z0-9+.-]*:|(^|[/])[.][.]([/]|$)/i.test(page) ? "" : page;
+      // Never another site, nor a way out of the app ("..", also encoded)
+      let plain = "";
+      try { plain = decodeURIComponent(page); } catch (error) { return ""; }
+      return /^[a-z][a-z0-9+.-]*:|(^|[/\\\\])[.][.]([/\\\\]|$)|^[/\\\\]/i.test(plain) ? "" : page;
     } catch (error) {
       return "";
     }

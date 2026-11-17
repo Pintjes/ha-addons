@@ -131,6 +131,43 @@
     };
   });
 
+  // What the app sends back. The add-on moved the addresses of the app in
+  // what it received; when the app sends that text back (a page it edits, its
+  // settings), the addresses are put back as the app wrote them, so that its
+  // data never keeps the address of Home Assistant. Plain, as JSON writes it
+  // ("\/") and as a form encodes it.
+  var own = (me && me.getAttribute("data-own")) || origin + "/";
+  var BACK_PAIRS = [[origin + base, own], [base, "/"]];
+  var WRITINGS = [
+    function (text) { return text; },
+    function (text) { return text.replace(/\//g, "\\/"); },
+    encodeURIComponent
+  ];
+  function unfix(text) {
+    if (typeof text !== "string" || text.length < base.length - 2) return text;
+    BACK_PAIRS.forEach(function (pair) {
+      WRITINGS.forEach(function (writing) {
+        var from = writing(pair[0]);
+        if (text.indexOf(from) !== -1) text = text.split(from).join(writing(pair[1]));
+      });
+    });
+    return text;
+  }
+  function unfixBody(body) {
+    if (typeof body === "string") return unfix(body);
+    if (window.URLSearchParams && body instanceof URLSearchParams) {
+      var params = new URLSearchParams();
+      body.forEach(function (value, key) { params.append(key, unfix(value)); });
+      return params;
+    }
+    if (window.FormData && body instanceof FormData) {
+      var form = new FormData();
+      body.forEach(function (value, key) { form.append(key, typeof value === "string" ? unfix(value) : value); });
+      return form;
+    }
+    return body;
+  }
+
   // Requests
   if (window.fetch) {
     var originalFetch = window.fetch;
@@ -141,6 +178,10 @@
         var fixed = fix(input.url);
         if (fixed !== input.url) input = new Request(fixed, input);
       }
+      if (init && init.body !== undefined && init.body !== null) {
+        var body = unfixBody(init.body);
+        if (body !== init.body) init = Object.assign({}, init, { body: body });
+      }
       return originalFetch.call(this, input, init);
     };
   }
@@ -149,6 +190,10 @@
     var args = Array.prototype.slice.call(arguments);
     args[1] = fix(url);
     return originalOpen.apply(this, args);
+  };
+  var originalSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.send = function (body) {
+    return arguments.length ? originalSend.call(this, unfixBody(body)) : originalSend.call(this);
   };
   ["WebSocket", "EventSource"].forEach(function (name) {
     var Original = window[name];
@@ -163,12 +208,24 @@
     window[name] = Wrapped;
   });
 
+  // A new window or tab the app opens on one of its own pages
+  if (window.open) {
+    var originalWindowOpen = window.open;
+    window.open = function (url) {
+      var args = Array.prototype.slice.call(arguments);
+      if (url !== undefined && url !== null && url !== "" && !elsewhere(url)) args[0] = fix(url);
+      return originalWindowOpen.apply(this, args);
+    };
+  }
+
   // Addresses the app puts on elements it creates
   [
     [window.HTMLScriptElement, "src"], [window.HTMLImageElement, "src"],
     [window.HTMLLinkElement, "href"], [window.HTMLAnchorElement, "href"],
     [window.HTMLIFrameElement, "src"], [window.HTMLSourceElement, "src"],
-    [window.HTMLMediaElement, "src"]
+    [window.HTMLMediaElement, "src"], [window.HTMLFormElement, "action"],
+    [window.HTMLButtonElement, "formAction"], [window.HTMLInputElement, "formAction"],
+    [window.HTMLVideoElement, "poster"]
   ].forEach(function (pair) {
     var proto = pair[0] && pair[0].prototype;
     var found = proto && Object.getOwnPropertyDescriptor(proto, pair[1]);
@@ -257,9 +314,39 @@
   var originalSetAttribute = Element.prototype.setAttribute;
   Element.prototype.setAttribute = function (name, value) {
     var lower = String(name).toLowerCase();
-    if ((lower === "src" || lower === "href") && /^(SCRIPT|IMG|LINK|A|IFRAME|SOURCE|VIDEO|AUDIO)$/.test(this.tagName)) {
+    if (((lower === "src" || lower === "href") && /^(SCRIPT|IMG|LINK|A|IFRAME|SOURCE|VIDEO|AUDIO)$/.test(this.tagName)) ||
+        (lower === "action" && this.tagName === "FORM") ||
+        (lower === "formaction" && /^(BUTTON|INPUT)$/.test(this.tagName)) ||
+        (lower === "poster" && this.tagName === "VIDEO")) {
       value = fix(value);
     }
     return originalSetAttribute.call(this, name, value);
   };
+
+  // HTML the app inserts as a block (innerHTML, outerHTML, insertAdjacentHTML):
+  // the paths starting with "/" in its address attributes are moved, as the
+  // add-on does in the pages it relays
+  var IN_HTML = /(\s(?:href|src|action|formaction|poster)\s*=\s*)(["'])(\/(?!\/)[^"']*)/gi;
+  function fixHtml(text) {
+    if (typeof text !== "string" || text.indexOf("=") === -1) return text;
+    return text.replace(IN_HTML, function (all, start, quote, path) {
+      return start + quote + (under(path.split(/[?#]/)[0]) ? path : base + path.slice(1));
+    });
+  }
+  ["innerHTML", "outerHTML"].forEach(function (name) {
+    var found = Object.getOwnPropertyDescriptor(Element.prototype, name);
+    if (!found || !found.set) return;
+    Object.defineProperty(Element.prototype, name, {
+      get: found.get,
+      set: function (value) { found.set.call(this, fixHtml(value)); },
+      configurable: true,
+      enumerable: found.enumerable
+    });
+  });
+  var originalInsert = Element.prototype.insertAdjacentHTML;
+  if (originalInsert) {
+    Element.prototype.insertAdjacentHTML = function (where, text) {
+      return originalInsert.call(this, where, fixHtml(text));
+    };
+  }
 })();

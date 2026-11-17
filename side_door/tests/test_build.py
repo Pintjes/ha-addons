@@ -197,6 +197,10 @@ class Build(unittest.TestCase):
         self.assertNotIn("SECRET", clean)
         self.assertEqual(clean.count("?..."), 3)
 
+    def test_way_back_from_a_login_never_leaves_the_app(self):
+        shell = build({"apps": [A, B]})[2]
+        self.assertIn("plain = decodeURIComponent(page)", shell)
+
     def test_script_receives_the_apps_and_the_mark(self):
         source = (HERE.parent / "njs" / "side_door.js").read_text(encoding="utf-8")
         _, apps, _, _, _ = build({"apps": [A, B]})

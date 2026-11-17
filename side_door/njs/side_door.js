@@ -102,8 +102,11 @@ function rewrite(r, a, type, text) {
             .replace(/\bdocument\.location(?![\w$])/g, 'document.__sd_loc')
             .replace(/\bwindow\.(top|parent)(?![\w$])/g, 'window.self');
         if (type === 'html') {
+            // data-own: the address of the app itself, so that the script can
+            // put it back in what the app sends (see web/shim.js)
             var tag = '<script src="' + (r.variables.http_x_ingress_path || '') + '/side_door_shim.js" data-base="'
-                + ingress + '"' + (nonce ? ' nonce="' + nonce + '"' : '') + '></script>';
+                + ingress + '" data-own="' + a.own.replace(/["<>&]/g, '') + '"'
+                + (nonce ? ' nonce="' + nonce + '"' : '') + '></script>';
             text = text.replace(/<head(\s[^>]*)?>/i, function (head) { return head + tag; });
         }
     }
