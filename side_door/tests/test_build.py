@@ -14,8 +14,8 @@ spec = importlib.util.spec_from_file_location("run", HERE.parent / "run.py")
 run = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(run)
 
-A = {"name": "Immo", "url": "http://192.168.0.12:8000"}
-B = {"name": "Plex", "url": "http://192.168.0.64:32400", "start": "web/index.html"}
+A = {"name": "Immo", "url": "http://192.168.1.10:8000"}
+B = {"name": "Plex", "url": "http://192.168.1.20:32400", "start": "web/index.html"}
 
 
 def build(options, dns=()):
@@ -35,7 +35,7 @@ class Build(unittest.TestCase):
         self.assertIsNone(shell)
 
     def test_refused_addresses(self):
-        for bad in ["192.168.0.12:8000", "ftp://x", "http://u:p@h/", "http://h/?a=1", "http://h/a;b",
+        for bad in ["192.168.1.10:8000", "ftp://x", "http://u:p@h/", "http://h/?a=1", "http://h/a;b",
                     "http://h/$x", "http://"]:
             self.assertNotIn("proxy_pass", build({"target_url": bad})[0], bad)
             self.assertNotIn("proxy_pass", build({"apps": [{"name": "X", "url": bad}]})[0], bad)
@@ -49,7 +49,7 @@ class Build(unittest.TestCase):
     def test_single_app(self):
         conf, apps, shell, _, _ = build({"target_url": A["url"], "rewrite_prefixes": ['data-url="', "pri$x", ""]})
         self.assertIsNone(shell)
-        for line in ["location / {", "proxy_pass http://192.168.0.12:8000/;", "set $sd_app 1;",
+        for line in ["location / {", "proxy_pass http://192.168.1.10:8000/;", "set $sd_app 1;",
                      "proxy_redirect / $http_x_ingress_path/;", "proxy_cookie_path / $http_x_ingress_path/;",
                      "js_header_filter sd.headers;", "js_body_filter sd.body buffer_type=buffer;"]:
             self.assertIn(line, conf)
@@ -129,9 +129,9 @@ class Build(unittest.TestCase):
         # The script is injected unless it is turned off
         self.assertEqual([apps[n]["inject"] for n in "123"], [True, True, False])
         self.assertEqual([apps[n]["rewrite"] for n in "123"], [True, True, False])
-        self.assertIn("Plex -> http://192.168.0.64:32400/ [relay hidden]", message)
+        self.assertIn("Plex -> http://192.168.1.20:32400/ [relay hidden]", message)
         self.assertIn("Raw -> http://h/ [paths not rewritten, script not injected]", message)
-        self.assertIn("Immo -> http://192.168.0.12:8000/,", message)
+        self.assertIn("Immo -> http://192.168.1.10:8000/,", message)
 
     def test_old_options_of_the_whole_add_on_are_ignored(self):
         conf, apps, _, _, _ = build({"apps": [A], "inject_script": False, "hide_proxy": True, "rewrite_paths": False})
@@ -141,7 +141,7 @@ class Build(unittest.TestCase):
 
     def test_certificate(self):
         conf = build({"apps": [
-            {"name": "Lan", "url": "https://192.168.0.1"},
+            {"name": "Lan", "url": "https://192.168.1.1"},
             {"name": "Named", "url": "https://plex.example.com"},
             {"name": "Self", "url": "https://nas.local", "verify_tls": "off"},
             {"name": "Forced", "url": "https://10.0.0.9", "verify_tls": "on"},
@@ -169,7 +169,7 @@ class Build(unittest.TestCase):
         self.assertIn("set $sd_target_2 https://remote.example;", block)
         self.assertIn("rewrite ^/app/r/(.*)$ /x/$1 break;", block)
         self.assertIn("proxy_pass $sd_target_2;", block)
-        self.assertIn("proxy_pass http://192.168.0.12:8000/;", self.location(conf, "immo"))
+        self.assertIn("proxy_pass http://192.168.1.10:8000/;", self.location(conf, "immo"))
 
     def test_without_dns_server_a_name_is_looked_up_at_the_start(self):
         conf, _, _, _, said = build({"apps": [A, {"name": "R", "url": "https://remote.example/x"}]})
