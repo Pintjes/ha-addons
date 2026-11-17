@@ -22,7 +22,7 @@ jobs:
       - name: Tests (Mesh Guardian)
         run: python tests/mesh_guardian/run_all.py
       - name: Tests (USB/IP Link)
-        run: python tests/usbip_link/test_link.py usbip_link
+        run: python tests/usbip_link/test_link.py usbip_link && python tests/usbip_link/test_omr.py usbip_link
       - name: Unit tests (Side Door)
         run: python -m unittest discover -s side_door/tests -p "test_build.py" -v
       - name: YAML

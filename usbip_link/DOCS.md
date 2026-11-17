@@ -54,6 +54,9 @@ password.
 | `devices` | one entry per device: `name`, and `hardware_id` (`VID:PID`, recommended: the USB port can change) or `bus_id` |
 | `check_interval` | seconds between two checks (10) |
 | `restart_addons` | add-ons restarted after the device is attached again, e.g. `core_openthread_border_router` |
+| `omr_prefix` | optional: `/64` OMR prefix the OpenThread border router is kept on (see below) |
+| `omr_preference` | `high` (default) or `med` |
+| `otbr_addon` | border router add-on, if not `core_openthread_border_router` |
 | `language` | `en` or `fr` |
 
 Turn **Protection mode** off, start the add-on: the log says `ZBT-2: attached (… 2-3)`.
@@ -65,6 +68,25 @@ baud rate **460800**, **hardware flow control** on (ZBT-2 with the OpenThread fi
 To join an existing Thread network (Google, Apple…) instead of creating a new one, share
 its credentials first (Home Assistant companion app → Troubleshooting → Sync Thread
 credentials), then **Settings → Thread → join**.
+
+## 4. Optional: a stable OMR prefix
+
+Every Thread device has an address in the OMR (off-mesh routable) prefix of the network. Each
+border router generates one with a **low** preference and the network uses the favored one;
+some border routers (Google TV…) replace theirs now and then, and the whole network then moves
+to another prefix: Matter devices drop out until they are found again.
+
+With `omr_prefix`, the add-on keeps the OpenThread border router on that prefix with the
+preference `omr_preference` (`high` by default): it is favored over the low prefixes of the
+other border routers, which withdraw theirs. Take the **current** OMR prefix of the network
+(Mesh Guardian shows it): nothing changes for the devices when it is set.
+
+OpenThread keeps this setting in memory only: the add-on reads it every 30 s and sets it again
+after each start of the border router (`ot-ctl br omrconfig custom <prefix> <preference>`,
+through the Docker API: Protection mode off). If the border router stops, the others publish
+their own prefixes again until it is back. Entity: **binary_sensor** *OMR prefix* (on = in
+place). Leave `omr_prefix` empty to stop: the border router goes back to its own prefix at
+its next start (or `ot-ctl br omrconfig auto`).
 
 ## Entities and Mesh Guardian
 

@@ -18,7 +18,16 @@ Every `check_interval` seconds:
   (the OpenThread border router opens its radio at start only).
 The state is published on MQTT (`usbip_link/state`, retained) with a Home Assistant entity per
 device; Mesh Guardian reads it and says when the radio of a border router is cut off.
+
+Optional (`omr_prefix`): the OpenThread border router is kept on a fixed OMR prefix. A prefix it
+generates itself has a low preference, like those of the other border routers (Google TV…), which
+replace theirs now and then: the whole Thread network then changes its OMR prefix. A custom prefix
+with a higher preference is favored by every border router, the others withdraw theirs. OpenThread
+keeps this setting in memory only: it is read back every OMR_CHECK_S and set again after each start
+of the border router (`ot-ctl br omrconfig`, through the Docker API).
 """
+import http.client
+import ipaddress
 import json
 import logging
 import os
@@ -31,7 +40,7 @@ import time
 import urllib.request
 from datetime import datetime
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 LOG = logging.getLogger("usbip_link")
 STATE_TOPIC = "usbip_link/state"
 DISCOVERY = "homeassistant"
@@ -39,6 +48,10 @@ DEAD_CHECKS = 3          # checks in a row without the server before an attached
 HEARTBEAT_S = 300        # the state is published again this often, even unchanged
 RESTART_SETTLE_S = 5     # s: time left to the system to create the serial port before the restarts
 USBIP_PORT = 3240
+OTBR_ADDON = "core_openthread_border_router"
+OMR_CHECK_S = 30         # s between two readings of the OMR configuration of the border router
+OMR_PREFERENCES = ("high", "med", "low")
+DOCKER_SOCK = "/run/docker.sock"
 
 TEXTS = {
     "fr": {
@@ -58,6 +71,17 @@ TEXTS = {
         "Cannot restart the add-on {slug}: {err}": "Impossible de redémarrer l'add-on {slug} : {err}",
         "Connected to MQTT": "Connecté à MQTT",
         "No MQTT broker: the state is only in the log": "Pas de broker MQTT : l'état n'est que dans le journal",
+        "Invalid omr_prefix {p}: {err}": "omr_prefix {p} invalide : {err}",
+        "Invalid omr_preference {p}: high, med or low": "omr_preference {p} invalide : high, med ou low",
+        "OMR prefix {p} (preference {prf}) set on the border router (it was: {was})":
+            "Préfixe OMR {p} (préférence {prf}) imposé au border router (il était : {was})",
+        "OMR prefix {p} (preference {prf}) in place on the border router":
+            "Préfixe OMR {p} (préférence {prf}) en place sur le border router",
+        "OMR prefix: border router unreachable: {err}": "Préfixe OMR : border router injoignable : {err}",
+        "OMR prefix: this border router does not know `br omrconfig` (OpenThread too old): {err}":
+            "Préfixe OMR : ce border router ne connaît pas `br omrconfig` (OpenThread trop ancien) : {err}",
+        "OMR prefix: no access to the Docker API ({err}); turn Protection mode off":
+            "Préfixe OMR : pas d'accès à l'API Docker ({err}) ; désactiver le mode protection",
     },
 }
 LANG = "en"
@@ -258,6 +282,181 @@ class Link:
                             for d in self.devices]}
 
 
+# ---------------------------------------------------------------- OMR prefix of the border router
+class DockerError(RuntimeError):
+    """The Docker API refused or could not be reached."""
+
+
+class _UnixHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, path, timeout):
+        super().__init__("localhost", timeout=timeout)
+        self._sock_path = path
+
+    def connect(self):
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(self.timeout)
+        s.connect(self._sock_path)
+        self.sock = s
+
+
+def _docker(method, path, body=None, timeout=30):
+    conn = _UnixHTTPConnection(DOCKER_SOCK, timeout)
+    try:
+        data = json.dumps(body).encode() if body is not None else None
+        conn.request(method, path, body=data, headers={"Content-Type": "application/json"} if data else {})
+        resp = conn.getresponse()
+        raw = resp.read()
+    except OSError as err:
+        raise DockerError(str(err)) from err
+    finally:
+        conn.close()
+    if resp.status >= 300:
+        try:
+            msg = json.loads(raw).get("message", "")
+        except ValueError:
+            msg = raw.decode(errors="replace").strip()
+        raise DockerError(f"{resp.status} {msg}".strip())
+    return raw
+
+
+def demux(raw):
+    """Output of a Docker exec without a tty: frames of [stream, 0, 0, 0, size (4 bytes)] + data."""
+    if len(raw) < 8 or raw[0] not in (0, 1, 2) or raw[1:4] != b"\0\0\0":
+        return raw.decode(errors="replace")
+    out, i = [], 0
+    while i + 8 <= len(raw):
+        size = int.from_bytes(raw[i + 4:i + 8], "big")
+        out.append(raw[i + 8:i + 8 + size])
+        i += 8 + size
+    return b"".join(out).decode(errors="replace")
+
+
+def docker_exec(container, cmd, timeout=30):
+    """(exit code, stdout + stderr) of a command run in a container."""
+    ex = json.loads(_docker("POST", f"/containers/{container}/exec",
+                            {"AttachStdout": True, "AttachStderr": True, "Cmd": cmd}, timeout))
+    raw = _docker("POST", f"/exec/{ex['Id']}/start", {"Detach": False, "Tty": False}, timeout)
+    info = json.loads(_docker("GET", f"/exec/{ex['Id']}/json", None, timeout))
+    return info.get("ExitCode"), demux(raw)
+
+
+OMR_CUSTOM_RE = re.compile(r"custom\s*\(\s*([0-9a-fA-F:.]+/\d+)\s*,\s*prf:\s*(\w+)\s*\)")
+
+
+def parse_omrconfig(text):
+    """`ot-ctl br omrconfig` -> (mode, prefix, preference): ("custom", "fd00:1::/64", "high"), ("auto", None, None)…"""
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    for ln in lines:
+        if ln.startswith("Error"):
+            raise RuntimeError(ln)
+    for ln in lines:
+        m = OMR_CUSTOM_RE.search(ln)
+        if m:
+            return "custom", str(ipaddress.IPv6Network(m.group(1), strict=False)), m.group(2).lower()
+        if ln in ("auto", "disabled"):
+            return ln, None, None
+    raise RuntimeError(f"unexpected answer: {lines[-1] if lines else '(empty)'}")
+
+
+class OmrKeeper:
+    """Keeps the OpenThread border router on the OMR prefix of the options (off without `omr_prefix`)."""
+
+    def __init__(self, options, executor=docker_exec, clock=time.time):
+        self.prefix, self.config_error = None, None
+        raw = str(options.get("omr_prefix") or "").strip()
+        self.preference = str(options.get("omr_preference") or "high").strip().lower()
+        if raw:
+            try:
+                net = ipaddress.IPv6Network(raw, strict=True)
+                if net.prefixlen != 64:
+                    raise ValueError("an OMR prefix is a /64")
+                self.prefix = str(net)
+            except ValueError as err:
+                self.config_error = t("Invalid omr_prefix {p}: {err}", p=raw, err=err)
+            if self.preference not in OMR_PREFERENCES:
+                self.config_error = t("Invalid omr_preference {p}: high, med or low", p=self.preference)
+                self.prefix = None
+        self.container = "addon_" + (str(options.get("otbr_addon") or "").strip() or OTBR_ADDON)
+        self.exec, self.clock = executor, clock
+        self.mode = self.current = self.current_prf = self.error = self.applied_at = None
+        self.applied = 0
+        self.last_check = None
+        self.events = []
+
+    @property
+    def enabled(self):
+        return self.prefix is not None
+
+    def enforced(self):
+        return self.mode == "custom" and self.current == self.prefix and self.current_prf == self.preference
+
+    def emit(self, kind, text, level=logging.INFO):
+        LOG.log(level, text)
+        self.events.append((kind, text))
+
+    def _otctl(self, *args):
+        code, out = self.exec(self.container, ["ot-ctl", *args])
+        if code not in (0, None) and "Done" not in out:
+            raise RuntimeError((out.strip().splitlines() or [f"exit {code}"])[-1])
+        return out
+
+    def _read(self):
+        self.mode, self.current, self.current_prf = parse_omrconfig(self._otctl("br", "omrconfig"))
+
+    def due(self):
+        return self.enabled and (self.last_check is None or self.clock() - self.last_check >= OMR_CHECK_S)
+
+    def check(self):
+        """One reading, and the custom prefix set again when needed; returns True when the state changed."""
+        if not self.enabled:
+            return False
+        before = json.dumps(self.public(), sort_keys=True)
+        self.last_check = self.clock()
+        was_ok = self.enforced()
+        try:
+            self._read()
+            if self.enforced():
+                if not was_ok:
+                    self.emit("omr_ok", t("OMR prefix {p} (preference {prf}) in place on the border router",
+                                          p=self.prefix, prf=self.preference))
+            else:
+                was = f"{self.mode} {self.current or ''} {self.current_prf or ''}".strip()
+                out = self._otctl("br", "omrconfig", "custom", self.prefix, self.preference)
+                if "Done" not in out:
+                    raise RuntimeError((out.strip().splitlines() or ["(empty)"])[-1])
+                self.applied += 1
+                self.applied_at = self.clock()
+                self._read()
+                self.emit("omr_set", t("OMR prefix {p} (preference {prf}) set on the border router (it was: {was})",
+                                       p=self.prefix, prf=self.preference, was=was))
+            self.error = None
+        except DockerError as err:
+            # 404/409: border router stopped or starting, 403 or no socket: no access to Docker at all
+            if str(err).startswith(("403", "[Errno 2]", "[Errno 13]")):
+                txt = t("OMR prefix: no access to the Docker API ({err}); turn Protection mode off", err=err)
+            else:
+                txt = t("OMR prefix: border router unreachable: {err}", err=err)
+            self._fail(txt)
+        except Exception as err:  # noqa: BLE001
+            if "InvalidCommand" in str(err):
+                txt = t("OMR prefix: this border router does not know `br omrconfig` (OpenThread too old): {err}", err=err)
+            else:
+                txt = t("OMR prefix: border router unreachable: {err}", err=err)
+            self._fail(txt)
+        return json.dumps(self.public(), sort_keys=True) != before
+
+    def _fail(self, txt):
+        self.mode = self.current = self.current_prf = None
+        if txt != self.error:
+            self.emit("omr_error", txt, logging.WARNING)
+        self.error = txt
+
+    def public(self):
+        return {"wanted": self.prefix, "preference": self.preference, "mode": self.mode, "current": self.current,
+                "current_preference": self.current_prf, "enforced": self.enforced(), "applied": self.applied,
+                "applied_at": self.applied_at, "error": self.error}
+
+
 # ---------------------------------------------------------------- Home Assistant side
 def supervisor(path, method="GET", timeout=30):
     token = os.environ.get("SUPERVISOR_TOKEN")
@@ -287,8 +486,8 @@ def slug_of(name):
 
 
 class Mqtt:
-    def __init__(self, link):
-        self.link, self.client = link, None
+    def __init__(self, link, omr=None):
+        self.link, self.omr, self.client = link, omr, None
         try:
             import paho.mqtt.client as mqtt   # noqa: PLC0415
             conf = supervisor("/services/mqtt")
@@ -322,13 +521,26 @@ class Mqtt:
                                                % d["name"].replace("'", ""),
                    "device": dev}
             client.publish(f"{DISCOVERY}/binary_sensor/usbip_link/{s}/config", json.dumps(cfg), retain=True)
+        omr_topic = f"{DISCOVERY}/binary_sensor/usbip_link/omr_prefix/config"
+        if self.omr is not None and self.omr.enabled:
+            cfg = {"name": "OMR prefix", "unique_id": "usbip_link_omr_prefix", "icon": "mdi:ip-network",
+                   "state_topic": STATE_TOPIC, "availability_topic": STATE_TOPIC + "/available",
+                   "value_template": "{{ 'ON' if value_json.omr and value_json.omr.enforced else 'OFF' }}",
+                   "json_attributes_topic": STATE_TOPIC,
+                   "json_attributes_template": "{{ (value_json.omr or {}) | tojson }}",
+                   "device": dev}
+            client.publish(omr_topic, json.dumps(cfg), retain=True)
+        else:
+            client.publish(omr_topic, "", retain=True)   # option turned off: the entity goes away
         self.publish()
 
     def publish(self):
         if self.client is not None:
-            self.client.publish(STATE_TOPIC, json.dumps(dict(self.link.public(), version=VERSION,
-                                                             updated=datetime.now().astimezone().isoformat(timespec="seconds"))),
-                                retain=True)
+            state = dict(self.link.public(), version=VERSION,
+                         updated=datetime.now().astimezone().isoformat(timespec="seconds"))
+            if self.omr is not None and self.omr.enabled:
+                state["omr"] = self.omr.public()
+            self.client.publish(STATE_TOPIC, json.dumps(state), retain=True)
 
 
 def main():
@@ -349,7 +561,10 @@ def main():
         LOG.debug("remount /sys: %s", err)
     load_module()
     link = Link(options)
-    mq = Mqtt(link)
+    omr = OmrKeeper(options)
+    if omr.config_error:
+        LOG.error(omr.config_error)
+    mq = Mqtt(link, omr)
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     interval = max(3, int(options.get("check_interval") or 10))
@@ -369,8 +584,14 @@ def main():
                     LOG.info(t("Add-on {slug} restarted", slug=slug))
                 except Exception as err:  # noqa: BLE001
                     LOG.warning(t("Cannot restart the add-on {slug}: {err}", slug=slug, err=err))
-        if changed or link.events or time.time() - last_pub > HEARTBEAT_S:
-            link.events = []
+            omr.last_check = None   # the border router just restarted without the custom prefix: check at once
+        if omr.due():
+            try:
+                changed = omr.check() or changed
+            except Exception as err:  # noqa: BLE001
+                LOG.warning("omr: %s", err)
+        if changed or link.events or omr.events or time.time() - last_pub > HEARTBEAT_S:
+            link.events, omr.events = [], []
             mq.publish()
             last_pub = time.time()
         stop.wait(interval)

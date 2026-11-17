@@ -1,5 +1,5 @@
 name: USB/IP Link
-version: "0.1.0"
+version: "0.2.0"
 slug: usbip_link
 url: https://github.com/Pintjes/ha-addons
 description: >-
@@ -24,6 +24,8 @@ privileged:
   - SYS_RAWIO
 hassio_api: true
 hassio_role: manager
+# `ot-ctl br omrconfig` in the OpenThread border router container (option omr_prefix)
+docker_api: true
 services:
   - mqtt:want
 options:
@@ -46,4 +48,7 @@ schema:
   check_interval: int(3,300)
   restart_addons:
     - str
+  omr_prefix: str?
+  omr_preference: list(high|med|low)?
+  otbr_addon: str?
   debug: bool
