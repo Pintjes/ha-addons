@@ -428,9 +428,58 @@ DIAG_OK = ("DIAG_GET.rsp/ans from fdde:ad00:beef:0:0:ff:fe00:b45c: 000800ca7a348
 d = ta.parse_diag(DIAG_OK)
 assert d["answered"] and d["ext"] == "ca7a34808b66e461" and len(d["addresses"]) == 5, d   # sans doublon
 assert d["addresses"][1] == OLD
-assert ta.parse_diag("Done\r\n") == {"answered": False, "ext": None, "addresses": []}
+assert ta.parse_diag("Done\r\n") == {"answered": False, "ext": None, "rloc16": None, "addresses": []}
 assert ta.parse_diag("DIAG_GET.rsp/ans from fd00::1: 00\r\nExt Address: 'AABBCCDDEEFF0011'\r\nDone\r\n") == \
-    {"answered": True, "ext": "aabbccddeeff0011", "addresses": []}
+    {"answered": True, "ext": "aabbccddeeff0011", "rloc16": None, "addresses": []}
+assert ta.parse_diag("DIAG_GET.rsp/ans from fd00::1: 00\r\nExt Address: 'aabbccddeeff0011'\r\nRloc16: 0x0c00\r\n"
+                     "IP6 Address List:\r\n    - fd00::5\r\nDone\r\n") == \
+    {"answered": True, "ext": "aabbccddeeff0011", "rloc16": 0x0C00, "addresses": ["fd00::5"]}
+# adresse etendue : majuscules, 0x, espaces
+assert ta.parse_ext(" 0xCA7A34808B66E461 ") == "ca7a34808b66e461"
+for bad in ("ca7a34808b66e46", "ca7a34808b66e4611", "zz7a34808b66e461", "", None):
+    try:
+        ta.parse_ext(bad)
+        raise AssertionError(bad)
+    except ValueError:
+        pass
+
+TARGET, ML = "ca7a34808b66e461", "fdde:ad00:beef:0:5d1c:7a22:9e01:33aa"
+ADDR = "fdde:ad00:beef::ff:fe00:b45c"
+
+
+def child_table(*rows):
+    head = ("| ID  | RLOC16 | Timeout    | Age        | LQ In | C_VN |R|D|N|Ver|CSL|QMsgCnt|Suprvsn| Extended MAC     |\r\n"
+            "+-----+--------+------------+------------+-------+------+-+-+-+---+---+-------+-------+------------------+\r\n")
+    return head + "".join(f"|   1 | {r} |        240 |         44 |     3 |  237 |1|1|1|  3| 0 |     0 |   129 | {e} |\r\n"
+                          for r, e in rows) + "Done\r\n"
+
+
+def neighbor_table(*rows):
+    head = ("| Role | RLOC16 | Age | Avg RSSI | Last RSSI | LQ In |R|D|N| Extended MAC     | Version |\r\n"
+            "+------+--------+-----+----------+-----------+-------+-+-+-+------------------+---------+\r\n")
+    return head + "".join(f"|    C | {r} |  12 |      -60 |       -61 |     3 |1|1|1| {e} |       4 |\r\n"
+                          for r, e in rows) + "Done\r\n"
+
+
+def router_table(*rows):
+    head = ("| ID | RLOC16 | Next Hop | Path Cost | LQ In | LQ Out | Age | Extended MAC     | Link |\r\n"
+            "+----+--------+----------+-----------+-------+--------+-----+------------------+------+\r\n")
+    return head + "".join(f"| 45 | {r} |       63 |         0 |     3 |      3 |   5 | {e} |    1 |\r\n"
+                          for r, e in rows) + "Done\r\n"
+
+
+assert ta.parse_table(child_table(("0xfc01", "4ecede68435358ac"), ("0xb45c", TARGET.upper()))) == \
+    {"4ecede68435358ac": 0xFC01, TARGET: 0xB45C}
+assert ta.parse_table(neighbor_table(("0xb400", TARGET))) == {TARGET: 0xB400}
+assert ta.parse_table(router_table(("0x0800", "8aa57d2c603fe16c"), ("0xb800", "fe109d277e0175cc"))) == \
+    {"8aa57d2c603fe16c": 0x0800, "fe109d277e0175cc": 0xB800}
+assert ta.parse_table("Done\r\n") == {} and ta.parse_table(child_table()) == {}
+assert ta.parse_table("| junk |\r\n| 1 | 2 |\r\nDone\r\n") == {}     # sans en-tete reconnu
+try:
+    ta.parse_table("Error 35: InvalidCommand\r\n")
+    raise AssertionError("Error")
+except RuntimeError:
+    pass
 try:
     ta.parse_diag("Error 28: ResponseTimeout\r\n")
     raise AssertionError("Error")
@@ -457,6 +506,8 @@ class FakeOtbr:
     def __init__(self, clk):
         self.clk, self.calls, self.timeouts, self.running = clk, [], [], True
         self.ping_out, self.diag_out, self.ping_takes, self.diag_takes = PING_OK, DIAG_OK, 0, 0
+        self.tables, self.table_takes = {}, 0     # "child" / "neighbor" / "router" -> sortie ot-ctl
+        self.ml_out = "Done\r\n"                  # reponse a `networkdiagnostic get <ML-EID> 0 1 8`
 
     def started_at(self, container):
         return "2026-11-17T10:57:34Z"
@@ -476,7 +527,10 @@ class FakeOtbr:
             return 0, self.ping_out
         if cmd[1:3] == ["networkdiagnostic", "get"]:
             self.clk.now += self.diag_takes
-            return 0, self.diag_out
+            return 0, self.ml_out if cmd[4:] == ["0", "1", "8"] else self.diag_out
+        if cmd[1] in ("child", "neighbor", "router") and cmd[2:] == ["table"]:
+            self.clk.now += self.table_takes
+            return 0, self.tables.get(cmd[1], "Done\r\n")
         raise AssertionError(f"command not allowed in a diagnostic: {cmd}")
 
 
@@ -509,6 +563,7 @@ assert all(1 <= tm <= ta.DIAG_TIMEOUT_S for tm in otbr.timeouts), otbr.timeouts
 assert not dg.running
 # rien d'ecrit sur le border router : aucune des commandes n'est une ecriture
 assert not [c for c in otbr.calls if c[0] not in ("ipaddr", "ping", "networkdiagnostic")]
+assert r["rloc16_from"] == "request"
 # ping demande a faux : pas de ping, "ping": null
 clk, otbr, dg, out = make_diag()
 dg.submit(req(ping=False))
@@ -559,8 +614,96 @@ assert out == [] and otbr.calls == []
 dg.submit(json.dumps({"id": "x", "rloc16": "zz"}))
 dg.submit(json.dumps({"id": "y"}))
 assert [(tp, r["error"][:14]) for tp, r in out] == [("thread_anchor/diag/result/x", "invalid rloc16"),
-                                                    ("thread_anchor/diag/result/y", "invalid rloc16")]
+                                                    ("thread_anchor/diag/result/y", "rloc16, ext or")]
 assert otbr.calls == [] and "ping" in out[0][1] and out[0][1]["addresses"] == []
+for i, extra in enumerate(({"ext": "pas-une-ext"}, {"ext": "ca7a34808b66e46"}, {"mleid": "pas-une-adresse"},
+                           {"mleid": "fdde:ad00:beef::/64"}, {"rloc16": "zz", "ext": TARGET})):
+    dg.submit(json.dumps(dict({"id": f"bad{i}"}, **extra)))
+    assert out[-1][0] == f"thread_anchor/diag/result/bad{i}" and out[-1][1]["error"].split(":")[0].startswith("invalid"), out[-1]
+assert otbr.calls == []
+
+# ---- RLOC16 inconnu : retrouve depuis l'adresse etendue (ext) ou l'ML-EID (mleid)
+
+
+def ask(otbr_setup=None, **kw):
+    """Une demande sans rloc16 ; rend (resultat, appels ot-ctl, otbr)."""
+    clk, otbr, dg, out = make_diag()
+    if otbr_setup:
+        otbr_setup(otbr)
+    dg.submit(json.dumps(dict({"id": "t"}, **kw)))
+    assert len(out) == 1 and not dg.running, out
+    return out[0][1], otbr.calls, otbr
+
+
+PING = ["ping", ADDR, "16", "1"]
+DIAG = ["networkdiagnostic", "get", ADDR, "0", "8"]
+OWN = ["ipaddr", "rloc"]
+# dans la table des enfants : les autres tables ne sont pas lues ; ext en majuscules, ping et diagnostic suivent
+r, calls, _ = ask(lambda o: o.tables.update(child=child_table(("0xfc01", "4ecede68435358ac"), ("0xb45c", TARGET))),
+                  ext=TARGET.upper())
+assert r["rloc16"] == "0xb45c" and r["rloc16_from"] == "child table" and r["rloc_address"] == ADDR and r["error"] is None
+assert calls == [OWN, ["child", "table"], PING, DIAG], calls
+assert r["ping"]["ok"] and r["ext"] == TARGET and r["other_prefix_addresses"] == [OLD] and len(r["addresses"]) == 5
+# pas chez les enfants : table des voisins, puis table des routeurs
+r, calls, _ = ask(lambda o: o.tables.update(child=child_table(("0xfc01", "4ecede68435358ac")),
+                                            neighbor=neighbor_table(("0xb45c", TARGET))), ext=TARGET)
+assert r["rloc16"] == "0xb45c" and r["rloc16_from"] == "neighbor table" and r["error"] is None
+assert calls == [OWN, ["child", "table"], ["neighbor", "table"], PING, DIAG], calls
+r, calls, _ = ask(lambda o: o.tables.update(router=router_table(("0xb45c", TARGET))), ext=TARGET, ping=False)
+assert r["rloc16_from"] == "router table" and r["ping"] is None and r["error"] is None
+assert calls == [OWN, ["child", "table"], ["neighbor", "table"], ["router", "table"], DIAG], calls
+# introuvable : « not found », ni ping ni diagnostic, rien d'autre que des lectures de tables
+r, calls, _ = ask(ext=TARGET)
+assert r["error"] == "not found" and r["rloc16"] is None and r["rloc16_from"] is None and r["rloc_address"] is None
+assert r["ping"] is None and r["addresses"] == [] and r["ext"] is None
+assert calls == [OWN, ["child", "table"], ["neighbor", "table"], ["router", "table"]], calls
+# une table en erreur (OpenThread ancien…) : on passe a la suivante
+r, calls, _ = ask(lambda o: o.tables.update(child="Error 35: InvalidCommand\r\n",
+                                            router=router_table(("0xb45c", TARGET))), ext=TARGET)
+assert r["rloc16_from"] == "router table" and r["error"] is None
+# la meme adresse etendue ne vaut qu'une fois : le premier trouve gagne
+r, _, _ = ask(lambda o: o.tables.update(child=child_table(("0x1111", TARGET)), router=router_table(("0x2222", TARGET))),
+              ext=TARGET)
+assert r["rloc16"] == "0x1111" and r["rloc_address"] == "fdde:ad00:beef::ff:fe00:1111"
+# ML-EID : une seule requete donne ext, RLOC16 et adresses ; pas de seconde requete, pas de table
+ML_OK = DIAG_OK.replace("Ext Address: 'ca7a34808b66e461'\r\n", "Ext Address: 'ca7a34808b66e461'\r\nRloc16: 0xb45c\r\n")
+ML_CALL = ["networkdiagnostic", "get", ML, "0", "1", "8"]
+r, calls, _ = ask(lambda o: setattr(o, "ml_out", ML_OK), mleid=ML, ext=TARGET)
+assert r["rloc16"] == "0xb45c" and r["rloc16_from"] == "mleid" and r["error"] is None and r["rloc_address"] == ADDR
+assert calls == [OWN, ML_CALL, PING], calls
+assert r["ext"] == TARGET and len(r["addresses"]) == 5 and r["other_prefix_addresses"] == [OLD]
+# ML-EID seul (ext pas fourni) ; l'ancien nom ml_eid reste accepte
+r, calls, _ = ask(lambda o: setattr(o, "ml_out", ML_OK), mleid=ML.upper())
+assert r["rloc16_from"] == "mleid" and calls[1] == ML_CALL and r["error"] is None
+r, calls, _ = ask(lambda o: setattr(o, "ml_out", ML_OK), ml_eid=ML)
+assert r["rloc16_from"] == "mleid"
+# l'adresse repond avec une autre ext : plus la bonne node -> les tables
+r, calls, _ = ask(lambda o: (setattr(o, "ml_out", ML_OK.replace(TARGET, "0011223344556677")),
+                             o.tables.update(child=child_table(("0xb45c", TARGET)))), mleid=ML, ext=TARGET)
+assert r["rloc16_from"] == "child table" and r["error"] is None and calls == [OWN, ML_CALL, ["child", "table"], PING, DIAG]
+# ML-EID sans reponse : tables si ext, sinon « not found »
+r, calls, _ = ask(lambda o: o.tables.update(neighbor=neighbor_table(("0xb45c", TARGET))), mleid=ML, ext=TARGET)
+assert r["rloc16_from"] == "neighbor table" and calls[:4] == [OWN, ML_CALL, ["child", "table"], ["neighbor", "table"]]
+r, calls, _ = ask(mleid=ML)
+assert r["error"] == "not found" and calls == [OWN, ML_CALL], calls
+# ML-EID hors du prefixe mesh-local : refuse, aucune requete
+r, calls, _ = ask(mleid="2001:db8::1", ext=TARGET)
+assert r["error"] == "mleid is not in the mesh-local prefix" and calls == [OWN] and r["rloc16_from"] is None
+# rloc16 fourni : il l'emporte, rien n'est cherche
+r, calls, _ = ask(lambda o: setattr(o, "ml_out", ML_OK), rloc16="0xB45C", mleid=ML, ext=TARGET)
+assert r["rloc16_from"] == "request" and calls == [OWN, PING, DIAG], calls
+# delai de 15 s : lire les tables a tout pris
+r, calls, _ = ask(lambda o: setattr(o, "table_takes", 16), ext=TARGET)
+assert r["error"] == "timeout (15 s)" and calls == [OWN, ["child", "table"]] and r["rloc16_from"] is None
+# limites : « too soon » par adresse etendue (dix secondes), « busy » comme avant
+clk, otbr, dg, out = make_diag()
+otbr.tables["child"] = child_table(("0xb45c", TARGET))
+dg.submit(json.dumps({"id": "u1", "ext": TARGET}))
+dg.submit(json.dumps({"id": "u2", "ext": TARGET.upper()}))
+assert out[0][1]["error"] is None and out[1][1]["error"] == "too soon", out
+clk.now += 10
+dg.submit(json.dumps({"id": "u3", "ext": TARGET}))
+assert out[2][1]["error"] is None and out[2][1]["rloc16"] == "0xb45c"
 # une seule a la fois : « busy » ; au plus une par node toutes les 10 s : « too soon »
 later = []
 clk, otbr, dg, out = make_diag(spawn=later.append)

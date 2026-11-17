@@ -32,7 +32,7 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 LOG = logging.getLogger("thread_anchor")
 STATE_TOPIC = "thread_anchor/state"
 DISCOVERY = "homeassistant"
@@ -78,6 +78,11 @@ TEXTS = {
         "Connected to MQTT": "Connecté à MQTT",
         "Diagnostic request ignored (no usable id): {err}": "Demande de diagnostic ignorée (pas d'id utilisable) : {err}",
         "invalid rloc16: {v}": "rloc16 invalide : {v}",
+        "invalid ext: {v}": "ext invalide : {v}",
+        "invalid mleid: {v}": "mleid invalide : {v}",
+        "rloc16, ext or mleid needed": "rloc16, ext ou mleid nécessaire",
+        "mleid is not in the mesh-local prefix": "mleid n'est pas dans le préfixe mesh-local",
+        "RLOC16 found by {m}": "RLOC16 trouvé par {m}",
         "no answer to the network diagnostic": "pas de réponse au diagnostic réseau",
         "another node answers at this RLOC16: ext {got} instead of {want}":
             "une autre node répond à ce RLOC16 : ext {got} au lieu de {want}",
@@ -411,6 +416,8 @@ class Anchor:
 LINK_LOCAL = ipaddress.IPv6Network("fe80::/10")
 GLOBAL = ipaddress.IPv6Network("2000::/3")
 EXT_RE = re.compile(r"Ext Address:\s*'?([0-9a-fA-F]{16})'?")
+RLOC_RE = re.compile(r"Rloc16:\s*(0x[0-9a-fA-F]{1,4})")
+EXT_ADDR_RE = re.compile(r"(?:0x)?([0-9a-fA-F]{16})")
 SENT_RE = re.compile(r"(\d+) packets transmitted, (\d+) packets received")
 RTT_RE = re.compile(r"Round-trip min/avg/max = [\d.]+/([\d.]+)/[\d.]+ ms")
 REPLY_RE = re.compile(r"bytes from \S+: icmp_seq=\d+ hlim=\d+ time=(\d+)ms")
@@ -424,6 +431,34 @@ def parse_rloc16(value):
     if not 0 <= n <= 0xFFFE:
         raise ValueError(value)
     return n
+
+
+def parse_ext(value):
+    """"CA7A34808B66E461" or "0xca7a…" -> "ca7a34808b66e461"; ValueError otherwise."""
+    m = EXT_ADDR_RE.fullmatch(str(value).strip())
+    if not m:
+        raise ValueError(value)
+    return m.group(1).lower()
+
+
+def parse_table(text):
+    """`child table`, `neighbor table` or `router table` -> {extended address: rloc16}.
+    The tables are drawn with `|` columns; the two columns are found from the header line."""
+    out, cols = {}, None
+    for ln in _lines(text):
+        if not ln.startswith("|"):
+            continue
+        cells = [c.strip() for c in ln.strip("|").split("|")]
+        if "RLOC16" in cells and "Extended MAC" in cells:
+            cols = (cells.index("RLOC16"), cells.index("Extended MAC"))
+            continue
+        if cols is None or len(cells) <= max(cols):
+            continue
+        try:
+            out[parse_ext(cells[cols[1]])] = parse_rloc16(cells[cols[0]])
+        except ValueError:
+            continue
+    return out
 
 
 def rloc_address(mesh_local, rloc16):
@@ -444,15 +479,19 @@ def parse_ping(text):
 
 
 def parse_diag(text):
-    """`networkdiagnostic get <addr> 0 8` -> {"answered", "ext", "addresses"}.
+    """`networkdiagnostic get <addr> 0 [1] 8` -> {"answered", "ext", "rloc16", "addresses"}.
     The answer comes as `DIAG_GET.rsp/ans from …`; without it the node did not answer in time."""
     lines = _lines(text)
-    out = {"answered": any(ln.startswith("DIAG_GET.rsp/ans") for ln in lines), "ext": None, "addresses": []}
+    out = {"answered": any(ln.startswith("DIAG_GET.rsp/ans") for ln in lines), "ext": None, "rloc16": None,
+           "addresses": []}
     in_list = False
     for ln in lines:
         m = EXT_RE.search(ln)
         if m:
             out["ext"] = m.group(1).lower()
+        m = RLOC_RE.search(ln)
+        if m:
+            out["rloc16"] = int(m.group(1), 16)
         if ln.startswith("IP6 Address List"):
             in_list = True
             continue
@@ -485,7 +524,9 @@ def classify(addresses, mesh_local, prefixes):
 class Diag:
     """Diagnostic of one node asked on MQTT (`thread_anchor/diag/request`): ping of its RLOC address
     and its IPv6 addresses read with a network diagnostic. Reads only: nothing is set on the
-    border router. One at a time, at most one per node every DIAG_GAP_S, DIAG_TIMEOUT_S each."""
+    border router. One at a time, at most one per node every DIAG_GAP_S, DIAG_TIMEOUT_S each.
+    Without `rloc16`, it is found from the extended address (`ext`): in the tables of the border
+    router (child, neighbor, router), or from the mesh-local address of the node (`mleid`)."""
 
     def __init__(self, anchor, reply, clock=time.time, spawn=None):
         self.anchor, self.reply, self.clock = anchor, reply, clock
@@ -504,25 +545,37 @@ class Diag:
         except (ValueError, TypeError, KeyError) as err:
             LOG.warning(t("Diagnostic request ignored (no usable id): {err}", err=err))
             return
-        base = {"id": rid, "rloc16": req.get("rloc16"), "rloc_address": None, "ext": None, "ping": None,
-                "addresses": [], "omr_addresses": [], "other_prefix_addresses": []}
+        base = {"id": rid, "rloc16": req.get("rloc16"), "rloc16_from": None, "rloc_address": None, "ext": None,
+                "ping": None, "addresses": [], "omr_addresses": [], "other_prefix_addresses": []}
+        raw16, raw_ext, raw_ml = req.get("rloc16"), req.get("ext"), req.get("mleid", req.get("ml_eid"))
         try:
-            rloc16 = parse_rloc16(req.get("rloc16"))
+            rloc16 = None if raw16 is None or raw16 == "" else parse_rloc16(raw16)
         except (ValueError, TypeError):
-            return self._done(base, t("invalid rloc16: {v}", v=req.get("rloc16")))
+            return self._done(base, t("invalid rloc16: {v}", v=raw16))
+        try:
+            ext = parse_ext(raw_ext) if str(raw_ext or "").strip() else None
+        except ValueError:
+            return self._done(base, t("invalid ext: {v}", v=raw_ext))
+        try:
+            ml = str(ipaddress.IPv6Address(str(raw_ml).strip())) if str(raw_ml or "").strip() else None
+        except ValueError:
+            return self._done(base, t("invalid mleid: {v}", v=raw_ml))
+        if rloc16 is None and not ext and not ml:
+            return self._done(base, t("rloc16, ext or mleid needed"))
+        # the node asked for: its RLOC16 when given, else its extended address, else its ML-EID
+        key = ("rloc16", rloc16) if rloc16 is not None else ("ext", ext) if ext else ("mleid", ml)
         with self.lock:
             if self.running:
                 return self._done(base, "busy")
-            last = self.last.get(rloc16)
+            last = self.last.get(key)
             if last is not None and self.clock() - last < DIAG_GAP_S:
                 return self._done(base, "too soon")
-            self.running, self.last[rloc16] = True, self.clock()
-        ext = str(req.get("ext") or "").strip().lower() or None
-        self.spawn(lambda: self.run(base, rloc16, ext, req.get("ping", True) is not False))
+            self.running, self.last[key] = True, self.clock()
+        self.spawn(lambda: self.run(base, rloc16, ext, ml, req.get("ping", True) is not False))
 
-    def run(self, res, rloc16, ext, ping):
+    def run(self, res, rloc16, ext, ml, ping):
         try:
-            self._run(res, rloc16, ext, ping)
+            self._run(res, rloc16, ext, ml, ping)
         except Exception as err:  # noqa: BLE001 - always an answer
             res["error"] = str(err) or type(err).__name__
         finally:
@@ -539,12 +592,56 @@ class Diag:
             raise RuntimeError((out.strip().splitlines() or [f"exit {code}"])[-1])
         return out
 
-    def _run(self, res, rloc16, ext, ping):
+    def _resolve(self, deadline, mlp, ext, ml):
+        """RLOC16 of a node known by its extended address and / or its ML-EID: (rloc16, how, diag)
+        or (None, None, None). The ML-EID answers by itself (one request: ext, RLOC16, addresses);
+        the tables of the border router cost no radio traffic but hold only its own children and
+        neighbors, and the routers."""
+        if ml:
+            if ipaddress.IPv6Address(ml) not in ipaddress.IPv6Network(mlp):
+                raise RuntimeError(t("mleid is not in the mesh-local prefix"))
+            try:
+                diag = parse_diag(self._otctl(deadline, "networkdiagnostic", "get", ml, "0", "1", "8"))
+            except RuntimeError as err:
+                if "timeout" in str(err):
+                    raise
+                LOG.debug("mleid: %s", err)
+            else:
+                if diag["answered"] and diag["rloc16"] is not None:
+                    # another extended address than asked: the address is not that node's any more
+                    if ext and diag["ext"] != ext:
+                        LOG.debug("mleid answered with ext %s, not %s", diag["ext"], ext)
+                    else:
+                        return diag["rloc16"], "mleid", diag
+        if ext:
+            for name, cmd in (("child table", ("child", "table")), ("neighbor table", ("neighbor", "table")),
+                              ("router table", ("router", "table"))):
+                try:
+                    found = parse_table(self._otctl(deadline, *cmd)).get(ext)
+                except RuntimeError as err:
+                    if "timeout" in str(err):
+                        raise
+                    LOG.debug("%s: %s", name, err)
+                    continue
+                if found is not None:
+                    return found, name, None
+        return None, None, None
+
+    def _run(self, res, rloc16, ext, ml, ping):
         deadline = self.clock() + DIAG_TIMEOUT_S
         # mesh-local prefix from the RLOC address of the border router itself (no secret in it,
         # unlike `dataset active`)
         own = _lines(self._otctl(deadline, "ipaddr", "rloc"))
         mlp = str(ipaddress.IPv6Network(f"{ipaddress.IPv6Address(own[0])}/64", strict=False))
+        diag = None
+        if rloc16 is None:
+            rloc16, how, diag = self._resolve(deadline, mlp, ext, ml)
+            if rloc16 is None:
+                res["error"] = "not found"
+                return
+            res["rloc16"], res["rloc16_from"] = f"0x{rloc16:04x}", how
+        else:
+            res["rloc16_from"] = "request"
         res["rloc_address"] = addr = rloc_address(mlp, rloc16)
         if ping:
             try:
@@ -554,7 +651,8 @@ class Diag:
                     raise
                 res["ping"] = {"ok": False, "rtt_ms": None}
                 LOG.debug("ping: %s", err)
-        diag = parse_diag(self._otctl(deadline, "networkdiagnostic", "get", addr, "0", "8"))
+        if diag is None:
+            diag = parse_diag(self._otctl(deadline, "networkdiagnostic", "get", addr, "0", "8"))
         if not diag["answered"]:
             res["error"] = t("no answer to the network diagnostic")
             return
@@ -569,10 +667,12 @@ class Diag:
         res["at"] = datetime.fromtimestamp(self.clock(), timezone.utc).astimezone().isoformat(timespec="seconds")
         p = res.get("ping")
         short = (t("ping ok {ms} ms", ms=p["rtt_ms"]) if p and p["ok"] else t("no ping answer") if p else "-")
+        how = res.get("rloc16_from")
+        via = f" [{t('RLOC16 found by {m}', m=how)}]" if how not in (None, "request") else ""
         LOG.info(t("Diagnostic {r} ({rloc}): {ping}, {n} addresses, {o} OMR, {x} on another prefix{err}",
-                   r=res.get("rloc16"), rloc=res.get("rloc_address") or "-", ping=short, n=len(res["addresses"]),
-                   o=len(res["omr_addresses"]), x=len(res["other_prefix_addresses"]),
-                   err=f" — {error}" if error else ""))
+                   r=res.get("rloc16") or res["id"], rloc=res.get("rloc_address") or "-", ping=short,
+                   n=len(res["addresses"]), o=len(res["omr_addresses"]), x=len(res["other_prefix_addresses"]),
+                   err=via + (f" — {error}" if error else "")))
         self.reply(f"{DIAG_RESULT_TOPIC}/{res['id']}", res)
         return res
 

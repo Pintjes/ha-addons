@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.3] - 2026-11-17
+
+### Added
+
+- Diagnostic of a node whose RLOC16 is not known: leave `rloc16` out of the request and give
+  `ext` (extended address) and / or `mleid` (mesh-local address). The RLOC16 is found from the
+  `mleid` with one network diagnostic (dropped when the extended address received is not the
+  one asked), then from the tables of the border router (`child table`, `neighbor table`,
+  `router table`), else the answer is `not found`. The answer says how in `rloc16_from`.
+  Reads only; the search counts in the 15 s limit.
+- A request with a wrong `ext`, `mleid` or `rloc16`, or with none of the three, gets an answer
+  with the reason in `error`.
+
 ## [0.1.2] - 2026-11-17
 
 ### Added

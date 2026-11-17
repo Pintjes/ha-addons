@@ -113,9 +113,9 @@ Request, on `thread_anchor/diag/request` (not retained):
 ```
 
 `id` is a unique string (letters, digits, `-`, `_`; no `/`, `+` or `#`), `rloc16`
-the short address of the node, `ext` its extended address (optional: checked
-against the answer), `ping` `false` to skip the ping. In the border router
-container it runs, one after the other (reads only):
+the short address of the node, `ext` its extended address (16 hexadecimal
+digits; checked against the answer), `ping` `false` to skip the ping. In the
+border router container it runs, one after the other (reads only):
 
 1. `ot-ctl ipaddr rloc` — the mesh-local prefix, hence the RLOC address of the
    node: `<mesh-local prefix>:0:ff:fe00:<rloc16>`;
@@ -123,22 +123,47 @@ container it runs, one after the other (reads only):
 3. `ot-ctl networkdiagnostic get <rloc address> 0 8` — the extended address
    (TLV 0) and the IPv6 address list (TLV 8) of the node.
 
+### Without `rloc16`
+
+A node that attached again may have a new RLOC16. Leave `rloc16` out (do not
+send `null`) and give `ext`, and / or `mleid` (its mesh-local address, `ML-EID`;
+it must be in the mesh-local prefix). The RLOC16 is looked for before step 1,
+in this order, and the first answer wins:
+
+1. with `mleid`: `ot-ctl networkdiagnostic get <mleid> 0 1 8` — extended
+   address (TLV 0), RLOC16 (TLV 1) and addresses (TLV 8) in one request. If `ext`
+   was given and differs from the one received, the address is not that node's
+   any more: this step is dropped;
+2. with `ext`: the tables of the border router, `ot-ctl child table`,
+   `neighbor table`, then `router table` (columns *RLOC16* and *Extended MAC*).
+   They cost no radio traffic, but hold only the children and neighbors of the
+   border router itself and the routers: a node attached to another router is
+   not in them;
+3. otherwise the answer is `error: "not found"`, with no ping and no diagnostic.
+
+Once found, the rest is unchanged (ping, network diagnostic; with `mleid` the
+diagnostic of step 1 is reused). The whole thing, searching included, is
+limited to 15 s.
+
 Answer, on `thread_anchor/diag/result/<id>` (not retained, JSON):
 
 | Field | |
 |---|---|
-| `id`, `rloc16` | as in the request |
+| `id` | as in the request |
+| `rloc16` | as in the request; when it was left out: the RLOC16 found, like `"0xb45c"` (`null`: not found) |
+| `rloc16_from` | how it is known: `request`, `mleid`, `child table`, `neighbor table` or `router table`; `null` when not found or the request was refused |
 | `rloc_address` | the RLOC address that was asked (`null` if it could not be built) |
 | `ext` | extended address the node answered with, lowercase (`null`: no answer) |
 | `ping` | `{"ok": bool, "rtt_ms": float or null}`; `null` when no ping was asked |
 | `addresses` | every IPv6 address of the node |
 | `omr_addresses` | those in the anchored prefix (`wanted`) or in the prefix the network favors (`favored`) |
 | `other_prefix_addresses` | global or local (ULA) addresses that are neither mesh-local, nor link-local, nor in the current prefixes: an old OMR prefix the node kept |
-| `error` | `null`, or why it failed: `busy`, `too soon`, `invalid rloc16: …`, `timeout (15 s)`, `no answer to the network diagnostic`, a different `ext` than asked, an `ot-ctl` or Docker error |
+| `error` | `null`, or why it failed: `busy`, `too soon`, `not found`, `invalid rloc16: …` / `invalid ext: …` / `invalid mleid: …`, `rloc16, ext or mleid needed`, `mleid is not in the mesh-local prefix`, `timeout (15 s)`, `no answer to the network diagnostic`, a different `ext` than asked, an `ot-ctl` or Docker error |
 | `at` | time of the answer (ISO 8601 with the time zone) |
 
 Limits: one diagnostic at a time (`busy`), at most one per node every 10 s
-(`too soon`), 15 s at most each. A request without a usable `id` gets no answer
+(`too soon`; the node is its `rloc16`, else its `ext`, else its `mleid`), 15 s
+at most each. A request without a usable `id` gets no answer
 (only a line in the log). Each diagnostic is one line in the log. A node that
 does not answer the ping may still answer the network diagnostic (it is reached
 by its RLOC address, which does not depend on the OMR prefix).
