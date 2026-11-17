@@ -825,7 +825,10 @@ def run_nginx():
     def stop(signum, frame):
         child.send_signal(signal.SIGTERM)
 
-    for signum in (signal.SIGTERM, signal.SIGINT):
+    # Run as process 1, this script dies of no signal it does not catch. The
+    # nginx image stops its containers with SIGQUIT: left alone, it was
+    # ignored and the container was killed after 10 s, in error.
+    for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGQUIT):
         signal.signal(signum, stop)
     for line in child.stderr:
         sys.stderr.write(PARAMETERS.sub("?...", line))

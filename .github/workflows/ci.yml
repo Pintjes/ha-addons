@@ -108,4 +108,20 @@ jobs:
           sleep 4
           python3 side_door/tests/test_live.py -v || { docker logs sd-live; exit 1; }
           docker logs sd-live
+          # A stop must be quick and clean: 0, not killed after the timeout
+          for sig in TERM QUIT; do
+            docker start sd-live >/dev/null && sleep 2
+            start=$(date +%s)
+            docker kill --signal "$sig" sd-live >/dev/null
+            code=$(docker wait sd-live)
+            took=$(( $(date +%s) - start ))
+            echo "SIG$sig: exit $code in ${took}s"
+            [ "$code" = 0 ] && [ "$took" -lt 5 ] || exit 1
+          done
+          docker start sd-live >/dev/null && sleep 2
+          start=$(date +%s); docker stop sd-live >/dev/null
+          code=$(docker inspect -f '{{.State.ExitCode}}' sd-live)
+          took=$(( $(date +%s) - start ))
+          echo "docker stop: exit $code in ${took}s"
+          [ "$code" = 0 ] && [ "$took" -lt 5 ] || exit 1
           docker rm -f sd-live

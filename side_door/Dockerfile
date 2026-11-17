@@ -16,5 +16,6 @@ LABEL \
     org.opencontainers.image.source="https://github.com/Pintjes/ha-addons" \
     org.opencontainers.image.licenses="GPL-3.0-or-later"
 
+STOPSIGNAL SIGTERM
 ENTRYPOINT []
 CMD [ "python3", "-u", "/run.py" ]
