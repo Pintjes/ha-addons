@@ -41,7 +41,7 @@ import time
 import urllib.request
 from datetime import datetime
 
-VERSION = "0.2.2"
+VERSION = "0.2.3"
 LOG = logging.getLogger("usbip_link")
 STATE_TOPIC = "usbip_link/state"
 DISCOVERY = "homeassistant"

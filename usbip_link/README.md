@@ -19,22 +19,51 @@ and keeps them plugged in.** Made for Home Assistant in a virtual machine
 without USB (Hyper-V on Windows), with a radio such as the Home Assistant
 Connect ZBT-2 plugged into the host and shared with usbipd-win.
 
+**And it can stop your Thread network from changing its OMR prefix** — the
+reason Matter devices drop out every day in homes with Google or Apple border
+routers.
+
 ## Why this add-on
 
-**1. The radio comes back by itself.**
-When the computer that shares the device restarts (a Windows update at night),
-the dead link is freed and the device is attached again as soon as the computer
-answers, then the OpenThread border router is restarted to open its radio
-again. No click in the morning.
+**1. You don't wake up without a radio.**
+A USB/IP client that attaches once at start works until the computer that
+shares the device restarts (a Windows update at night): the link is dead, the
+radio is gone, and nothing brings it back until someone restarts things by
+hand. USB/IP Link keeps checking: the dead link is freed, the device is
+attached again as soon as the computer answers, then the OpenThread border
+router is restarted to open its radio again. No click in the morning.
 
 **2. Found by what it is, not where it is.**
 The device is looked up by its `VID:PID`: another USB port on the host, another
 bus id, nothing to change.
 
 **3. A Thread network that stops moving.**
-Optional: the OpenThread border router is kept on a fixed OMR prefix, favored
-over the ones other border routers (Google TV…) keep replacing. The devices
-keep their addresses; Matter stops losing them.
+See below.
+
+## A stable OMR prefix for Thread
+
+Every Thread device has an address in the OMR prefix of the network, chosen
+among the prefixes the border routers publish. Some border routers (Google TV,
+Nest Hub…) replace theirs now and then: the whole network moves to another
+prefix, and Matter devices become unavailable until they are found again at
+their new address. On the network this add-on was made for, that was **7
+different OMR prefixes in 3 days**, with devices dropping out each time.
+
+With `omr_prefix`, USB/IP Link keeps the Home Assistant OpenThread border
+router on one prefix with a **high** preference. Every border router favors it
+over the low-preference prefixes they generate themselves, and withdraws its
+own:
+
+- **nothing to renumber:** take the prefix the network uses now (Mesh Guardian
+  shows it), the devices keep their addresses when it is set;
+- **kept in place:** OpenThread forgets this setting at each restart, so the
+  add-on reads it every 30 s and sets it again (`ot-ctl br omrconfig`);
+- **visible:** an *OMR prefix* entity says whether it is in place.
+
+It works with any radio of the OpenThread Border Router add-on, attached through
+USB/IP or not. The price: the add-on needs the Docker API to reach the border
+router, so **Protection mode** must be off. If the Home Assistant border router
+stops, the others publish their own prefixes again until it is back.
 
 ## Also
 

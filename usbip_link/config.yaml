@@ -1,11 +1,12 @@
 name: USB/IP Link
-version: "0.2.2"
+version: "0.2.3"
 slug: usbip_link
 url: https://github.com/Pintjes/ha-addons
 description: >-
   Uses the USB devices of another computer (USB/IP: usbipd-win on Windows) and keeps
   them attached: again by itself after a restart of that computer. For Home Assistant
-  in a virtual machine without USB (Hyper-V). Beta.
+  in a virtual machine without USB (Hyper-V). Can keep the Thread network on a stable
+  OMR prefix. Beta.
 arch:
   - amd64
   - aarch64

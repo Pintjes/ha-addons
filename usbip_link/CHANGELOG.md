@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3] - 2026-11-17
+
+### Changed
+
+- Presentation page: what sets the add-on apart from a client that attaches once at start,
+  and a section on the stable OMR prefix (the problem, how it works, its price).
+
 ## [0.2.2] - 2026-11-17
 
 ### Fixed

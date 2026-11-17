@@ -12,7 +12,7 @@ Add-on repository for [Home Assistant](https://www.home-assistant.io/).
 | <img src="mesh_guardian/icon.png" width="48" alt=""> | **[Mesh Guardian](mesh_guardian/)** *(beta)* | ![version][mg-version] | Keeps your Thread / Matter devices online: automatic recovery of lost nodes, a live table of every node, border router monitoring and radio advice. |
 | <img src="voice_agent_bridge/icon.png" width="48" alt=""> | **[Voice Agent Bridge](voice_agent_bridge/)** *(beta)* | ![version][vab-version] | Talk to Claude through Assist and your voice satellites, with your Claude plan (no API key), the full Home Assistant toolset and a conversation panel. |
 | <img src="side_door/icon.png" width="48" alt=""> | **[Side Door](side_door/)** | ![version][sd-version] | Opens a web app of your local network in the Home Assistant sidebar: HTTPS and Home Assistant login for free, nothing exposed to the Internet. |
-| <img src="usbip_link/icon.png" width="48" alt=""> | **[USB/IP Link](usbip_link/)** *(beta)* | ![version][ul-version] | Uses the USB devices of another computer (usbipd-win on Windows) and keeps them attached, for Home Assistant in a virtual machine without USB; can keep the Thread network on a stable OMR prefix. |
+| <img src="usbip_link/icon.png" width="48" alt=""> | **[USB/IP Link](usbip_link/)** *(beta)* | ![version][ul-version] | A radio plugged into another computer (usbipd-win on Windows) for Home Assistant in a virtual machine without USB, attached again by itself after every restart of that computer. And a stable OMR prefix for your Thread network: no more Matter devices dropping out when Google or Apple border routers change theirs. |
 
 ## Installation
 
