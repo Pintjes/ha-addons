@@ -234,10 +234,11 @@ function body(r, data, flags) {
     // end. What the add-on changes never spans two lines, and a line break
     // never falls inside a UTF-8 character.
     var cut = flags.last ? whole.length : whole.lastIndexOf(10) + 1;
-    if (cut === 0) {
+    if (cut === 0 && !flags.last) {
         chunks = [whole];
         return;
     }
+    // The end of the answer is always passed on, even when it comes empty
     var ready = whole.slice(0, cut);
     var rest = whole.slice(cut);
     chunks = rest.length ? [rest] : [];
