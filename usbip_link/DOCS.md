@@ -22,9 +22,12 @@ Every `check_interval` seconds the add-on checks the link:
 - server silent three checks in a row → the device is detached (a dead link would keep the
   port busy for a long time) and attached again when the server is back;
 - attached again after a loss → the add-ons of `restart_addons` are restarted (the
-  OpenThread border router opens its radio only when it starts).
+  OpenThread border router opens its radio only when it starts);
+- attached for the first time (start of Home Assistant) → those of them that already run,
+  or are in error, are restarted once: they may have started before the device was there.
 
-A restart of the add-on itself does not detach anything.
+A restart of the add-on itself does not detach anything, and restarts nothing: a device
+found attached is taken as it is, and its state is published only once checked.
 
 ## 1. Windows: share the device (usbipd-win)
 
@@ -46,11 +49,20 @@ New-NetFirewallRule -DisplayName "USB/IP (Home Assistant)" -Direction Inbound -P
 do after a restart. Limit the firewall rule to the address of Home Assistant: USB/IP has no
 password.
 
+> **The installer opens the port too.** usbipd-win adds its own inbound rule, `usbipd`, for
+> the whole local subnet. Windows firewall rules that allow add up: while it is on, any
+> computer of the network can attach the device, whatever the rule above says. Disable it,
+> or limit it to the address of Home Assistant:
+>
+> ```powershell
+> Get-NetFirewallRule -DisplayName "usbipd" | Set-NetFirewallRule -RemoteAddress <IP of Home Assistant>
+> ```
+
 ## 2. Home Assistant: the add-on
 
 | Option | |
 |---|---|
-| `server` | address of the computer that shares the device |
+| `server` | address (or name) of the computer that shares the device |
 | `devices` | one entry per device: `name`, and `hardware_id` (`VID:PID`, recommended: the USB port can change) or `bus_id` |
 | `check_interval` | seconds between two checks (10) |
 | `restart_addons` | add-ons restarted after the device is attached again, e.g. `core_openthread_border_router` |
@@ -84,7 +96,8 @@ With MQTT:
   the bus id, the number of attachments, the last error and the latency as attributes;
 - **sensor** *Link latency*: time the server takes to answer (TCP connection to its USB/IP
   port, every check), averaged over the last 5 minutes; the last and the worst values as
-  attributes. A slow or irregular link shows there before the radio suffers.
+  attributes. A slow or irregular link shows there before the radio suffers. Published at
+  most every minute; unknown while the server is silent.
 
 The state is published on `usbip_link/state` (`latency_ms`, `latency_avg_ms`,
 `latency_max_ms`); **Mesh Guardian** reads it and says in *To do* when the radio of a border

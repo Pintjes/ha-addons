@@ -61,10 +61,12 @@ class Fake:
 f = Fake()
 link = ul.Link({"server": "192.168.1.10", "devices": [{"name": "ZBT-2", "hardware_id": "303A:831A"}],
                 "restart_addons": ["core_openthread_border_router"]}, runner=f.run, probe=f.probe, clock=f.clock)
-# premier passage : trouve par VID:PID, attache, pas de redemarrage (premier attachement)
+# premier passage : trouve par VID:PID, attache ; OpenThread redemarre seulement s'il tourne deja (course au boot)
 assert link.check() and f.attached and "attach -r 192.168.1.10 -b 2-3" in f.calls
 st = link.public()["devices"][0]
-assert st["attached"] and st["busid"] == "2-3" and st["attaches"] == 1 and link.restart == []
+assert st["attached"] and st["busid"] == "2-3" and st["attaches"] == 1
+assert link.restart == ["core_openthread_border_router"] and link.restart_if_running is True
+link.restart = []
 # rien ne change : rien a faire
 f.calls.clear()
 assert not link.check() and f.calls == ["port"]
@@ -86,6 +88,7 @@ assert link.check() and f.attached
 kinds = [k for k, _ in link.events]
 assert "attached" in kinds and any("4 min" in txt for _, txt in link.events), link.events
 assert link.restart == ["core_openthread_border_router"] and link.public()["devices"][0]["attaches"] == 2
+assert link.restart_if_running is False   # apres une perte : redemarre dans tous les cas
 # lien coupe sans que le serveur se taise (cable USB debranche cote Windows)
 link.restart, link.events = [], []
 f.attached = False
@@ -99,10 +102,13 @@ assert [k for k, _ in link.events] == ["lost", "not_found"], link.events
 # deja attache au demarrage de l'add-on (redemarrage de l'add-on) : repris tel quel, sans rattacher
 f2 = Fake()
 f2.attached = True
-link2 = ul.Link({"server": "192.168.1.10", "devices": [{"name": "ZBT-2", "bus_id": "2-3"}]}, runner=f2.run, probe=f2.probe,
-                clock=f2.clock)
+link2 = ul.Link({"server": "192.168.1.10", "devices": [{"name": "ZBT-2", "bus_id": "2-3"}],
+                 "restart_addons": ["core_openthread_border_router"]}, runner=f2.run, probe=f2.probe, clock=f2.clock)
 link2.check()
 assert link2.public()["devices"][0]["attached"] and not any(c.startswith("attach") for c in f2.calls)
+assert link2.restart == []   # repris tel quel : aucun redemarrage
+link2.check()
+assert link2.restart == []
 assert ul.fmt_duration(42) == "42 s" and ul.fmt_duration(240) == "4 min" and ul.fmt_duration(7300) == "2 h 01"
 assert ul.slug_of("ZBT-2 (Thread)") == "zbt_2_thread"
 
@@ -119,14 +125,136 @@ assert not link3.check()              # seule la latence change : pas une raison
 assert link3.public()["latency_avg_ms"] == 3.0
 link3.check()
 assert link3.public()["latency_max_ms"] == 30.0 and link3.public()["latency_avg_ms"] == 12.0
-link3.check()                         # serveur muet : latence inconnue, moyenne gardee
-assert link3.public()["latency_ms"] is None and link3.public()["server_ok"] is False
-assert link3.public()["latency_avg_ms"] == 12.0
+assert link3.check()                  # serveur muet : changement, latence inconnue et fenetre videe
+st = link3.public()
+assert st["latency_ms"] is None and st["server_ok"] is False
+assert st["latency_avg_ms"] is None and st["latency_max_ms"] is None and st["devices"][0]["latency_ms"] is None
+assert link3.latencies == []
 link3.check()
-assert link3.public()["latency_ms"] == 3.0 and link3.public()["server_ok"] is True
-assert len(link3.latencies) == 4
+st = link3.public()
+assert st["latency_ms"] == 3.0 and st["server_ok"] is True and st["latency_avg_ms"] == 3.0 and st["latency_max_ms"] == 3.0
+assert len(link3.latencies) == 1
 # l'etat sans latence ne bouge pas avec elle (pour decider de publier)
 assert "latency_ms" not in link3.public(latency=False) and "latency_ms" not in link3.public(latency=False)["devices"][0]
 # vraie sonde : un port ferme ne repond pas
 assert ul.server_up("127.0.0.1", 9, timeout=0.5) is None
+
+# serveur donne par son nom : `usbip port` affiche l'adresse ; reconnu une fois le nom resolu
+f4 = Fake()
+f4.attached = True                     # PORT montre usbip://192.168.1.10
+
+
+def run4(args, timeout=20):
+    if args[1] == "attach":            # deja attache : usbipd refuse un second attachement
+        f4.calls.append(" ".join(args[1:]))
+        raise RuntimeError("usbip: error: Attach Request for 2-3 failed - Device busy (exported)")
+    return Fake.run(f4, args, timeout)
+
+
+resolves = [set(), {"192.168.1.10"}]   # DNS pas pret au premier passage
+link4 = ul.Link({"server": "desktop-serveur.local", "devices": [{"name": "ZBT-2", "hardware_id": "303a:831a"}]},
+                runner=run4, probe=f4.probe, clock=f4.clock, resolver=lambda host: resolves.pop(0))
+link4.check()                          # nom pas encore resolu : le port n'est pas reconnu, l'attachement est refuse
+st = link4.public()["devices"][0]
+assert not st["attached"] and "Device busy" in st["error"] and not link4.resolved
+f4.calls.clear()
+link4.check()                          # resolu : le port est reconnu, aucune tentative d'attachement en boucle
+st = link4.public()["devices"][0]
+assert st["attached"] and st["error"] is None and link4.resolved and resolves == []
+assert not any(c.startswith("attach") for c in f4.calls)
+link4.check()                          # plus de resolution une fois faite (resolves vide : pop leverait)
+assert ul.find_port(ul.parse_port(PORT), {"hardware_id": "303a:831a"}, "192.168.1.99") is None
+assert ul.find_port(ul.parse_port(PORT), {"hardware_id": "303a:831a"}, {"x.lan", "192.168.1.10"})["port"] == "00"
+assert ul.resolve("127.0.0.1") == {"127.0.0.1"}
+
+# publication : changement, evenement, battement ; la latence seule au plus toutes les 60 s
+lat_a, lat_b = {"latency_ms": 1.0}, {"latency_ms": 2.0}
+assert ul.publish_due(True, [], 1000, 990, lat_a, lat_a)
+assert ul.publish_due(False, [("x", "y")], 1000, 990, lat_a, lat_a)
+assert ul.publish_due(False, [], 1000, 1000 - ul.HEARTBEAT_S - 1, lat_a, lat_a)
+assert not ul.publish_due(False, [], 1000, 970, lat_b, lat_a)      # latence bougee il y a 30 s : attendre
+assert ul.publish_due(False, [], 1000, 940, lat_b, lat_a)          # 60 s : publier
+assert not ul.publish_due(False, [], 1000, 900, lat_a, lat_a)      # rien n'a bouge
+
+# redemarrages : apres une perte, toujours ; au premier attachement, seulement les add-ons en marche ou en erreur
+calls = []
+states = {"otbr": "started", "zha": "stopped", "matter": "error", "bad": "boom"}
+
+
+def sup(path, method="GET", timeout=30):
+    calls.append((method, path))
+    slug = path.split("/")[2]
+    if slug == "bad":
+        raise RuntimeError("404")
+    return {"state": states[slug]} if path.endswith("/info") else {}
+
+
+assert ul.do_restarts(["otbr", "zha", "matter", "bad"], True, sup=sup) == ["otbr", "matter"]
+assert ("POST", "/addons/zha/restart") not in calls and ("POST", "/addons/otbr/restart") in calls
+calls.clear()
+assert ul.do_restarts(["otbr", "zha"], False, sup=sup) == ["otbr", "zha"]
+assert all(m == "POST" for m, _ in calls)
+
+# discovery : une entite par appareil, la latence (None = inconnu pour HA, pas une chaine), l'ancienne entite OMR retiree
+disc = ul.discovery([{"name": "ZBT-2"}, {"name": "Dongle d'Ana"}])
+topics = [tp for tp, _ in disc]
+assert topics == ["homeassistant/binary_sensor/usbip_link/zbt_2/config",
+                  "homeassistant/binary_sensor/usbip_link/dongle_d_ana/config",
+                  "homeassistant/sensor/usbip_link/latency/config",
+                  "homeassistant/binary_sensor/usbip_link/omr_prefix/config"]
+zbt = ul.json.loads(disc[0][1])
+assert zbt["unique_id"] == "usbip_link_zbt_2" and zbt["device_class"] == "connectivity"
+assert zbt["state_topic"] == "usbip_link/state" and zbt["availability_topic"] == "usbip_link/state/available"
+assert "selectattr('name', 'eq', 'ZBT-2')" in zbt["value_template"] and zbt["device"]["sw_version"] == ul.VERSION
+assert "'Dongle dAna'" in ul.json.loads(disc[1][1])["value_template"]
+lat = ul.json.loads(disc[2][1])
+assert lat["unique_id"] == "usbip_link_latency" and lat["unit_of_measurement"] == "ms" and lat["state_class"] == "measurement"
+assert "'unknown'" not in lat["value_template"] and "else 'None'" in lat["value_template"]
+assert disc[3][1] == ""
+try:   # le rendu des templates comme HA (Jinja), si jinja2 est la
+    import jinja2
+except ImportError:
+    jinja2 = None
+if jinja2:
+    env = jinja2.Environment()
+    env.filters["tojson"] = ul.json.dumps
+
+    def render(tpl, state):
+        return env.from_string(tpl).render(value_json=state)
+
+    assert render(lat["value_template"], {"latency_avg_ms": None}) == "None"
+    assert render(lat["value_template"], {"latency_avg_ms": 0.9}) == "0.9"
+    devs = {"devices": [{"name": "ZBT-2", "attached": True}]}
+    assert render(zbt["value_template"], devs) == "ON"
+    assert render(zbt["value_template"], {"devices": [{"name": "ZBT-2", "attached": False}]}) == "OFF"
+
+# demarrage de l'add-on, device deja attache : aucun etat "non attache" publie avant le premier passage
+# (sinon Mesh Guardian ecrit « lien coupe » puis « retabli » a chaque redemarrage de USB/IP Link)
+class Client:
+    def __init__(self):
+        self.sent = []
+
+    def publish(self, topic, payload, retain=False):
+        self.sent.append((topic, payload))
+
+
+f5 = Fake()
+f5.attached = True
+link5 = ul.Link({"server": "192.168.1.10", "devices": [{"name": "ZBT-2", "hardware_id": "303a:831a"}]},
+                runner=f5.run, probe=f5.probe, clock=f5.clock)
+mq = ul.Mqtt.__new__(ul.Mqtt)          # sans broker : le client est simule
+mq.link, mq.client = link5, Client()
+mq.on_connect(mq.client, None, None, 0)   # connexion MQTT avant le premier passage
+assert [tp for tp, _ in mq.client.sent if tp == "usbip_link/state"] == []
+assert ("usbip_link/state/available", "online") in mq.client.sent and len(mq.client.sent) == 4   # online + 3 discovery
+mq.publish()
+assert [tp for tp, _ in mq.client.sent if tp == "usbip_link/state"] == []
+link5.check()
+mq.publish()
+states = [ul.json.loads(p) for tp, p in mq.client.sent if tp == "usbip_link/state"]
+assert len(states) == 1 and states[0]["devices"][0]["attached"] is True and states[0]["version"] == ul.VERSION
+mq.client.sent.clear()
+mq.on_connect(mq.client, None, None, 0)   # reconnexion apres le premier passage : etat publie, attache
+states = [ul.json.loads(p) for tp, p in mq.client.sent if tp == "usbip_link/state"]
+assert len(states) == 1 and states[0]["devices"][0]["attached"] is True
 print("OK")

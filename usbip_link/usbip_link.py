@@ -16,7 +16,9 @@ Every `check_interval` seconds:
   restarts: Windows update…) is detached, so that its port is free and the device is attached
   again when the server is back, instead of a dead link the kernel keeps for a long time;
 - after an attachment that follows a loss, the add-ons listed in `restart_addons` are restarted
-  (the OpenThread border router opens its radio at start only).
+  (the OpenThread border router opens its radio at start only); after the first attachment, only
+  those already running (or in error): at the start of Home Assistant they may have started before
+  the device was there. A device found attached already (restart of this add-on) restarts nothing.
 The state is published on MQTT (`usbip_link/state`, retained) with a Home Assistant entity per
 device; Mesh Guardian reads it and says when the radio of a border router is cut off. The time the
 server takes to answer (TCP connection to its USB/IP port) is published too, as the latency of the
@@ -37,7 +39,7 @@ import time
 import urllib.request
 from datetime import datetime
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 LOG = logging.getLogger("usbip_link")
 STATE_TOPIC = "usbip_link/state"
 DISCOVERY = "homeassistant"
@@ -46,6 +48,8 @@ HEARTBEAT_S = 300        # the state is published again this often, even unchang
 RESTART_SETTLE_S = 5     # s: time left to the system to create the serial port before the restarts
 USBIP_PORT = 3240
 LATENCY_SAMPLES = 30     # latency average over this many checks (5 min at 10 s)
+LATENCY_PUBLISH_S = 60   # a change of the latency alone is published at most this often
+RUNNING = ("started", "error")   # states of an add-on restarted after the first attachment
 
 TEXTS = {
     "fr": {
@@ -62,6 +66,8 @@ TEXTS = {
         "Server {server} does not answer (port {port})": "Le serveur {server} ne répond pas (port {port})",
         "Server {server} answers again": "Le serveur {server} répond à nouveau",
         "Add-on {slug} restarted": "Add-on {slug} redémarré",
+        "Add-on {slug} restarted: it started before the device was attached":
+            "Add-on {slug} redémarré : il avait démarré avant l'attachement du périphérique",
         "Cannot restart the add-on {slug}: {err}": "Impossible de redémarrer l'add-on {slug} : {err}",
         "Connected to MQTT": "Connecté à MQTT",
         "No MQTT broker: the state is only in the log": "Pas de broker MQTT : l'état n'est que dans le journal",
@@ -122,9 +128,13 @@ def parse_list(text):
     return out
 
 
-def find_port(ports, dev, server):
+def find_port(ports, dev, servers):
+    """Port of `dev` among `ports`; `servers`: the names the server is shown under by `usbip port`
+    (the address of the option and the addresses it resolves to)."""
+    if isinstance(servers, str):
+        servers = {servers}
     for p in ports:
-        if p["server"] not in (None, server):
+        if p["server"] is not None and p["server"] not in servers:
             continue
         if dev.get("bus_id") and p["busid"] == dev["bus_id"]:
             return p
@@ -144,6 +154,14 @@ def server_up(host, port=USBIP_PORT, timeout=2.0):
         return None
 
 
+def resolve(host):
+    """Addresses of `host` (a name or an address); empty when it cannot be resolved now."""
+    try:
+        return {info[4][0] for info in socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)}
+    except (OSError, UnicodeError):
+        return set()
+
+
 def run(args, timeout=20):
     """Output of a command; raises RuntimeError with its error text when it fails."""
     res = subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
@@ -154,8 +172,11 @@ def run(args, timeout=20):
 
 # ---------------------------------------------------------------- the link
 class Link:
-    def __init__(self, options, runner=run, probe=server_up, clock=time.time):
+    def __init__(self, options, runner=run, probe=server_up, clock=time.time, resolver=resolve):
         self.server = str(options.get("server") or "").strip()
+        self.resolver = resolver
+        self.servers = {self.server}   # + its addresses, once resolved: `usbip port` shows an address
+        self.resolved = False
         self.port = int(options.get("server_port") or USBIP_PORT)
         self.devices = []
         for i, d in enumerate(options.get("devices") or []):
@@ -174,6 +195,8 @@ class Link:
         self.latencies = []      # last LATENCY_SAMPLES answer times, for the average and the worst
         self.events = []       # (kind, text) since the last publish, for the log and MQTT
         self.restart = []      # add-ons to restart after this check
+        self.restart_if_running = False   # True: only those running or in error (first attachment)
+        self.checks = 0        # checks done: nothing is published before the first (attached unknown till then)
 
     def emit(self, kind, text, level=logging.INFO):
         LOG.log(level, text)
@@ -188,6 +211,13 @@ class Link:
         self.latency_ms = round(float(res), 1) if up and not isinstance(res, bool) else None
         if self.latency_ms is not None:
             self.latencies = (self.latencies + [self.latency_ms])[-LATENCY_SAMPLES:]
+        elif not up:
+            self.latencies = []   # server silent: no latency, rather than an average of before
+        if up and not self.resolved:
+            # a name: `usbip port` shows the address; tried again at each check until it resolves
+            addrs = self.resolver(self.server)
+            self.servers |= addrs
+            self.resolved = bool(addrs)
         if up != self.server_ok:
             if up is False:
                 self.emit("server_down", t("Server {server} does not answer (port {port})", server=self.server, port=self.port),
@@ -202,10 +232,10 @@ class Link:
             LOG.debug("usbip port: %s", err)
             ports = []
         exported = None
-        reattached = False
+        reattached = first = False
         for d in self.devices:
             st = self.state[d["name"]]
-            p = find_port(ports, d, self.server)
+            p = find_port(ports, d, self.servers)
             if p and not up and self.dead >= DEAD_CHECKS:
                 # the server restarts: the kernel would keep a dead link for long; free the port
                 try:
@@ -258,9 +288,14 @@ class Link:
                 reattached = True
             else:
                 self.emit("attached", t("{name}: attached ({server} {busid})", name=d["name"], server=self.server, busid=busid))
+                first = first or not st["attached_once"]
             st["attached_once"], st["lost_at"] = True, None
         if reattached:
-            self.restart = list(self.restart_addons)
+            self.restart, self.restart_if_running = list(self.restart_addons), False
+        elif first:
+            # start of Home Assistant: the border router may have opened no radio; restarted if it runs
+            self.restart, self.restart_if_running = list(self.restart_addons), True
+        self.checks += 1
         # the latency moves at each check: published with the rest, not a reason to publish by itself
         return json.dumps(self.public(latency=False), sort_keys=True) != before
 
@@ -270,7 +305,8 @@ class Link:
             st["lost_at"] = self.clock()
 
     def latency(self):
-        """{"latency_ms", "latency_avg_ms", "latency_max_ms"} of the link to the server (None when unknown)."""
+        """{"latency_ms", "latency_avg_ms", "latency_max_ms"} of the link to the server (None when unknown,
+        the server silent included)."""
         avg = round(sum(self.latencies) / len(self.latencies), 1) if self.latencies else None
         return {"latency_ms": self.latency_ms, "latency_avg_ms": avg,
                 "latency_max_ms": max(self.latencies) if self.latencies else None}
@@ -340,36 +376,77 @@ class Mqtt:
             return
         LOG.info(t("Connected to MQTT"))
         client.publish(STATE_TOPIC + "/available", "online", retain=True)
-        dev = {"identifiers": ["usbip_link"], "name": "USB/IP Link", "manufacturer": "Pintjes", "sw_version": VERSION}
-        for d in self.link.devices:
-            s = slug_of(d["name"])
-            cfg = {"name": d["name"], "unique_id": f"usbip_link_{s}", "device_class": "connectivity",
-                   "state_topic": STATE_TOPIC, "availability_topic": STATE_TOPIC + "/available",
-                   "value_template": "{{ 'ON' if (value_json.devices | selectattr('name', 'eq', '%s') | map(attribute='attached') "
-                                     "| first) else 'OFF' }}" % d["name"].replace("'", ""),
-                   "json_attributes_topic": STATE_TOPIC,
-                   "json_attributes_template": "{{ (value_json.devices | selectattr('name', 'eq', '%s') | first) | tojson }}"
-                                               % d["name"].replace("'", ""),
-                   "device": dev}
-            client.publish(f"{DISCOVERY}/binary_sensor/usbip_link/{s}/config", json.dumps(cfg), retain=True)
-        client.publish(f"{DISCOVERY}/sensor/usbip_link/latency/config", json.dumps({
-            "name": "Link latency", "unique_id": "usbip_link_latency", "icon": "mdi:timer-outline",
-            "device_class": "duration", "unit_of_measurement": "ms", "state_class": "measurement",
-            "state_topic": STATE_TOPIC, "availability_topic": STATE_TOPIC + "/available",
-            "value_template": "{{ value_json.latency_avg_ms if value_json.latency_avg_ms is not none else 'unknown' }}",
-            "json_attributes_topic": STATE_TOPIC,
-            "json_attributes_template": "{{ {'last_ms': value_json.latency_ms, 'max_ms': value_json.latency_max_ms,"
-                                        " 'server': value_json.server} | tojson }}",
-            "device": dev}), retain=True)
-        # the OMR prefix entity of 0.2.x: the prefix moved to Thread Anchor, the entity goes away
-        client.publish(f"{DISCOVERY}/binary_sensor/usbip_link/omr_prefix/config", "", retain=True)
+        for topic, payload in discovery(self.link.devices):
+            client.publish(topic, payload, retain=True)
         self.publish()
 
     def publish(self):
-        if self.client is not None:
+        # before the first check every device reads "not attached": published, that is a false "link cut"
+        # for Mesh Guardian at each start of the add-on; the retained state of before stays until then
+        if self.client is not None and self.link.checks:
             state = dict(self.link.public(), version=VERSION,
                          updated=datetime.now().astimezone().isoformat(timespec="seconds"))
             self.client.publish(STATE_TOPIC, json.dumps(state), retain=True)
+
+
+def discovery(devices):
+    """[(topic, payload)] of the Home Assistant MQTT discovery: one connectivity entity per device and
+    the Link latency entity; an empty payload removes the OMR prefix entity of 0.2.x."""
+    dev = {"identifiers": ["usbip_link"], "name": "USB/IP Link", "manufacturer": "Pintjes", "sw_version": VERSION}
+    out = []
+    for d in devices:
+        s = slug_of(d["name"])
+        name = d["name"].replace("'", "")
+        cfg = {"name": d["name"], "unique_id": f"usbip_link_{s}", "device_class": "connectivity",
+               "state_topic": STATE_TOPIC, "availability_topic": STATE_TOPIC + "/available",
+               "value_template": "{{ 'ON' if (value_json.devices | selectattr('name', 'eq', '%s') | map(attribute='attached') "
+                                 "| first) else 'OFF' }}" % name,
+               "json_attributes_topic": STATE_TOPIC,
+               "json_attributes_template": "{{ (value_json.devices | selectattr('name', 'eq', '%s') | first) | tojson }}" % name,
+               "device": dev}
+        out.append((f"{DISCOVERY}/binary_sensor/usbip_link/{s}/config", json.dumps(cfg)))
+    out.append((f"{DISCOVERY}/sensor/usbip_link/latency/config", json.dumps({
+        "name": "Link latency", "unique_id": "usbip_link_latency", "icon": "mdi:timer-outline",
+        "device_class": "duration", "unit_of_measurement": "ms", "state_class": "measurement",
+        "state_topic": STATE_TOPIC, "availability_topic": STATE_TOPIC + "/available",
+        # "None" is the payload Home Assistant takes as unknown; any other text is "not numeric" for it
+        "value_template": "{{ value_json.latency_avg_ms if value_json.latency_avg_ms is not none else 'None' }}",
+        "json_attributes_topic": STATE_TOPIC,
+        "json_attributes_template": "{{ {'last_ms': value_json.latency_ms, 'max_ms': value_json.latency_max_ms,"
+                                    " 'server': value_json.server} | tojson }}",
+        "device": dev})))
+    # the OMR prefix entity of 0.2.x: the prefix moved to Thread Anchor, the entity goes away
+    out.append((f"{DISCOVERY}/binary_sensor/usbip_link/omr_prefix/config", ""))
+    return out
+
+
+def publish_due(changed, events, now, last_pub, latency, last_latency):
+    """True when the state is to be published: a change, an event, the heartbeat, or a latency that
+    moved (at most every LATENCY_PUBLISH_S)."""
+    if changed or events or now - last_pub > HEARTBEAT_S:
+        return True
+    return latency != last_latency and now - last_pub >= LATENCY_PUBLISH_S
+
+
+def do_restarts(slugs, if_running, sup=None):
+    """Restarts the add-ons `slugs`; with `if_running`, only those started or in error (a stopped one
+    finds the device when it starts). Returns the slugs restarted."""
+    sup = sup or supervisor
+    done = []
+    for slug in slugs:
+        try:
+            if if_running:
+                state = (sup(f"/addons/{slug}/info") or {}).get("state")
+                if state not in RUNNING:
+                    LOG.debug("%s: %s, not restarted", slug, state)
+                    continue
+            sup(f"/addons/{slug}/restart", method="POST", timeout=120)
+            LOG.info(t("Add-on {slug} restarted: it started before the device was attached" if if_running
+                       else "Add-on {slug} restarted", slug=slug))
+            done.append(slug)
+        except Exception as err:  # noqa: BLE001
+            LOG.warning(t("Cannot restart the add-on {slug}: {err}", slug=slug, err=err))
+    return done
 
 
 def main():
@@ -396,7 +473,7 @@ def main():
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     interval = max(3, int(options.get("check_interval") or 10))
-    last_pub = 0.0
+    last_pub, last_latency = 0.0, None
     while not stop.is_set():
         try:
             changed = link.check()
@@ -406,16 +483,12 @@ def main():
         if link.restart:
             todo, link.restart = link.restart, []
             stop.wait(RESTART_SETTLE_S)
-            for slug in todo:
-                try:
-                    supervisor(f"/addons/{slug}/restart", method="POST", timeout=120)
-                    LOG.info(t("Add-on {slug} restarted", slug=slug))
-                except Exception as err:  # noqa: BLE001
-                    LOG.warning(t("Cannot restart the add-on {slug}: {err}", slug=slug, err=err))
-        if changed or link.events or time.time() - last_pub > HEARTBEAT_S:
+            do_restarts(todo, link.restart_if_running)
+        latency = link.latency()
+        if publish_due(changed, link.events, time.time(), last_pub, latency, last_latency):
             link.events = []
             mq.publish()
-            last_pub = time.time()
+            last_pub, last_latency = time.time(), latency
         stop.wait(interval)
     # the devices stay attached: a restart of the add-on must not cut the radio of the border router
 

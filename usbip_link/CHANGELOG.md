@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.3.1] - 2026-11-17
+
+### Fixed
+
+- At each start of the add-on, a device attached already was published as not attached
+  before the first check (Mesh Guardian then wrote "link cut" and "back" in the same
+  second): the state is now published only after the first check.
+- *Link latency* entity: without a measure it reads unknown (payload `None`) instead of the
+  text `unknown`, which Home Assistant takes as not numeric.
+- Server silent: the latency (`latency_ms`, `latency_avg_ms`, `latency_max_ms`) is unknown
+  and its 5-minute window emptied, instead of the average of before.
+- `server` given as a name: `usbip port` shows the address, so an attached device was not
+  recognised and attached again in a loop; the name is resolved (again at each check until
+  it resolves) and the device recognised under its address.
+
+### Changed
+
+- First attachment of a device (start of Home Assistant): the add-ons of `restart_addons`
+  that already run, or are in error, are restarted once, the border router having perhaps
+  started before the device was there. A device found attached already (restart of this
+  add-on) restarts nothing; an attachment after a loss restarts them all, as before.
+- A change of the latency alone is published at most every 60 s (the heartbeat stays 5 min).
+
+### Docs
+
+- Windows: the installer of usbipd-win adds a firewall rule `usbipd` (local subnet) that
+  adds up with the one limited to Home Assistant: to be disabled or limited too.
+
 ## [0.3.0] - 2026-11-17
 
 ### Added
