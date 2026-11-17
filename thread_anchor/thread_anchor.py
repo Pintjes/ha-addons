@@ -30,17 +30,20 @@ import socket
 import threading
 import time
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 LOG = logging.getLogger("thread_anchor")
 STATE_TOPIC = "thread_anchor/state"
 DISCOVERY = "homeassistant"
 OTBR_ADDON = "core_openthread_border_router"
 PREFERENCES = ("high", "med", "low")
+ULA = ipaddress.IPv6Network("fc00::/7")   # local prefixes: the only ones accepted as omr_prefix
 DOCKER_SOCK = "/run/docker.sock"
+MEMORY_FILE = "/data/anchor.json"         # since when the prefix is anchored: kept over a restart
 TICK_S = 5               # s between two looks at the border router container (restart detection)
 HEARTBEAT_S = 300        # the state is published again this often, even unchanged
+MQTT_RETRY_S = 60        # s before the MQTT broker is looked for again when it was not found
 
 TEXTS = {
     "fr": {
@@ -49,6 +52,14 @@ TEXTS = {
             "Pas d'omr_prefix : le border router est seulement observé, rien n'est imposé",
         "Invalid omr_prefix {p}: {err}": "omr_prefix {p} invalide : {err}",
         "Invalid omr_preference {p}: high, med or low": "omr_preference {p} invalide : high, med ou low",
+        "an OMR prefix is a /64": "un préfixe OMR est un /64",
+        "not a local prefix (ULA, fc00::/7): nothing is set":
+            "ce n'est pas un préfixe local (ULA, fc00::/7) : rien n'est imposé",
+        "The network does not follow: it favors {p} ({prf}) instead of {w} ({wprf})":
+            "Le réseau ne suit pas : il retient {p} ({prf}) au lieu de {w} ({wprf})",
+        "The network follows again: it favors {p} ({prf})": "Le réseau suit de nouveau : il retient {p} ({prf})",
+        "No MQTT broker yet ({err}): the state is only in the log, tried again every {s} s":
+            "Pas encore de broker MQTT ({err}) : l'état n'est que dans le journal, nouvel essai toutes les {s} s",
         "OMR prefix {p} (preference {prf}) set on the border router (it was: {was})":
             "Préfixe OMR {p} (préférence {prf}) imposé au border router (il était : {was})",
         "OMR prefix {p} (preference {prf}) in place on the border router":
@@ -61,7 +72,6 @@ TEXTS = {
         "No access to the Docker API ({err}); turn Protection mode off":
             "Pas d'accès à l'API Docker ({err}) ; désactiver le mode protection",
         "Connected to MQTT": "Connecté à MQTT",
-        "No MQTT broker: the state is only in the log": "Pas de broker MQTT : l'état n'est que dans le journal",
     },
 }
 LANG = "en"
@@ -187,7 +197,7 @@ def parse_omrprefix(text):
 
 # ---------------------------------------------------------------- the anchor
 class Anchor:
-    def __init__(self, options, docker=None, clock=time.time):
+    def __init__(self, options, docker=None, clock=time.time, memory=None):
         self.prefix, self.config_error = None, None
         raw = str(options.get("omr_prefix") or "").strip()
         self.preference = str(options.get("omr_preference") or "high").strip().lower()
@@ -199,7 +209,10 @@ class Anchor:
             try:
                 net = ipaddress.IPv6Network(raw, strict=True)
                 if net.prefixlen != 64:
-                    raise ValueError("an OMR prefix is a /64")
+                    raise ValueError(t("an OMR prefix is a /64"))
+                if not net.subnet_of(ULA):
+                    # a global prefix published by mistake would be worse than none
+                    raise ValueError(t("not a local prefix (ULA, fc00::/7): nothing is set"))
                 self.prefix = str(net)
             except ValueError as err:
                 self.config_error = t("Invalid omr_prefix {p}: {err}", p=raw, err=err)
@@ -215,6 +228,9 @@ class Anchor:
         self.applied = 0
         self.last_check = None
         self.events = []
+        self.unfollowed = False      # the "network does not follow" warning was given for this episode
+        self.memory = memory         # file that keeps anchored_since over a restart of the add-on
+        self.anchored_since = self._remember()
 
     @property
     def enabled(self):
@@ -223,6 +239,43 @@ class Anchor:
     def enforced(self):
         return self.enabled and self.mode == "custom" and self.current == self.prefix \
             and self.current_prf == self.preference
+
+    def followed(self):
+        """The whole network favors the anchored prefix, with its preference."""
+        return self.enforced() and self.favored == self.prefix and self.favored_prf == self.preference
+
+    def _remember(self):
+        """anchored_since of the last run, when it was for the same prefix and preference."""
+        if not (self.memory and self.enabled):
+            return None
+        try:
+            with open(self.memory, encoding="utf-8") as f:
+                kept = json.load(f)
+            if kept.get("prefix") == self.prefix and kept.get("preference") == self.preference:
+                since = kept.get("anchored_since")
+                datetime.fromisoformat(since)
+                return since
+        except (OSError, ValueError, TypeError, AttributeError) as err:
+            LOG.debug("memory: %s", err)
+        return None
+
+    def _since(self, since):
+        """Start of the unbroken period the prefix is in place (None: seen lost), kept in the memory file."""
+        if since == self.anchored_since:
+            return
+        self.anchored_since = since
+        if not self.memory:
+            return
+        try:
+            tmp = self.memory + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"prefix": self.prefix, "preference": self.preference, "anchored_since": since}, f)
+            os.replace(tmp, self.memory)
+        except OSError as err:
+            LOG.debug("memory: %s", err)
+
+    def _now_iso(self):
+        return datetime.fromtimestamp(self.clock(), timezone.utc).astimezone().isoformat(timespec="seconds")
 
     def emit(self, kind, text, level=logging.INFO):
         LOG.log(level, text)
@@ -274,27 +327,45 @@ class Anchor:
             self.emit("otbr_restart", t("Border router restarted: OMR prefix checked again"))
         try:
             self.mode, self.current, self.current_prf = parse_omrconfig(self._otctl("br", "omrconfig"))
+            applied_now = False
             if self.enabled and not self.enforced():
+                self._since(None)   # read, and not in place: the anchoring is seen lost
                 was = f"{self.mode} {self.current or ''} {self.current_prf or ''}".strip()
                 out = self._otctl("br", "omrconfig", "custom", self.prefix, self.preference)
                 if "Done" not in out:
                     raise RuntimeError((out.strip().splitlines() or ["(empty)"])[-1])
                 self.applied += 1
                 self.applied_at = self.clock()
+                applied_now, self.unfollowed = True, False
                 self.mode, self.current, self.current_prf = parse_omrconfig(self._otctl("br", "omrconfig"))
                 self.emit("anchor_set", t("OMR prefix {p} (preference {prf}) set on the border router (it was: {was})",
                                           p=self.prefix, prf=self.preference, was=was))
             elif self.enforced() and not was_ok:
                 self.emit("anchor_ok", t("OMR prefix {p} (preference {prf}) in place on the border router",
                                          p=self.prefix, prf=self.preference))
+            if self.enforced() and not self.anchored_since:
+                self._since(self._now_iso())
+            favored_read = False
             try:
                 pr = parse_omrprefix(self._otctl("br", "omrprefix"))
                 self.favored, self.favored_prf, self.local = pr["favored"], pr["favored_preference"], pr["local"]
+                favored_read = True
             except Exception as err:  # noqa: BLE001 - the anchor itself still works
                 LOG.debug("omrprefix: %s", err)
                 self.favored = self.favored_prf = self.local = None
             if self.favored and (self.favored, self.favored_prf) != was_favored:
                 self.emit("favored", t("The network favors {p} ({prf})", p=self.favored, prf=self.favored_prf or "?"))
+            if self.followed():
+                if self.unfollowed:
+                    self.unfollowed = False
+                    self.emit("follow_back", t("The network follows again: it favors {p} ({prf})",
+                                               p=self.favored, prf=self.favored_prf))
+            elif self.enforced() and favored_read and not applied_now and not self.unfollowed:
+                # once per episode, and not in the pass that set the prefix: the network needs a moment
+                self.unfollowed = True
+                self.emit("follow_lost", t("The network does not follow: it favors {p} ({prf}) instead of {w} ({wprf})",
+                                           p=self.favored or "-", prf=self.favored_prf or "?", w=self.prefix,
+                                           wprf=self.preference), logging.WARNING)
             self.error = None
         except DockerError as err:
             if str(err).startswith(("403", "[Errno 2]", "[Errno 13]")):
@@ -320,7 +391,7 @@ class Anchor:
                 "current": self.current, "current_preference": self.current_prf, "enforced": self.enforced(),
                 "favored": self.favored, "favored_preference": self.favored_prf, "local": self.local,
                 "applied": self.applied, "applied_at": self.applied_at, "otbr_started_at": self.started_at,
-                "error": self.error}
+                "error": self.error, "anchored_since": self.anchored_since, "followed": self.followed()}
 
 
 # ---------------------------------------------------------------- Home Assistant side
@@ -334,24 +405,63 @@ def supervisor(path, method="GET", timeout=30):
     return json.loads(body).get("data", {}) if body else {}
 
 
+def _paho_client():
+    import paho.mqtt.client as mqtt   # noqa: PLC0415
+    return mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="thread_anchor")
+
+
 class Mqtt:
-    def __init__(self, anchor):
-        self.anchor, self.client = anchor, None
+    """The state on MQTT. The broker is looked for again every MQTT_RETRY_S until it is found
+    (`start`, called at every tick); once the client exists, paho reconnects by itself."""
+
+    def __init__(self, anchor, service=None, factory=_paho_client, clock=time.time):
+        self.anchor, self.client, self.clock = anchor, None, clock
+        self.service = service or (lambda: supervisor("/services/mqtt"))
+        self.factory = factory
+        self.next_try, self.last_error = 0.0, None
+
+    def start(self):
+        """True when the MQTT client exists (made now or before)."""
+        if self.client is not None:
+            return True
+        if self.clock() < self.next_try:
+            return False
+        c = None
         try:
-            import paho.mqtt.client as mqtt   # noqa: PLC0415
-            conf = supervisor("/services/mqtt")
-        except Exception as err:  # noqa: BLE001
-            LOG.warning("%s (%s)", t("No MQTT broker: the state is only in the log"), err)
+            conf = self.service()
+            c = self.factory()
+            if conf.get("username"):
+                c.username_pw_set(conf["username"], conf.get("password"))
+            c.will_set(STATE_TOPIC + "/available", "offline", retain=True)
+            c.on_connect = self.on_connect
+            c.reconnect_delay_set(1, 60)
+            c.connect_async(conf.get("host", "core-mosquitto"), int(conf.get("port", 1883)), keepalive=60)
+            c.loop_start()
+        except Exception as err:  # noqa: BLE001 - no broker yet, add-on stopped, bad answer…
+            self.next_try = self.clock() + MQTT_RETRY_S
+            if str(err) != self.last_error:   # said once, not every minute
+                LOG.warning(t("No MQTT broker yet ({err}): the state is only in the log, tried again every {s} s",
+                              err=err, s=MQTT_RETRY_S))
+            self.last_error = str(err)
+            return False
+        self.client, self.last_error = c, None
+        return True
+
+    def stop(self):
+        """Clean stop: `offline` said at once (the will is only sent when the connection is lost)."""
+        c, self.client = self.client, None
+        if c is None:
             return
-        c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="thread_anchor")
-        if conf.get("username"):
-            c.username_pw_set(conf["username"], conf.get("password"))
-        c.will_set(STATE_TOPIC + "/available", "offline", retain=True)
-        c.on_connect = self.on_connect
-        c.reconnect_delay_set(1, 60)
-        c.connect_async(conf.get("host", "core-mosquitto"), int(conf.get("port", 1883)), keepalive=60)
-        c.loop_start()
-        self.client = c
+        try:
+            info = c.publish(STATE_TOPIC + "/available", "offline", retain=True)
+            info.wait_for_publish(2)
+        except Exception as err:  # noqa: BLE001 - not connected: the retained value stays as it is
+            LOG.debug("offline: %s", err)
+        for end in (c.disconnect, c.loop_stop):
+            try:
+                end()
+            except Exception as err:  # noqa: BLE001
+                LOG.debug("mqtt stop: %s", err)
 
     def on_connect(self, client, userdata, flags, reason_code, properties=None):
         if getattr(reason_code, "is_failure", False):
@@ -388,7 +498,7 @@ def main():
     if options.get("debug"):
         logging.getLogger().setLevel(logging.DEBUG)
     LOG.info(t("Thread Anchor {v} starting", v=VERSION))
-    anchor = Anchor(options)
+    anchor = Anchor(options, memory=MEMORY_FILE)
     if anchor.config_error:
         LOG.error(anchor.config_error)
     elif not anchor.enabled:
@@ -399,6 +509,7 @@ def main():
     last_pub = 0.0
     while not stop.is_set():
         changed = False
+        mq.start()
         try:
             if anchor.restarted():
                 changed = anchor.check("restart")
@@ -411,6 +522,7 @@ def main():
             mq.publish()
             last_pub = time.time()
         stop.wait(TICK_S)
+    mq.stop()
 
 
 if __name__ == "__main__":

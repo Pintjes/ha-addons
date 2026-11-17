@@ -48,7 +48,7 @@ routers follow.
 
 | Option | |
 |---|---|
-| `omr_prefix` | `/64` prefix to anchor; empty: watch only |
+| `omr_prefix` | local `/64` prefix to anchor (ULA, in `fc00::/7`: it starts with `fc` or `fd`); empty: watch only. Any other prefix is refused and nothing is set |
 | `omr_preference` | `high` (default), `med` or `low` |
 | `otbr_addon` | slug of the border router add-on (`core_openthread_border_router`) |
 | `check_interval` | seconds between two readings (30) |
@@ -77,6 +77,24 @@ With MQTT (state on `thread_anchor/state`, retained):
   prefix of the options; attributes: mode, current prefix and preference,
   prefix favored by the network, number of times it was set, last error.
 - **sensor** *Favored OMR prefix*: the prefix the whole network uses.
+
+Without a broker at start, the add-on works all the same and looks for it again
+every 60 s. `thread_anchor/state/available` says `online` / `offline`: `offline`
+is published when the add-on stops; the retained state is then left as it was.
+
+Fields of `thread_anchor/state` (JSON):
+
+| Field | |
+|---|---|
+| `wanted`, `preference` | prefix and preference of the options (`wanted` empty: watch only) |
+| `mode`, `current`, `current_preference` | what the border router holds (`auto`, `custom`…) |
+| `enforced` | the border router holds the prefix of the options |
+| `anchored_since` | since when it has held it without a break (ISO 8601 with the time zone). Filled when the prefix is found in place, even set by something else; kept over a restart of the add-on and while the border router cannot be read; empty once the prefix is read and is no longer in place |
+| `favored`, `favored_preference`, `local` | prefix the network favors, and the border router's own |
+| `followed` | `enforced`, and the network favors that prefix with that preference. When it is false while `enforced` is true, another border router wins: a warning is in the log |
+| `applied`, `applied_at` | times the prefix was set since the add-on started, and the last time (Unix time) |
+| `otbr_started_at`, `error` | start of the border router container, last error |
+| `version`, `updated` | version of the add-on, time of this state |
 
 **Mesh Guardian** reads this state: it says in *To do* when the anchor is no
 longer in place, and in its log when it is lost and back.
