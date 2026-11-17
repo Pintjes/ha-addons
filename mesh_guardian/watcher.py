@@ -77,7 +77,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.28.0"
+VERSION = "2.28.1"
 OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
 OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
@@ -261,6 +261,7 @@ class Watch:
         self.prev_node_prefixes = None
         self.omr_left = {}      # OMR prefix a border router stopped publishing -> (time, border router)
         self.omr_changes = []   # times of the OMR prefix changes (24h)
+        self._prefixes_dirty = False   # a node prefix changed: prefixes.json to write again
         self.dirty = True
         self.discovered_br = set()
         self.mqtt = None
@@ -990,9 +991,10 @@ class Watch:
             n["addrs"] = addrs
             before = n.get("prefix")
             n["prefix"] = prefixes[0] if prefixes else before
+            if n["prefix"] != before:
+                # saved by check_node_prefixes: one write for a whole renumbering, not one per node
+                self._prefixes_dirty = True
             self.dirty = True
-        if n["prefix"] != before:
-            self._save_prefixes()
 
     def node_name(self, node):
         """"Name (area)" of the node according to Home Assistant, or None."""
@@ -1224,6 +1226,9 @@ class Watch:
         self.prev_leaders, self.prev_partitions, self.prev_omr = leaders, parts, omr
 
     def check_node_prefixes(self):
+        if self._prefixes_dirty:
+            self._prefixes_dirty = False
+            self._save_prefixes()
         s = self.summary()
         keys = tuple(sorted(s["node_prefixes"]))
         if self.quiet:

@@ -11,6 +11,7 @@ being replaced by an empty state at the next save.
 import json
 import logging
 import os
+import threading
 import time
 
 from i18n import t
@@ -22,12 +23,34 @@ def save_json(path, data, **kw):
     """Write data as JSON to path. Raises OSError (or TypeError / ValueError for data
     that is not JSON) and then leaves the file as it was."""
     text = json.dumps(data, **kw)   # built first: an error here does not touch the file
-    tmp = f"{path}.tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        f.write(text)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)
+    # two threads saving the same file at once: one after the other, each with its own
+    # temporary file (they renamed each other's: "No such file")
+    with _lock_of(path):
+        _write(path, text)
+
+
+_LOCKS, _LOCKS_LOCK = {}, threading.Lock()
+
+
+def _lock_of(path):
+    with _LOCKS_LOCK:
+        return _LOCKS.setdefault(os.path.abspath(path), threading.Lock())
+
+
+def _write(path, text):
+    tmp = f"{path}.{os.getpid()}-{threading.get_ident()}.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
     try:   # the new name itself must reach the disk
         fd = os.open(os.path.dirname(path) or ".", os.O_RDONLY)
         try:

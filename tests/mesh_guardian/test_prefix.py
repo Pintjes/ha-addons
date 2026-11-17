@@ -134,4 +134,23 @@ r._cached = lambda nid: {"0/49/1": [{"networkID": "AAA=", "connected": True}], "
 res = r.recover_node("000000000000005A")
 assert res == {"result": "stale", "prefix": OLD, "br": "Google TV Salon", "at": "06:17"}, res
 assert not r.busy.locked() and not r.recovering
+
+# ecritures simultanees du meme fichier (2.28.0 : « No such file » au demarrage) : aucune ne perd
+import store  # noqa: E402
+path, errors = os.path.join(TMP, "same.json"), []
+
+
+def writer(i):
+    for _ in range(30):
+        try:
+            store.save_json(path, {"i": i})
+        except OSError as err:
+            errors.append(err)
+
+
+ths = [threading.Thread(target=writer, args=(i,)) for i in range(6)]
+[x.start() for x in ths]
+[x.join() for x in ths]
+assert not errors, errors[:2]
+assert store.load_json(path)["i"] in range(6) and not [f for f in os.listdir(TMP) if f.endswith(".tmp")]
 print("OK")

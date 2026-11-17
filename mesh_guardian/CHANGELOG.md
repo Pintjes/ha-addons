@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.28.1] - 2026-11-17
+
+### Fixed
+
+- Files in /data: two threads saving the same file at once no longer fail ("No such file or directory" on the temporary file, seen at the first start of 2.28.0 with `prefixes.json`): the writes of one file wait for each other, each with its own temporary file. The prefixes of the nodes are written once per renumbering, not once per node.
+
 ## [2.28.0] - 2026-11-17
 
 ### Added
