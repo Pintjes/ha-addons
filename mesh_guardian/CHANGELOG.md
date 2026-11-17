@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.36.0] - 2026-11-17
+
+### Changed
+
+- **Panel of a border router put in order**, in the sections of the panel of a node (they fold, kept in the browser): on top its state, Thread network and role; then **OMR prefix** (shown once: the fixed prefix, anchored since, before / since side by side; another border router: the prefix it announces), **Stability** (detaches of the last day and the list of the last 7 days together), **Network** (same subnet, primary, last contact, radio over USB/IP), the nodes that go through it or are attached to it (only when there are some), technical details. A small "i" says what "End device" and "Primary" mean for a border router. "Remove" says what it does ("Remove from the list"), sits at the bottom and only shows for an offline border router (it is confirmed, as before).
+- **Border router cards**: one grid, same width, the same lines in every card (name; role; seen when and radio link), the fixed OMR prefix as a badge under them on the card of Home Assistant. Same words, colors and text sizes as before.
+
 ## [2.35.2] - 2026-11-17
 
 ### Fixed

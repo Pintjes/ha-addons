@@ -97,14 +97,19 @@
   button.open { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: inherit; cursor: pointer; }
   .issue .what { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 
-  .brs { display: flex; flex-wrap: wrap; gap: 8px; }
-  .br { padding: 8px 12px; display: flex; gap: 10px; align-items: center; cursor: pointer; }
-  .br small { color: var(--mut); display: block; }
-  .br .anc1.warn { color: var(--warn, #b26a00); }
+  /* border router cards: one grid, same width, same three lines (name and badge; role; state) */
+  .brs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(270px, 100%), 1fr)); gap: 8px; }
+  .br { padding: 10px 12px; display: flex; gap: 10px; align-items: flex-start; cursor: pointer; min-width: 0; }
+  .br .ic { margin-top: 1px; }
+  .br .brx { flex: 1; min-width: 0; display: grid; gap: 2px; }
+  .br .brn { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .br .brn b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .br .brx > .st { justify-self: start; margin-top: 4px; }
+  .br small { color: var(--mut); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* small "i" (the info icon of the page, muted): its text on hover */
+  .tipi { display: inline-flex; vertical-align: -2px; margin-left: 4px; color: var(--mut); cursor: help; }
+  .tipi svg { width: 1em; height: 1em; }
   .sheet .anc p { margin: 4px 0; }
-  .sheet .anc .facts { display: grid; gap: 4px; }
-  .sheet .anc .facts div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
-  .sheet .anc .facts b { font-weight: 600; text-align: right; }
 
   .st { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px 2px 6px; border-radius: 999px; font-size: 12.5px; font-weight: 500; white-space: nowrap; }
   .st.ok { background: var(--ok-soft); } .st.ok svg { color: var(--ok); }
@@ -349,9 +354,12 @@ const T = {
     
     storm:"Thread storm: pings spaced out, sweep paused.",
     br_open:"Details of this border router", br_state:"State", br_online:"online", br_offline_since:"offline since {t}", br_primary_l:"Primary", yes:"yes", no:"no",
+    br_end_tip:"End device: attached to a router, it does not relay the messages of the others. Usual for the border router of Home Assistant when other border routers are routers.",
+    br_primary_tip:"Primary: the border router that links the Thread network to the home network for group messages (primary backbone border router, multicast). One per network; another one takes over if it goes away.",
+    br_prefix_own:"Prefix it announces", br_stab:"Stability", br_netw:"Network", br_usb_l:"Radio over USB/IP", br_ms:"{v} ms on average",
     br_net:"Thread network", br_prefix:"Prefix", br_last:"Last contact", br_subnet:"Same subnet as Home Assistant", br_det:"Detaches (24h)", br_detaches:"Detaches of the last 7 days",
     br_through:"Nodes going through it ({n})", br_children:"Nodes attached to it ({n})", br_model:"Model", br_id:"Identifier", br_ext:"Extended address", br_xpan:"Extended PAN ID", br_part:"Partition", br_addr:"Addresses", br_if:"Thread interface",
-    br_src:{mdns:"announcement", thread:"heard over Thread"}, br_remove:"Remove", br_remove_tip:"Remove this border router from the list. It comes back by itself if it is heard again.", br_remove_online:"Only an offline border router can be removed",
+    br_src:{mdns:"announcement", thread:"heard over Thread"}, br_remove:"Remove from the list", br_remove_tip:"Remove this border router from the list. It comes back by itself if it is heard again.", br_remove_online:"Only an offline border router can be removed",
     br_remove_confirm:"{n}: remove this border router from the list? It comes back by itself if it is heard again.", br_removed:"{n} removed from the list", br_offline_adv:"Check its power and its network, or remove it from the list if you took it away on purpose.",
     brs:"Border routers", br_usb:"radio over USB/IP {v} ms", br_seen:"seen {t}", br_never:"never seen", br_primary:"primary", offline:"offline", other_subnet:"other subnet than Home Assistant",
     nodes:"Nodes", search:"Filter: name, area, model…", c_all:"All", c_issues:"To handle", c_bat:"On battery",
@@ -444,9 +452,12 @@ const T = {
     
     storm:"Tempête Thread : pings espacés, balayage suspendu.",
     br_open:"Détails de ce border router", br_state:"État", br_online:"en ligne", br_offline_since:"hors ligne depuis {t}", br_primary_l:"Primaire", yes:"oui", no:"non",
+    br_end_tip:"Appareil final : rattaché à un routeur, il ne relaie pas les messages des autres. Normal pour le border router de Home Assistant quand d'autres border routers sont routeurs.",
+    br_primary_tip:"Primaire : le border router qui relie le réseau Thread au réseau de la maison pour les messages de groupe (BBR primaire, multicast). Un seul par réseau ; un autre prend le relais s'il disparaît.",
+    br_prefix_own:"Préfixe qu'il annonce", br_stab:"Stabilité", br_netw:"Réseau", br_usb_l:"Radio via USB/IP", br_ms:"{v} ms en moyenne",
     br_net:"Réseau Thread", br_prefix:"Préfixe", br_last:"Dernier contact", br_subnet:"Même sous-réseau que Home Assistant", br_det:"Décrochages (24 h)", br_detaches:"Décrochages des 7 derniers jours",
     br_through:"Nodes qui passent par lui ({n})", br_children:"Nodes rattachées à lui ({n})", br_model:"Modèle", br_id:"Identifiant", br_ext:"Adresse étendue", br_xpan:"Extended PAN ID", br_part:"Partition", br_addr:"Adresses", br_if:"Interface Thread",
-    br_src:{mdns:"annonce", thread:"entendu en Thread"}, br_remove:"Retirer", br_remove_tip:"Retirer ce border router de la liste. Il revient tout seul s'il est de nouveau entendu.", br_remove_online:"Seul un border router hors ligne peut être retiré",
+    br_src:{mdns:"annonce", thread:"entendu en Thread"}, br_remove:"Retirer de la liste", br_remove_tip:"Retirer ce border router de la liste. Il revient tout seul s'il est de nouveau entendu.", br_remove_online:"Seul un border router hors ligne peut être retiré",
     br_remove_confirm:"{n} : retirer ce border router de la liste ? Il revient tout seul s'il est de nouveau entendu.", br_removed:"{n} retiré de la liste", br_offline_adv:"Vérifier son alimentation et son réseau, ou le retirer de la liste s'il a été enlevé exprès.",
     brs:"Border routers", br_usb:"radio via USB/IP {v} ms", br_seen:"vu {t}", br_never:"jamais vu", br_primary:"primaire", offline:"hors ligne", other_subnet:"autre sous-réseau que Home Assistant",
     nodes:"Nodes", search:"Filtrer : nom, pièce, modèle…", c_all:"Toutes", c_issues:"À traiter", c_bat:"Sur pile",
@@ -728,12 +739,12 @@ function anchorLines(a) {
     // under one day: the counts as they are ("1 node lost in 45 min"); a rate per day only from one day on
     const dur = s => s < 3600 ? F("anc_min", {m: Math.max(1, Math.round(s / 60))}) : F("anc_hmin", {h: Math.floor(s / 3600), m: Math.round(s % 3600 / 60)});
     const cnt = (n, one, many) => F(n === 1 ? one : many, {n});
-    const row = (k, x) => !x ? "" : (x.seconds ?? x.days * 86400) < 86400
-      ? `<div><span>${esc(L(k + "0"))}</span><b class="num">${esc(F("anc_raw", {o: cnt(x.omr, "anc_omr1", "anc_omrN"), l: cnt(x.lost, "anc_lost1", "anc_lostN"), d: dur(x.seconds ?? x.days * 86400)}))}</b></div>`
-      : `<div><span>${esc(F(k, {d: x.days}))}</span><b class="num">${esc(F("anc_rate", {o: x.omr_per_day, l: x.lost_per_day}))}</b></div>`;
+    // before the anchoring / since: label above, value below, like every other value of a panel
+    const row = (k, x) => !x ? null : (x.seconds ?? x.days * 86400) < 86400
+      ? [esc(L(k + "0")), `<span class="num">${esc(F("anc_raw", {o: cnt(x.omr, "anc_omr1", "anc_omrN"), l: cnt(x.lost, "anc_lost1", "anc_lostN"), d: dur(x.seconds ?? x.days * 86400)}))}</span>`]
+      : [esc(F(k, {d: dec(x.days)})), `<span class="num">${esc(F("anc_rate", {o: dec(x.omr_per_day), l: dec(x.lost_per_day)}))}</span>`];
     const when = new Date(r.anchored_since).toLocaleString(LANG, {dateStyle: "short", timeStyle: "short"});
-    lines.push(`<p class="mut">${esc(F("anc_since", {d: when}))}</p>
-      <div class="facts">${row("anc_before", r.before)}${row("anc_after", r.after)}</div>`);
+    lines.push(`<p class="mut">${esc(F("anc_since", {d: when}))}</p>` + grid([row("anc_before", r.before), row("anc_after", r.after)].filter(Boolean)));
   }
   return lines;
 }
@@ -824,25 +835,35 @@ function renderBrs() {
   const brs = D.border_routers || [];
   $("#brTitle").textContent = L("brs");
   $("#brTitle").style.display = brs.length ? "" : "none";
+  // every card has the same three lines: name (and the badge of the anchored prefix); role in plain
+  // words (and "main"); state (seen when, radio link). Past detaches are a note in "Good to know"
   $("#brs").innerHTML = brs.map(b => {
-    // the card shows the state now; past detaches are a note in "To handle"
-    const k = !b.online ? "bad" : b.role === "detached" || b.same_subnet === false ? "warn" : "ok";
-    const extra = [b.online ? (L("roles")[b.role] || b.role) : L("offline")];
-    if (b.primary) extra.push(L("br_primary"));
-    if (b.same_subnet === false) extra.push(L("other_subnet"));
-    extra.push(b.last_contact ? F("br_seen", {t: ago(b.last_contact)}) : L("br_never"));
+    const k = brState(b);
+    const role = !b.online ? L("offline") : brRole(b.role) + (b.primary ? " · " + L("br_primary") : "");
+    const seen = [b.online ? (b.last_contact ? F("br_seen", {t: ago(b.last_contact)}) : L("br_never"))
+      : F("br_offline_since", {t: b.since ? dt(b.since) : "?"})];
     // radio carried by USB/IP Link: average latency of the link (5 min)
     const u = b.usb_latency;
-    if (u && u.avg_ms != null) extra.push(F("br_usb", {v: u.avg_ms < 10 ? dec(u.avg_ms) : Math.round(u.avg_ms)}));
-    // the border router of Home Assistant carries the anchoring of the OMR prefix (Thread Anchor):
-    // one short line on the card, the whole of it in its panel
-    const a = b.ha ? D.anchor : null;
-    const anc = !a ? "" : a.proposal ? `<small class="anc1">${esc(L("anc_short_prop"))}</small>`
-      : a.wanted ? `<small class="anc1 ${a.enforced ? "" : "warn"}">${esc(L(a.enforced ? "anc_short_ok" : "anc_short_out"))}</small>` : "";
+    if (b.online && u && u.avg_ms != null) seen.push(F("br_usb", {v: u.avg_ms < 10 ? dec(u.avg_ms) : Math.round(u.avg_ms)}));
+    if (b.same_subnet === false) seen.push(L("other_subnet"));
     return `<div class="card br" data-br="${esc(b.id)}" role="button" tabindex="0" title="${esc(L("br_open"))}"><span class="st ${k} ic">${k === "ok" ? IC.ok : k === "bad" ? IC.bad : IC.warn}</span>
-      <div><b>${esc(b.name)}</b>${b.role === "leader" ? ` <span title="Leader">${IC.crown}</span>` : ""}<small>${extra.map(esc).join(" · ")}</small>${anc}</div></div>`;
+      <div class="brx"><span class="brn"><b>${esc(b.name)}</b>${b.role === "leader" && b.online ? `<span title="Leader">${IC.crown}</span>` : ""}</span>
+      <small>${esc(role)}</small><small>${esc(seen.join(" · "))}</small>${b.ha ? ancBadge(D.anchor) : ""}</div></div>`;
   }).join("");
 }
+// state of a border router: offline; detached or on another subnet; fine
+const brState = b => !b.online ? "bad" : b.role === "detached" || b.same_subnet === false ? "warn" : "ok";
+// its Thread role: the words of the node list
+const brRole = role => (L("roles") || {})[role] || role || "—";
+// the anchoring of the OMR prefix (Thread Anchor), carried by the border router of Home Assistant:
+// a badge, the one of the states ("available"…)
+function ancBadge(a) {
+  if (!a || !(a.proposal || a.wanted)) return "";
+  const [k, txt] = a.proposal ? ["warn", "anc_short_prop"] : a.enforced ? ["ok", "anc_short_ok"] : ["warn", "anc_short_out"];
+  return `<span class="st ${k}" title="${esc(L("anc_tip"))}">${k === "ok" ? IC.ok : IC.warn}${esc(L(txt))}</span>`;
+}
+// a small "i" with its explanation on hover
+const tipI = text => `<span class="tipi" title="${esc(text)}" aria-label="${esc(text)}" role="img">${IC.info}</span>`;
 
 // ------------------------------------------------------------ node list
 const PREF = "mesh_guardian_beta_v1";
@@ -1319,27 +1340,43 @@ function openBr(id) {
   const kids = rows.filter(r => r.parent === b.name).map(r => r.name).sort();
   const c = v => v == null || v === "" ? "—" : esc(v);
   const yn = v => v == null ? "—" : L(v ? "yes" : "no");
-  const k = !b.online ? "bad" : b.role === "detached" || b.same_subnet === false ? "warn" : "ok";
+  const k = brState(b);
   const state = b.online ? L("br_online") : F("br_offline_since", {t: b.since ? dt(b.since) : "?"});
   const adv = b.online ? "" : `<div class="advice bad">${IC.bad}<div><b>${esc(state.replace(/^./, x => x.toUpperCase()))}</b><br>${esc(L("br_offline_adv"))}</div></div>`;
-  const kv = [[L("br_state"), `<span class="st ${k}">${k === "ok" ? IC.ok : k === "bad" ? IC.bad : IC.warn}${esc(state)}</span>`],
-    [L("d_role"), b.online ? esc(L("roles")[b.role] || b.role || "—") : "—"], [L("br_primary_l"), b.online ? yn(b.primary) : "—"],
-    [L("br_net"), c(b.network_name)], [L("br_prefix"), b.online ? c(b.omr) : "—"],
-    [L("br_last"), b.last_contact ? ago(b.last_contact) + (b.contact_src ? ` <small class="mut">(${esc(L("br_src")[b.contact_src] || b.contact_src)})</small>` : "") : L("br_never")],
-    [L("br_subnet"), yn(b.same_subnet)], [L("br_det"), c(b.detached_24h)]];
-  const list = (title, names) => `<h2>${esc(F(title, {n: names.length}))}</h2>${names.length ? `<p>${names.map(esc).join(", ")}</p>` : `<p class="mut">${L("none")}</p>`}`;
-  const det = (b.detaches || []).slice().reverse().map(x => `<li>${dt(x)}</li>`).join("");
+  // Same order as the panel of a node: on top what it is and how it is doing, then sections that
+  // fold (kept in this browser): OMR prefix, stability, network, the nodes that use it (only when
+  // there are some), technical details (closed). Removing it from the list: at the bottom.
+  const sec = (key, title, body, open, tip) => `<details class="sec" data-sec="${key}"${secOpen(key, open) ? " open" : ""}><summary${tip ? ` title="${esc(tip)}"` : ""}>${title}</summary>${body}</details>`;
+  const top = [[L("br_state"), `<span class="st ${k}">${k === "ok" ? IC.ok : k === "bad" ? IC.bad : IC.warn}${esc(state)}</span>`],
+    [L("br_net"), c(b.network_name)]];
+  // "End device": a small "i" says what it means for a border router
+  const endTip = ["child", "reed", "end_device", "sleepy_end_device"].includes(b.role) ? tipI(L("br_end_tip")) : "";
+  if (b.online) top.push([L("d_role"), esc(brRole(b.role)) + endTip]);
+  // OMR prefix: once. The border router of Home Assistant: the anchoring (Thread Anchor) and its
+  // report; another one: the prefix it announces
+  const a = b.ha ? D.anchor : null;
+  const anc = a ? anchorLines(a) : [];
+  const own = b.online && b.omr && !(a && a.wanted === b.omr) ? grid([[L("br_prefix_own"), c(b.omr), "wide"]]) : "";
+  const prefix = anc.length || own ? sec("br_omr", esc(L("anc_title")), `<div class="anc">${anc.join("")}</div>${own}`, true, L("anc_tip")) : "";
+  // stability: detaches of the last day and of the last 7 days, together
+  const det = (b.detaches || []).slice().reverse().map(x => `<li>${dt(x)}</li>`);
+  const stab = sec("br_stab", esc(L("br_stab")), grid([[L("br_det"), c(b.detached_24h)]]) +
+    `<h4 class="sub">${L("br_detaches")}</h4>` + (det.length ? `<ul>${det.join("")}</ul>` : `<p class="mut">${L("none")}</p>`), true);
+  const u = b.usb_latency;
+  const netRows = [[L("br_subnet"), yn(b.same_subnet)], [L("br_primary_l") + tipI(L("br_primary_tip")), b.online ? yn(b.primary) : "—"],
+    [L("br_last"), b.last_contact ? ago(b.last_contact) + (b.contact_src ? ` <small class="mut">(${esc(L("br_src")[b.contact_src] || b.contact_src)})</small>` : "") : L("br_never")]];
+  if (u && u.avg_ms != null) netRows.push([L("br_usb_l"), esc(F("br_ms", {v: u.avg_ms < 10 ? dec(u.avg_ms) : Math.round(u.avg_ms)}))]);
+  const netw = sec("br_netw", esc(L("br_netw")), grid(netRows), true);
+  // the nodes that use it: only the lists that have some
+  const list = (key, title, names) => names.length ? sec(key, esc(F(title, {n: names.length})), `<p>${names.map(esc).join(", ")}</p>`, true) : "";
+  const users = b.online ? list("br_through", "br_through", through) + list("br_children", "br_children", kids) : "";
   const tech = [[L("br_model"), [b.vendor, b.model].filter(Boolean).map(esc).join(" · ") || "—"], [L("br_id"), c(b.id)], [L("br_ext"), c(b.ext_address)],
     [L("br_xpan"), c(b.ext_pan)], [L("br_part"), c(b.partition)], [L("br_if"), c(b.interface)],
     [L("br_addr"), (b.addresses || []).map(esc).join("<br>") || "—"]];
-  // the border router of Home Assistant: the OMR prefix it is kept on (Thread Anchor), under its prefix
-  const anc = b.ha && D.anchor ? anchorLines(D.anchor) : [];
-  const ancHtml = anc.length ? `<h2 title="${esc(L("anc_tip"))}">${esc(L("anc_title"))}</h2><div class="anc">${anc.join("")}</div>` : "";
-  openSheet(head(esc(b.name), [b.vendor, b.model].filter(Boolean).map(esc).join(" · ")) + adv + grid(kv) + ancHtml +
-    `<div class="sheet-acts"><button class="btn" id="brRemove" data-brid="${esc(b.id)}" ${b.online ? "disabled" : ""} title="${esc(L(b.online ? "br_remove_online" : "br_remove_tip"))}">${ACT_ICON.remove || ""}<span>${L("br_remove")}</span></button></div>` +
-    (b.online ? list("br_through", through) + list("br_children", kids) : "") +
-    `<h2>${L("br_detaches")}</h2>${det ? `<ul>${det}</ul>` : `<p class="mut">${L("none")}</p>`}` +
-    `<details><summary>${L("tech")}</summary>${grid(tech)}</details>`);
+  // remove it from the list: only an offline one, said in words, at the bottom, confirmed
+  const remove = b.online ? "" : `<div class="sheet-acts"><button class="btn" id="brRemove" data-brid="${esc(b.id)}" title="${esc(L("br_remove_tip"))}">${ACT_ICON.remove || ""}<span>${L("br_remove")}</span></button></div>`;
+  openSheet(head(esc(b.name), [b.vendor, b.model].filter(Boolean).map(esc).join(" · ")) + adv + grid(top) +
+    prefix + stab + netw + users + sec("br_tech", L("tech"), grid(tech), false) + remove);
 }
 async function removeBr(id) {
   const b = (D.border_routers || []).find(x => x.id === id);
