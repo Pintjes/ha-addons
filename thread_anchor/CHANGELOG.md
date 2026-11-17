@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.1.6] - 2026-11-17
+
+### Added
+
+- The children that stayed silent are named. A child asked for its extended address
+  (`networkdiagnostic get`) that did not answer is listed in `silent_children` of the answer
+  (`[{"rloc16": "0xb45d", "parent": "0xb400"}]`; `[]` when none) and in the log line of the
+  step (`children of 0xb400: 3 children asked, 2 answered, ext not among them; silent: 0xb45d`).
+  A node that attached again to its parent under a new RLOC16 and sleeps is typically there.
+- One more try for the silent children of a router named in the request's `routers`: at the end
+  of the scan, if there is time left, only those are asked again once (`children of 0x… (again)`):
+  a child asleep answers when it is awake.
+- A scan that stopped before its end (time budget of 90 s, or a hit) is carried on by the next
+  one, for 30 minutes: the routers whose children are all known and the children that answered
+  are not asked again, the routers not read yet come first, then the ones with silent children;
+  a router named in the request is read again anyway. A child that answered in the scan that is
+  carried on is found again without any traffic. A scan that went to the end with every router
+  known is not carried on (the next one is complete), nor after the border router started again.
+  Same limits as before: 90 s, one scan every 5 minutes.
+
 ## [0.1.5] - 2026-11-17
 
 ### Fixed

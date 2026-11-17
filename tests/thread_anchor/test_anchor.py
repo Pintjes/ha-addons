@@ -1038,7 +1038,10 @@ assert steps(r)[-1] == ("old RLOC16 0xb45e", "old_gone")
 assert r["search"][6]["rows"] == 3 and r["search"][6]["detail"] == 2 and r["search"][-1]["detail"] == "0xb400"
 # le routeur de la demande est traite tout de suite, les autres routeurs ensuite (leur childtable repond)
 assert steps(r)[7:9] == [("meshdiag childtable 0x5800", "not_found"), ("meshdiag childtable 0xb800", "not_found")]
-assert [c for c in otbr.calls if c[0] == "networkdiagnostic"] == [ND(CHILD_A), ND(CHILD_B), ND(CHILD_C)]
+# le muet (B45D) est redemande une fois en fin de balayage, lui seul
+assert [c for c in otbr.calls if c[0] == "networkdiagnostic"] == [ND(CHILD_A), ND(CHILD_B), ND(CHILD_C), ND(CHILD_C)]
+assert ("children of 0xb400 (again)", "asked") in steps(r) and r["silent_children"] == [{"rloc16": "0xb45d", "parent": "0xb400"}]
+assert steps(r)[-2:] == [("children of 0xb400 (again)", "asked"), ("old RLOC16 0xb45e", "old_gone")]
 # un enfant qui ne repond pas, ou dont la sortie est vide, ne casse rien
 clk, otbr, dg, out = kids_diag()
 otbr.child_diag[CHILD_A] = ""
@@ -1080,6 +1083,97 @@ r = one(dg, out, ext=TARGET)
 assert r["error"] == "not found" and TKIDS not in otbr.calls
 # la lecture seule reste vraie : que des lectures
 assert not [c for c in otbr.calls if c[0] not in ("ipaddr", "ping", "networkdiagnostic", "help", "child", "neighbor", "router", "meshdiag")]
+
+# ---- 0.1.6 : les enfants muets sont dits, redemandes une fois, et le balayage est repris la ou il s'est arrete
+# sans balayage de reseau : champ present, vide
+clk, otbr, dg, out = make_diag()
+assert one(dg, out, rloc16="0xB45C")["silent_children"] == []
+# les muets sont dits (RLOC16 et routeur), sans indice : pas de seconde demande
+clk, otbr, dg, out = kids_diag()
+r = one(dg, out, ext="4444444444444444")
+assert r["silent_children"] == [{"rloc16": "0xb45d", "parent": "0xb400"}] and "(again)" not in " ".join(s["step"] for s in r["search"])
+assert [c for c in otbr.calls if c[0] == "networkdiagnostic"] == [ND(CHILD_A), ND(CHILD_B), ND(CHILD_C)]
+# routeur nomme : ses muets sont redemandes une fois en fin de balayage (un enfant endormi repond a son reveil)
+clk, otbr, dg, out = kids_diag()
+otbr.child_diag = {CHILD_A: KID(CHILD_A, OTHER)}
+otbr.script["networkdiagnostic get " + CHILD_C + " 0"] = [TIMEOUT, KID(CHILD_C, TARGET)]
+r = one(dg, out, ext=TARGET, routers=["0xb400"])
+assert r["rloc16"] == "0xb45d" and r["parent"] == "0xb400" and r["rloc16_from"] == "meshdiag", r
+assert [s for s in steps(r) if s[0].startswith("children")] == [("children of 0xb400", "asked"), ("children of 0xb400 (again)", "found")]
+assert [c for c in otbr.calls if c[:2] == ["networkdiagnostic", "get"] and c[3:] == ["0"] and len(c) == 4] == \
+    [ND(CHILD_A), ND(CHILD_B), ND(CHILD_C), ND(CHILD_B), ND(CHILD_C)]
+assert r["silent_children"] == [{"rloc16": "0xb45c", "parent": "0xb400"}]
+# un nommé qui repond a la 2e fois : plus de muets, routeur complet
+clk, otbr, dg, out = kids_diag()
+otbr.child_diag = {CHILD_A: KID(CHILD_A, OTHER), CHILD_B: KID(CHILD_B, "7777777777777777")}
+otbr.script["networkdiagnostic get " + CHILD_C + " 0"] = [TIMEOUT, KID(CHILD_C, "8888888888888888")]
+r = one(dg, out, ext="4444444444444444", routers=["0xb400"])
+assert r["silent_children"] == [] and 0xB400 in dg.done and r["error"] == "not found"
+assert [s for s in steps(r) if s[0].startswith("children")] == [("children of 0xb400", "asked"), ("children of 0xb400 (again)", "asked")]
+
+
+def partial_diag():
+    """Premier balayage arrete par le budget de 90 s sous 0xb400 : A et B ont repondu, C n'a pas ete demande."""
+    clk, otbr, dg, out = kids_diag()
+    otbr.child_diag[CHILD_B] = KID(CHILD_B, "7777777777777777")
+    otbr.child_diag[CHILD_C] = KID(CHILD_C, "6666666666666666")
+    otbr.child_takes = 50
+    r = one(dg, out, ext="4444444444444444")
+    assert steps(r)[-1] == ("children of 0xb400", "stopped") and dg.partial and r["silent_children"] == []
+    assert dg.done == {0x5800, 0xB800} and dg.silent == {}
+    otbr.child_takes = 0
+    otbr.calls.clear()
+    return clk, otbr, dg, out
+
+
+# reprise : routeurs deja connus et enfants deja repondus ne sont pas redemandes, `help` non plus
+clk, otbr, dg, out = partial_diag()
+clk.now += 301
+r = one(dg, out, ext="6666666666666666")
+assert r["rloc16"] == "0xb45d" and r["parent"] == "0xb400" and ("children of 0xb400", "found") in steps(r)
+assert otbr.calls[:8] == [OWN, *TABLES, ["meshdiag", "topology"], CT("0xb400"), TKIDS, ND(CHILD_C)], otbr.calls
+assert CT("0x5800") not in otbr.calls and CT("0xb800") not in otbr.calls and ["help"] not in otbr.calls
+assert ND(CHILD_A) not in otbr.calls and ND(CHILD_B) not in otbr.calls
+# un enfant qui avait repondu a l'ecoute precedente est retrouve sans traffic, meme apres 5 minutes
+clk, otbr, dg, out = partial_diag()
+clk.now += 301
+r = one(dg, out, ext="7777777777777777", ping=False)
+assert r["rloc16"] == "0xb45c" and r["parent"] == "0xb400" and steps(r)[-1] == ("meshdiag", "found"), steps(r)
+assert not [c for c in otbr.calls if c[0] == "meshdiag" and c != ["meshdiag", "topology"]]
+# un routeur nomme est relu meme s'il etait connu ; les autres connus restent sautes
+clk, otbr, dg, out = partial_diag()
+clk.now += 301
+r = one(dg, out, ext="6666666666666666", routers=["0x5800"])
+assert CT("0x5800") in otbr.calls and CT("0xb800") not in otbr.calls and r["rloc16"] == "0xb45d"
+assert otbr.calls.index(CT("0x5800")) < otbr.calls.index(CT("0xb400"))
+# la reprise n'est que de 30 minutes : ensuite, tout est redemande
+clk, otbr, dg, out = partial_diag()
+clk.now += 1801
+r = one(dg, out, ext="6666666666666666")
+assert CT("0x5800") in otbr.calls and CT("0xb800") in otbr.calls and ND(CHILD_A) in otbr.calls
+# le border router a redemarre : plus rien n'est repris
+clk, otbr, dg, out = partial_diag()
+clk.now += 301
+dg.anchor.started_at = "2026-11-18T03:00:00Z"
+r = one(dg, out, ext="6666666666666666")
+assert ["help"] in otbr.calls and CT("0x5800") in otbr.calls and ND(CHILD_A) in otbr.calls
+# un balayage qui est alle au bout avec tous les routeurs connus n'est pas repris : le suivant est complet
+clk, otbr, dg, out = scan_diag()
+one(dg, out, ext="4444444444444444")
+assert dg.partial is False and dg.done == {0x5800, 0xB400, 0xB800}
+clk.now += 301
+n = len(otbr.calls)
+one(dg, out, ext="4444444444444444")
+assert [c for c in otbr.calls[n:] if c[:2] == ["meshdiag", "childtable"]] == [CT("0x5800"), CT("0xb400"), CT("0xb800")]
+# des muets qui restent : le balayage reste a reprendre, et ne redemande que eux
+clk, otbr, dg, out = kids_diag()
+one(dg, out, ext="4444444444444444")
+assert dg.partial is True and dg.silent == {0xB400: [0xB45D]}
+clk.now += 301
+otbr.calls.clear()
+r = one(dg, out, ext="4444444444444444")
+assert [c for c in otbr.calls if c[:2] == ["networkdiagnostic", "get"] and c[3:] == ["0"] and len(c) == 4] == [ND(CHILD_C)]
+assert CT("0x5800") not in otbr.calls and r["silent_children"] == [{"rloc16": "0xb45d", "parent": "0xb400"}]
 
 # ---- une sortie vide d'ot-ctl = commande ignoree (une autre est en attente) : redemandee, jamais un echec
 RETRY = ["ping", ADDR, "16", "1"]

@@ -182,7 +182,16 @@ Reads only, but it is radio traffic: a request for every router.
   that sleeps answers late (its parent hands it the question when it wakes up),
   many do not answer in time: the step says how many were asked and how many
   answered (`children of 0xb400: 12 children asked, 7 answered, ext not among
-  them`). The children that answered are kept with the scan;
+  them; silent: 0xb403, 0xb40a`). The children that answered are kept with the
+  scan, and those that did not are named in `silent_children` of the answer.
+  For a router named in the request, the silent ones are asked once more at the
+  end of the scan, if there is time left (`children of 0xb400 (again)`);
+- a scan that stopped before its end (the 90 s are used, or a hit) is carried on
+  by the next scans for 30 minutes: the routers whose children are all known,
+  and the children that answered, are not asked again; the routers not read yet
+  come first, then those with silent children; a router named in the request is
+  read again anyway. After a scan that went to the end with every router known,
+  or when the border router started again, the next scan is complete;
 - when a request names an old RLOC16 of a child in `routers` (`"0xB45C"`) and
   the list of children of its router (`0xB400`) was read, `search` says whether
   that RLOC16 is still listed there (`old RLOC16 0xb45c`: `old_listed` or
@@ -205,7 +214,8 @@ Answer, on `thread_anchor/diag/result/<id>` (not retained, JSON):
 | `rloc16_from` | how it is known: `request`, `mleid`, `child table`, `neighbor table`, `router table` or `meshdiag`; `null` when not found or the request was refused |
 | `parent` | with `meshdiag`: RLOC16 of the router whose child table lists the node (`null` when the node is a router itself, or not found by `meshdiag`) |
 | `alive` | `true` only if the ping or the network diagnostic answered (and the node that answers has the `ext` asked); `false` when the RLOC16 is known (even from a table) but nobody answered, or another node answers there; `null` when there is no RLOC16 (not found, request refused) |
-| `search` | the steps of the search for the RLOC16, in order: `[{"step": "child table", "result": "found", "rows": 4, "detail": "0xb45c"}, …]`; `step` is `mleid`, `child table`, `neighbor table`, `router table`, `meshdiag help`, `meshdiag`, `meshdiag topology`, `meshdiag childtable 0x…`, `meshdiag topology children`, `children of 0x…` or `old RLOC16 0x…`; `result` is `found`, `not_found`, `no_answer`, `ext_differs`, `error`, `not_supported`, `too_soon`, `stopped`, `kids`, `no_list`, `asked`, `old_listed` or `old_gone`; `rows`: lines read (tables, topology: routers; `children of`: children asked); `detail`: RLOC16, extended address received, error or reason. Empty when `rloc16` was given |
+| `search` | the steps of the search for the RLOC16, in order: `[{"step": "child table", "result": "found", "rows": 4, "detail": "0xb45c"}, …]`; `step` is `mleid`, `child table`, `neighbor table`, `router table`, `meshdiag help`, `meshdiag`, `meshdiag topology`, `meshdiag childtable 0x…`, `meshdiag topology children`, `children of 0x…` (also `children of 0x… (again)`) or `old RLOC16 0x…`; `result` is `found`, `not_found`, `no_answer`, `ext_differs`, `error`, `not_supported`, `too_soon`, `stopped`, `kids`, `no_list`, `asked`, `old_listed` or `old_gone`; `rows`: lines read (tables, topology: routers; `children of`: children asked); `detail`: RLOC16, extended address received, error or reason. Empty when `rloc16` was given |
+| `silent_children` | children of routers read by `meshdiag topology children` that did not answer the request for their extended address: `[{"rloc16": "0xb45d", "parent": "0xb400"}]`, as known at the end of the scan (carried over from the last scans while they are carried on); `[]` when none, or when there was no meshdiag step. A silent child is not proved dead: it may be asleep |
 | `rloc_address` | the RLOC address that was asked (`null` if it could not be built) |
 | `ext` | extended address the node answered with, lowercase (`null`: no answer) |
 | `ping` | `{"ok": bool, "rtt_ms": float or null}`; `null` when no ping was asked |

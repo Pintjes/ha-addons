@@ -34,7 +34,7 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
-VERSION = "0.1.5"
+VERSION = "0.1.6"
 LOG = logging.getLogger("thread_anchor")
 STATE_TOPIC = "thread_anchor/state"
 DISCOVERY = "homeassistant"
@@ -52,6 +52,7 @@ DIAG_TIMEOUT_S = 15      # at most this long for one diagnostic
 DIAG_GAP_S = 10          # at most one diagnostic of the same node this often
 DIAG_SCAN_TIMEOUT_S = 90   # budget of the meshdiag step (routers asked one by one)
 DIAG_SCAN_GAP_S = 300      # at most one meshdiag scan of the network this often
+DIAG_RESUME_S = 1800       # a scan that stopped before the end is carried on by the next ones for this long
 OTCTL_TRIES = 3            # an empty answer of ot-ctl is a command ignored (another one is pending): asked again
 OTCTL_RETRY_S = 3          # s between two tries
 OTCTL_LOCK_S = 60          # s a command waits for the one in progress
@@ -67,7 +68,7 @@ SEARCH_TEXTS = {           # one line of the log per step of the search for an R
     "stopped": "stopped: {d}",
     "kids": "children of {n} routers read{d}",
     "no_list": "this router gave no list of its children",
-    "asked": "{n} children asked, {d} answered, ext not among them",
+    "asked": "{n} children asked, {d} answered, ext not among them{s}",
     "old_listed": "still listed under {d}",
     "old_gone": "not listed any more under {d}",
 }
@@ -117,8 +118,9 @@ TEXTS = {
         "stopped: {d}": "arrêtée : {d}",
         "children of {n} routers read{d}": "enfants de {n} routeurs lus{d}",
         "this router gave no list of its children": "ce routeur n'a pas donné la liste de ses enfants",
-        "{n} children asked, {d} answered, ext not among them":
-            "{n} enfants interrogés, {d} ont répondu, ext absente",
+        "{n} children asked, {d} answered, ext not among them{s}":
+            "{n} enfants interrogés, {d} ont répondu, ext absente{s}",
+        "; silent: {l}": " ; muets : {l}",
         "still listed under {d}": "toujours listé sous {d}",
         "not listed any more under {d}": "n'est plus listé sous {d}",
         "ot-ctl: no answer (another command pending?)": "ot-ctl : pas de réponse (autre commande en attente ?)",
@@ -737,6 +739,10 @@ class Diag:
         self.meshdiag, self.meshdiag_for = None, None   # `help` knows meshdiag (for this start of the OTBR)
         self.scan_at, self.scan_map = None, {}   # last scan: when, and {ext: (rloc16, parent rloc16)}
         self.scan_kids, self.scan_topo = {}, None   # last scan: children known per router, `topology children`
+        # a scan that stopped before its end (time budget, a hit) is carried on by the next one:
+        # routers whose children are all known are not asked again, nor are the children that answered
+        self.partial, self.done, self.tried = False, set(), set()
+        self.silent = {}          # router rloc16 -> children asked that did not answer
 
     def submit(self, raw):
         """A request from MQTT: answered at once when refused, else run in the background."""
@@ -750,7 +756,7 @@ class Diag:
             return
         base = {"id": rid, "rloc16": req.get("rloc16"), "rloc16_from": None, "parent": None, "alive": None,
                 "rloc_address": None, "ext": None, "ping": None, "addresses": [], "omr_addresses": [],
-                "other_prefix_addresses": [], "search": []}
+                "other_prefix_addresses": [], "search": [], "silent_children": []}
         raw16, raw_ext, raw_ml = req.get("rloc16"), req.get("ext"), req.get("mleid", req.get("ml_eid"))
         try:
             rloc16 = None if raw16 is None or raw16 == "" else parse_rloc16(raw16)
@@ -800,10 +806,11 @@ class Diag:
         """Through the single entry point of the anchor (one command at a time, empty answers asked again)."""
         return self.anchor.otctl(*args, deadline=deadline, limit=self.limit)
 
-    def _step(self, res, step, result, detail=None, rows=None):
-        """One step of the search for an RLOC16: kept in the answer (`search`) and said in the log."""
+    def _step(self, res, step, result, detail=None, rows=None, extra=""):
+        """One step of the search for an RLOC16: kept in the answer (`search`) and said in the log
+        (`extra`: more words for the log only)."""
         res["search"].append({"step": step, "result": result, "rows": rows, "detail": detail})
-        LOG.info(t("Search {step}: {text}", step=step, text=t(SEARCH_TEXTS[result], d=detail, n=rows)))
+        LOG.info(t("Search {step}: {text}", step=step, text=t(SEARCH_TEXTS[result], d=detail, n=rows, s=extra)))
 
     def _resolve(self, res, deadline, mlp, ext, ml, hints, scan):
         """RLOC16 of a node known by its extended address and / or its ML-EID:
@@ -855,15 +862,31 @@ class Diag:
         one for their children, in DIAG_SCAN_TIMEOUT_S at most, at most one scan every DIAG_SCAN_GAP_S
         (in between, the last scan is read again, no traffic). A router that does not answer
         `meshdiag childtable` is asked for its children by `meshdiag topology children` (RLOC16 only),
-        and each child is then asked for its extended address. Listing a child proves nothing about
-        its being alive: only a ping or a diagnostic answer does."""
+        and each child is then asked for its extended address. A scan that stopped before its end
+        (time budget, a hit) is carried on by the next ones for DIAG_RESUME_S: routers whose children
+        are all known, and the children that answered, are not asked again. Listing a child proves
+        nothing about its being alive: only a ping or a diagnostic answer does."""
         self.limit = DIAG_SCAN_TIMEOUT_S
         try:
             hit = self._scan_run(res, ext, hints, mlp)
             self._old_rloc16(res, hints)
+            res["silent_children"] = [{"rloc16": f"0x{rl:04x}", "parent": f"0x{r:04x}"}
+                                      for r in sorted(self.silent) for rl in sorted(self.silent[r])]
             return hit
         finally:
             self.limit = DIAG_TIMEOUT_S
+
+    def _forget(self):
+        """Nothing is kept of the earlier scans (the border router started again, or a scan is new)."""
+        self.scan_map, self.scan_kids, self.scan_topo = {}, {}, None
+        self.partial, self.done, self.tried, self.silent = False, set(), set(), {}
+
+    def _mark(self, router, silent):
+        """The children of a router that did not answer (none: the entry goes)."""
+        if silent:
+            self.silent[router] = silent
+        else:
+            self.silent.pop(router, None)
 
     def _old_rloc16(self, res, hints):
         """Says whether a child RLOC16 of the request (the old one of the node) is still listed under
@@ -874,13 +897,14 @@ class Diag:
                 self._step(res, f"old RLOC16 0x{h:04x}", "old_listed" if h in self.scan_kids[router] else "old_gone",
                            f"0x{router:04x}")
 
-    def _children(self, res, deadline, ext, router, hints, mlp):
+    def _children(self, res, deadline, ext, router, hints, mlp, again=False):
         """Children of a router that did not answer `meshdiag childtable`: their RLOC16 come from
         `meshdiag topology children` (one per scan, same Diagnostic Get as `topology`, which these
         routers do answer), then each child is asked for its extended address (`networkdiagnostic
-        get <RLOC address> 0`), the old RLOC16 of the request first. A child asleep answers late,
-        when its parent gets to hand it the question: many do not answer. (rloc16, router),
-        None, or _STOP when the time budget is used."""
+        get <RLOC address> 0`), the old RLOC16 of the request first. The children that answered
+        earlier are not asked again. A child asleep answers late, when its parent gets to hand it the
+        question: many do not answer; they are kept in `silent`, and with `again` only those are
+        asked once more. (rloc16, router), None, or _STOP when the time budget is used."""
         if self.scan_topo is None:
             self.scan_topo = {}
             name = "meshdiag topology children"
@@ -894,15 +918,20 @@ class Diag:
                     self._step(res, name, "error", err)
                 else:
                     self._step(res, name, "kids", f" ({err})" if err else "", rows=len(kids))
-        name = f"children of 0x{router:04x}"
+        name = f"children of 0x{router:04x}" + (" (again)" if again else "")
         rlocs = self.scan_topo.get(router)
         if rlocs is None:
             self._step(res, name, "no_list")
             return None
         self.scan_kids[router] = set(rlocs)
-        asked = answered = 0
-        for rl in sorted(rlocs, key=lambda r: (r not in hints, r)):
+        known = {rl for rl, parent in self.scan_map.values() if parent == router}    # answered already
+        todo = [rl for rl in rlocs if rl not in known]
+        if again:
+            todo = [rl for rl in todo if rl in self.silent.get(router, ())]
+        asked, answered, silent = 0, 0, []
+        for rl in sorted(todo, key=lambda r: (r not in hints, r)):
             if deadline - self.clock() < 1:
+                self._mark(router, silent)
                 self._step(res, name, "stopped", t("time budget used"))
                 return _STOP
             asked += 1
@@ -910,15 +939,24 @@ class Diag:
                 diag = parse_diag(self._otctl(deadline, "networkdiagnostic", "get", rloc_address(mlp, rl), "0"))
             except RuntimeError as err:
                 LOG.debug("child 0x%04x: %s", rl, err)
+                silent.append(rl)
                 continue
             if not diag["answered"] or not diag["ext"]:
+                silent.append(rl)
                 continue
             answered += 1
             self.scan_map[diag["ext"]] = (rl, router)
             if diag["ext"] == ext:
+                self._mark(router, silent)
                 self._step(res, name, "found", f"0x{rl:04x}", rows=len(rlocs))
                 return rl, router
-        self._step(res, name, "asked", answered, rows=asked)
+        if silent:
+            self.silent[router] = silent
+        else:
+            self.silent.pop(router, None)
+            self.done.add(router)      # every child of the router answered: nothing left to ask
+        self._step(res, name, "asked", answered, rows=asked,
+                   extra=t("; silent: {l}", l=", ".join(f"0x{r:04x}" for r in silent)) if silent else "")
         return None
 
     def _scan_run(self, res, ext, hints, mlp):
@@ -932,6 +970,7 @@ class Diag:
                 self._step(res, "meshdiag help", "error", str(err))
                 return None
             self.meshdiag_for = started
+            self._forget()
         if not self.meshdiag:
             self._step(res, "meshdiag", "not_supported")
             return None
@@ -942,29 +981,40 @@ class Diag:
                 return hit
             self._step(res, "meshdiag", "too_soon", int(now - self.scan_at))
             return None
-        self.scan_at, self.scan_map = now, {}   # a scan counts as done even when it fails
-        self.scan_kids, self.scan_topo = {}, None   # routers whose children are known: {router: {rloc16}}
+        resume = self.partial and self.scan_at is not None and now - self.scan_at < DIAG_RESUME_S
+        self.scan_at, self.scan_topo = now, None     # a scan counts as done even when it fails
+        if not resume:
+            self._forget()
+        self.partial = True      # until the scan reaches its end with every router known
         try:
             routers = parse_topology(self._otctl(deadline, "meshdiag", "topology"))
         except RuntimeError as err:
             self._step(res, "meshdiag topology", "error", str(err))
             return None
+        rhit = next((r for r in routers if r["ext"] == ext), None)
         for r in routers:
             self.scan_map[r["ext"]] = (r["rloc16"], None)
-        hit = self.scan_map.get(ext)
-        self._step(res, "meshdiag topology", "found" if hit else "not_found", f"0x{hit[0]:04x}" if hit else None,
-                   rows=len(routers))
-        if hit:
-            return hit
+        self._step(res, "meshdiag topology", "found" if rhit else "not_found",
+                   f"0x{rhit['rloc16']:04x}" if rhit else None, rows=len(routers))
+        if rhit:
+            return rhit["rloc16"], None
+        old = self.scan_map.get(ext)     # a child that answered in the scan this one carries on
+        if old:
+            self._step(res, "meshdiag", "found", f"0x{old[0]:04x}")
+            return old
         # the border router's own children are in `child table` already
         others = [r["rloc16"] for r in routers if not r["me"]]
-        first = list(dict.fromkeys(h & 0xFC00 for h in hints))    # routers of the request
+        first = list(dict.fromkeys(h & 0xFC00 for h in hints))    # routers of the request: read again
+        todo = [o for o in others if o not in self.done or o in first]
+        order = [h for h in first if h in todo] + [o for o in todo if o not in first and o not in self.tried] \
+            + [o for o in todo if o not in first and o in self.tried]
         failed = []     # routers that did not answer `meshdiag childtable`, in the order they were asked
-        for router in [h for h in first if h in others] + [o for o in others if o not in first]:
+        for router in order:
             name = f"meshdiag childtable 0x{router:04x}"
             if deadline - self.clock() < 1:
                 self._step(res, name, "stopped", t("time budget used"))
                 return None
+            self.tried.add(router)
             try:
                 kids = parse_childtable(self._otctl(deadline, "meshdiag", "childtable", f"0x{router:04x}"))
             except RuntimeError as err:
@@ -981,6 +1031,8 @@ class Diag:
                         return hit
                 continue
             self.scan_kids[router] = set(kids.values())
+            self.silent.pop(router, None)
+            self.done.add(router)
             for e, rl in kids.items():
                 self.scan_map[e] = (rl, router)
             if ext in kids:
@@ -993,8 +1045,15 @@ class Diag:
                 return None
             if hit:
                 return hit
+        for router in first:       # a child asleep answers once awake: the silent ones, one more try
+            if self.silent.get(router) and router in others and deadline - self.clock() >= 1:
+                hit = self._children(res, deadline, ext, router, hints, mlp, again=True)
+                if hit is _STOP:
+                    return None
+                if hit:
+                    return hit
+        self.partial = not all(o in self.done for o in others)
         return None
-
     def _run(self, res, rloc16, ext, ml, ping, hints=(), scan=True):
         deadline = self.clock() + DIAG_TIMEOUT_S
         self.limit = DIAG_TIMEOUT_S
