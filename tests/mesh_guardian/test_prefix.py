@@ -25,7 +25,7 @@ src = open(os.path.join(MG, "watcher.py"), encoding="utf-8").read()
 tree = ast.parse(src)
 cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Watch")
 want = ("_omr_now", "stale_prefix", "omr_episodes_24h", "_load_prefixes", "_save_prefixes", "matter_gone", "usb_link",
-        "omr_fixed")
+        "omr_fixed", "favored_omr")
 body = [m for m in cls.body if isinstance(m, ast.FunctionDef) and m.name in want]
 assert len(body) == len(want), [m.name for m in body]
 consts = [n for n in tree.body if isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name)

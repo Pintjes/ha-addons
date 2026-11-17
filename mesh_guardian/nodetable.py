@@ -44,6 +44,7 @@ def is_ha_br(b):
 
 
 HEARD_RECENT_S = 900   # a node heard by a neighbor this recently is alive (its radio works)
+ALIVE_RECENT_S = 3600  # an unavailable node heard within this time is still not "without power"
 
 
 FUZZY_EXT = 4096   # an extended address that went through a float (JSON of some tools) lost its last ~11 bits
@@ -563,6 +564,14 @@ class NodeTable:
             role = a.get("0/53/1")
             rloc = rlocs.get(nid)
             hb = heard_of(heard_all, ext_of(a))
+            seen = self.__dict__.setdefault("_last_heard", {})
+            if hb:
+                seen[nid] = (now - hb["ago_s"], hb)
+            elif nid in seen and now - seen[nid][0] <= ALIVE_RECENT_S and m.get("available") is False:
+                # not in a fresh neighbor table now (it may be attaching again, with a new RLOC16):
+                # heard within the hour all the same, so alive. Its old place is not shown as current
+                at, old = seen[nid]
+                hb = dict(old, ago_s=round(now - at), rloc16=None, child=False, old=True)
             if hb and hb.get("rloc16") is not None and (rloc is None or m.get("available") is False):
                 # where a neighbor that answers sees it now (the cached values of an unavailable
                 # node are old): its RLOC16, and a child is not a router
@@ -661,7 +670,9 @@ class NodeTable:
                 "battery": bool(m.get("battery")), "available": bool(avail), "added": v["node"].get("date_commissioned"), **identity_of(a),
                 "since": m.get("since") if not avail else None,
                 "role": ROLE.get(role, str(role)) if role is not None else None,
-                "parent": p[0] if p else None, "rssi": p[1] if p else None, "lqi": p[2] if p else None,
+                # no parent in its own (frozen) tables: the neighbor that has it as a child
+                "parent": p[0] if p else hb["by"] if hb and hb.get("child") else None,
+                "rssi": p[1] if p else hb["rssi"] if hb and hb.get("child") else None, "lqi": p[2] if p else None,
                 "new_parent": new_parent,
                 "rloc16": f"0x{rloc:04x}" if rloc is not None else None,
                 "best_link": bl[0] if bl else None, "best_rssi": bl[1] if bl else None, "best_lqi": bl[2] if bl else None,
@@ -685,6 +696,10 @@ class NodeTable:
                 "stale_prefix": self.w.stale_prefix(nid, thread=True) if not avail and hasattr(self.w, "stale_prefix") else None,
                 # unavailable but still in the neighbor table of a node that answers: it is alive
                 "heard_by": hb if not avail else None,
+                # prefix of its own mDNS record (what the Matter Server finds after a reconnection),
+                # and an announcement in its place kept until that record is right again
+                "announced_prefix": (getattr(self.w, "matter", {}).get(nid) or {}).get("prefix"),
+                "held": nid in (getattr(self.w, "proxy_holds", None) or {}),
             })
         for nid, v in other.items():
             rows.append(self._other_row(nid, v))
@@ -869,7 +884,8 @@ class NodeTable:
         usb = {"avg_ms": links.get("latency_avg_ms"), "max_ms": links.get("latency_max_ms"),
                "last_ms": links.get("latency_ms"), "server": links.get("server")} if links.get("devices") else None
         for x in brs:
-            x["usb_latency"] = usb if usb and is_ha_br(x) else None
+            x["ha"] = is_ha_br(x)   # the page shows the OMR prefix of Thread Anchor in its card
+            x["usb_latency"] = usb if usb and x["ha"] else None
         with self.h.lock:
             unavailable = sum(1 for n in self.h.nodes.values() if not n["available"])
             total = len(self.h.nodes)

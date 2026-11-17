@@ -146,9 +146,10 @@ class Anchor:
         """Thread Anchor publishes and is not stopped: it can run a diagnostic."""
         return isinstance(self.state, dict) and self.available is not False
 
-    def diag(self, rloc16, ext=None, ping=True, timeout=DIAG_WAIT_S):
+    def diag(self, rloc16, ext=None, ping=True, timeout=DIAG_WAIT_S, mleid=None):
         """Asks Thread Anchor for the Thread diagnostic of a node, reached through the mesh by its
-        RLOC16 (whatever its OMR prefix): ping and current addresses. Returns its answer
+        RLOC16 and/or its mesh-local EID (whatever its OMR prefix; the ML-EID stays when the RLOC16
+        changes), ext to check it is the right node: ping and current addresses. Returns its answer
         ({"ping": {"ok", "rtt_ms"}, "addresses", "omr_addresses", "other_prefix_addresses", "error"…}),
         or None when nothing came back in time."""
         mq = getattr(self.w, "mqtt", None)
@@ -159,9 +160,13 @@ class Anchor:
         with self.lock:
             self._diag_waits[rid] = [ev, None]
         try:
-            req = {"id": rid, "rloc16": f"0x{int(rloc16):04X}", "ping": bool(ping)}
+            req = {"id": rid, "ping": bool(ping)}
+            if rloc16 is not None:
+                req["rloc16"] = f"0x{int(rloc16):04X}"
             if ext is not None:
                 req["ext"] = f"{int(ext):016x}"
+            if mleid:
+                req["mleid"] = str(mleid)
             mq.publish(DIAG_REQUEST_TOPIC, json.dumps(req))
             ev.wait(timeout)
             with self.lock:

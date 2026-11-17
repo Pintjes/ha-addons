@@ -33,6 +33,9 @@ configuration:
   advice:
     name: "Advice"
     description: "Give advice for the available nodes (find a new link, add a router…)."
+  thread_diag_recovery:
+    name: "Recovery by the Thread diagnostic"
+    description: "With Thread Anchor: an unavailable node a neighbor hears is reached through the mesh, then announced in its place on its current address (its radio is not restarted). At most once per node every 30 min, 5 nodes per hour."
   matter_fabric:
     name: "Matter fabric"
     description: "Leave empty: detected automatically."

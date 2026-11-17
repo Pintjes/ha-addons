@@ -71,6 +71,11 @@ PATHS = ["0/53/1", "0/53/7", "0/51/0", "0/49/1", "0/49/65529"]   # table and add
 
 
 PROXY_SETTLE_S = 5    # s: time left to the Matter Server to hear the announcement made in a node's place
+BACK_WAIT_S = 60      # s: announced in its place on its current address: time left to come back before anything else
+AUTO_EVERY_S = 60     # s: automatic recovery by the Thread diagnostic: candidates looked for this often
+AUTO_NODE_S = 1800    # s: at most one automatic diagnostic per node in this time
+AUTO_PER_HOUR = 5     # nodes at most per hour (automatic)
+AUTO_HEARD_S = 900    # s: only for a node a neighbor heard this recently
 
 
 def _ago(s):
@@ -88,6 +93,33 @@ def ext_of(attrs):
                 continue
             if len(raw) == 8:
                 return int.from_bytes(raw, "big")
+    return None
+
+
+def mleid_of(attrs):
+    """Mesh-local EID of a Thread node (its stable address inside the mesh, whatever the OMR prefix):
+    the address of its Thread interface (0/51/0, field 6) in the mesh-local prefix (0/53/5), not an
+    RLOC/ALOC (interface id 0000:00ff:fe00:xxxx). Known from the last values of the node, also
+    when it is unavailable. None when not found."""
+    import ipaddress   # noqa: PLC0415
+    raw = attrs.get("0/53/5")
+    try:
+        pre = base64.b64decode(raw) if isinstance(raw, str) else bytes(raw or b"")
+    except Exception:  # noqa: BLE001
+        return None
+    pre = pre[1:9] if len(pre) == 9 else pre[:8]   # ipv6pre: [length in bits] + prefix, or the 8 bytes alone
+    if len(pre) != 8:
+        return None
+    for itf in attrs.get("0/51/0") or []:
+        if not isinstance(itf, dict) or itf.get("7") != 4:
+            continue
+        for a in itf.get("6") or []:
+            try:
+                b = base64.b64decode(a)
+            except Exception:  # noqa: BLE001
+                continue
+            if len(b) == 16 and b[:8] == pre and b[8:14] != bytes.fromhex("000000fffe00"):
+                return str(ipaddress.IPv6Address(b))
     return None
 
 
@@ -595,6 +627,105 @@ class Reattach:
         return {"ok": sorted(ip for ip, v in res.items() if v), "ko": sorted(ip for ip, v in res.items() if not v),
                 "heard": heard, "radio_known": ext is not None}
 
+    def announce_current(self, nid, name, ips):
+        """Announces the node in its place on the addresses the Thread diagnostic found, and keeps
+        that announcement until the node announces itself again on the prefix of the network."""
+        if not hasattr(self.w, "proxy_announce") or not self.w.proxy_announce(nid, ips):
+            return False
+        if hasattr(self.w, "proxy_hold"):
+            self.w.proxy_hold(nid, ips, name)
+        self.w.emit("recover_proxy", t("{node}: announced in its place on {ip} (address given by the Thread diagnostic)",
+                                       node=name, ip=", ".join(ips)), node=name, ip=list(ips))
+        self.w.stop.wait(PROXY_SETTLE_S)
+        return True
+
+    def _hearing(self, nid, ext, recent):
+        """Most recent hearing of the node in the neighbor tables of the other nodes (nodetable.heard_map)."""
+        if ext is None or not self.live:
+            return None
+        with self.h.lock:
+            names = {k: v.get("name") or k for k, v in self.h.nodes.items()}
+        with self.live.lock:
+            snap = {k: {"attrs": dict(n.get("attributes") or {}), "meta": {"available": n.get("available")},
+                        "node": {}, "name": names.get(k, k)} for k, n in self.live.nodes.items() if k != nid}
+        return heard_of(heard_map(snap, self.live, time.time(), recent=recent), ext)
+
+    # ------------------------------------------------------------ automatic recovery by the Thread diagnostic
+    def run_auto(self):
+        """Every AUTO_EVERY_S: one unavailable mains node that a neighbor hears and whose address is
+        not known (or on an old prefix) gets the gentle way: Thread diagnostic, then the announcement
+        in its place on its current address. Never the restart of its radio (ConnectNetwork)."""
+        if self.w.stop.wait(300):   # after a start, Home Assistant and the tables settle first
+            return
+        while True:
+            try:
+                self.auto_pass()
+            except Exception as err:  # noqa: BLE001
+                LOG.warning(t("Automatic Thread diagnostic failed: {err}", err=err))
+            if self.w.stop.wait(AUTO_EVERY_S):
+                return
+
+    def auto_pass(self, now=None):
+        """One candidate at most per pass. Returns the node hex handled, or None."""
+        now = time.time() if now is None else now
+        if not getattr(self, "auto_diag", True):
+            return None
+        anchor = getattr(self.w, "anchor", None)
+        storm = getattr(self.h, "storm", None)
+        if anchor is None or not anchor.diag_ready() or anchor.blocked() or (storm and storm.active):
+            return None
+        last = self.__dict__.setdefault("auto_last", {})
+        done = self.__dict__["auto_done"] = [x for x in self.__dict__.get("auto_done", []) if now - x < 3600]
+        if len(done) >= AUTO_PER_HOUR:
+            return None
+        with self.h.lock:
+            down = sorted(((k, n) for k, n in self.h.nodes.items() if not n.get("available") and not n.get("battery")),
+                          key=lambda x: x[1].get("since") or 0)
+        holds = getattr(self.w, "proxy_holds", None) or {}
+        for nid, n in down:
+            if nid in self.recovering or nid in holds or (nid in last and now - last[nid] < AUTO_NODE_S):
+                continue
+            st = self.w.stale_prefix(nid, thread=True) if hasattr(self.w, "stale_prefix") else None
+            announced = (self.w.matter.get(nid) or {}).get("online") if hasattr(self.w, "matter") else None
+            if not st and announced is not False:
+                continue   # announced on a current address: the diagnostic would not change anything
+            try:
+                ext = ext_of(self._cached(nid))
+            except Exception:  # noqa: BLE001
+                continue
+            if not self._hearing(nid, ext, AUTO_HEARD_S):
+                continue   # nobody hears it: not this way (the pings of the recovery go on)
+            if not self.busy.acquire(blocking=False):
+                return None
+            try:
+                last[nid] = now
+                done.append(now)
+                name = n.get("name") or f"0x{nid.lstrip('0')}"
+                d = self._thread_diag(nid, name, ext)
+                if d is None:
+                    return nid
+                self.w.emit("auto_diag", t("{node}: automatic Thread diagnostic: {diag}", node=name, diag=d["text"]),
+                            node=name, result=d["result"])
+                if d["omr"] and self.announce_current(nid, name, d["omr"]):
+                    if self._wait_back(nid, BACK_WAIT_S):
+                        self._recover_result(nid, name, "back_announce", t(
+                            "{node}: back once announced in its place on its current address", node=name) + " · " + d["text"])
+                elif d["result"] in ("old_prefix_only", "frozen"):
+                    self._recover_result(nid, name, d["result"], d["outcome"] + " · " + d["text"])
+                return nid
+            finally:
+                self.busy.release()
+        return None
+
+    def _wait_back(self, nid, seconds):
+        end = time.time() + seconds
+        while time.time() < end:
+            if self._is_back(nid):
+                return True
+            if self.w.stop.wait(3):
+                return False
+        return self._is_back(nid)
+
     def _thread_diag(self, nid, name, ext):
         """Thread diagnostic of a node by Thread Anchor (its RLOC16 read in the neighbor tables of the
         nodes that hear it). None when it cannot be asked (no Thread Anchor, RLOC16 not known).
@@ -603,28 +734,28 @@ class Reattach:
         anchor = getattr(self.w, "anchor", None)
         if anchor is None or not anchor.diag_ready() or ext is None or not self.live:
             return None
-        with self.h.lock:
-            names = {k: v.get("name") or k for k, v in self.h.nodes.items()}
-        with self.live.lock:
-            snap = {k: {"attrs": dict(n.get("attributes") or {}), "meta": {"available": n.get("available")},
-                        "node": {}, "name": names.get(k, k)} for k, n in self.live.nodes.items() if k != nid}
-        hb = heard_of(heard_map(snap, self.live, time.time(), recent=3600), ext)
-        if not hb or hb.get("rloc16") is None:
-            return None
-        rloc = hb["rloc16"]
-        res = anchor.diag(rloc, ext)
+        hb = self._hearing(nid, ext, 3600)
+        try:
+            mleid = mleid_of(self._cached(nid))
+        except Exception:  # noqa: BLE001
+            mleid = None
+        rloc = hb.get("rloc16") if hb else None
+        if rloc is None and mleid is None:
+            return None   # nothing Thread Anchor can reach it by
+        res = anchor.diag(rloc, ext, mleid=mleid)
+        where = f"RLOC 0x{rloc:04X}" if rloc is not None else f"ML-EID {mleid}"
         if not isinstance(res, dict):
-            return {"text": t("Thread diagnostic (RLOC 0x{r:04X}) failed: {why}", r=rloc, why=t("no answer from Thread Anchor")),
+            return {"text": t("Thread diagnostic ({where}) failed: {why}", where=where, why=t("no answer from Thread Anchor")),
                     "omr": [], "result": "unknown", "outcome": ""}
         ping = res.get("ping") or {}
         err = str(res.get("error") or "")
         pinged = (t("answers through the mesh ({ms} ms)", ms=ping.get("rtt_ms")) if ping.get("ok")
                   else t("no answer through the mesh") if ping else t("not pinged"))
         if err:
-            text = t("Thread diagnostic (RLOC 0x{r:04X}) failed: {why}", r=rloc, why=err) + (f" ({pinged})" if ping else "")
+            text = t("Thread diagnostic ({where}) failed: {why}", where=where, why=err) + (f" ({pinged})" if ping else "")
             # neither the diagnostic nor the ping answers while a neighbor hears it: its network stack
             # is stuck. Any other error (busy, too soon, another node at this RLOC16…) proves nothing
-            if err.startswith("no answer to the network diagnostic") and not ping.get("ok"):
+            if err.startswith("no answer to the network diagnostic") and not ping.get("ok") and hb:
                 return {"text": text, "omr": [], "result": "frozen", "outcome": t(
                     "{node}: heard by {who} but no answer through the mesh: its network stack is stuck. No remote way "
                     "is left: cutting its power for 10 s is the last resort, your call", node=name, who=hb["by"])}
@@ -633,7 +764,7 @@ class Reattach:
         omr = [str(x) for x in res.get("omr_addresses") or []]
         old = [str(x) for x in res.get("other_prefix_addresses") or []]
         addrs = ", ".join(omr + old) or t("no routable address")
-        text = t("Thread diagnostic (RLOC 0x{r:04X}): {ping}; addresses: {addrs}", r=rloc, ping=pinged, addrs=addrs)
+        text = t("Thread diagnostic ({where}): {ping}; addresses: {addrs}", where=where, ping=pinged, addrs=addrs)
         if omr:
             return {"text": text, "omr": omr, "result": "omr", "outcome": ""}
         if old:
@@ -679,13 +810,15 @@ class Reattach:
                     d = self._thread_diag(nid, name, ext)
                     if d is not None:
                         alive_txt += " · " + d["text"]
-                        if d["omr"] and hasattr(self.w, "proxy_announce"):
-                            proxied = self.w.proxy_announce(nid, d["omr"])
-                            if proxied:
-                                self.w.emit("recover_proxy", t("{node}: announced in its place on {ip} (address given by the Thread diagnostic)",
-                                                               node=name, ip=", ".join(d["omr"])), node=name, ip=d["omr"])
-                                self.w.stop.wait(PROXY_SETTLE_S)
-                                st = None   # its current address is announced: the command can leave
+                        if d["omr"] and self.announce_current(nid, name, d["omr"]):
+                            # the gentle way first: often the Matter Server only needed its address
+                            # (17/11, Miele: back 6 s later). The radio of the node is not restarted
+                            if self._wait_back(nid, BACK_WAIT_S):
+                                self._recover_result(nid, name, "back_announce", t(
+                                    "{node}: back once announced in its place on its current address", node=name)
+                                    + " · " + alive_txt)
+                                return
+                            st = None   # its current address is announced: the command can leave
                         elif d["result"] in ("old_prefix_only", "frozen"):
                             self._recover_result(nid, name, d["result"], d["outcome"] + " · " + alive_txt)
                             return

@@ -33,6 +33,9 @@ configuration:
   advice:
     name: "Conseils"
     description: "Donner des conseils pour les nodes disponibles (rechercher un nouveau lien, ajouter un routeur…)."
+  thread_diag_recovery:
+    name: "Récupération par le diagnostic Thread"
+    description: "Avec Thread Anchor : une node indisponible qu'un voisin entend est jointe par le maillage, puis annoncée à sa place sur son adresse actuelle (sans redémarrer sa radio). Au plus une fois par node toutes les 30 min, 5 nodes par heure."
   matter_fabric:
     name: "Fabric Matter"
     description: "Laisser vide : détection automatique."

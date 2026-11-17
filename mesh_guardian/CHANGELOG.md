@@ -4,11 +4,29 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## Highlights of 2.9 to 2.33 (16 November 2026)
+## Highlights of 2.9 to 2.34 (16 November 2026)
 
 - **Act on a node from its panel**: recovery attempt on an unavailable node, reset from a distance, pairing codes kept by the add-on (photo or scan of the label), pairing and naming a new device without leaving the page.
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
+
+## [2.34.0] - 2026-11-17
+
+### Added
+
+- **Automatic recovery by the Thread diagnostic** (option `thread_diag_recovery`, on by default, with Thread Anchor): an unavailable mains node that a neighbor heard in the last 15 min and whose address is not known (or on an old prefix) is reached through the mesh, then announced in its place on its current address. The gentle way only: its radio is never restarted (no fail-safe, no ConnectNetwork). At most once per node every 30 min and 5 nodes per hour, never during a pause (radio or prefix out) or a Thread storm. Events `auto_diag`, then `recover_result` (`back_announce`, `old_prefix_only`, `frozen`).
+- **Announcement in its place kept**: on the address given by the Thread diagnostic, it stays until the node announces itself again on the prefix of the network (`proxy_released`), 24 h at most (`proxy_expired`). Withdrawn at once (2.33), the old record came back after a reconnection and the node dropped again (17/11, Miele, 3 min later).
+- **Mesh-local EID in the diagnostic**: sent to Thread Anchor with the RLOC16 and the extended address; the diagnostic still leaves when the RLOC16 is not known (the node attached again elsewhere).
+- **Border router names from Home Assistant**: the name a user gave a border router in the device registry (`name_by_user`) comes first, for the OpenThread border router of Home Assistant (its integration or model) and for the others (by the original name of their device). Read every 10 min.
+- Table: `announced_prefix` (prefix of the node's own mDNS record) and `held` (announcement in its place kept).
+
+### Changed
+
+- **Recovery attempt, the gentle way first**: announced in its place on its current address, the node gets 60 s to come back; when it does, nothing else is sent (2.33 went on with the fail-safe and ConnectNetwork: the fail-safe was not closed, it expired and dropped the node again).
+- **OMR prefix in the card of the border router of Home Assistant**: state, anchoring date and report before / since move there (a card of their own only when that border router is not in the list). The anchoring date is shown to the minute.
+- **No "Check its power" for a node heard within the hour**: an unavailable node not in a fresh neighbor table (attaching again, new RLOC16) but heard less than an hour ago gets "Alive but unreachable", with when it was last heard.
+- **Old prefix judged against the favored prefix**: with Thread Anchor, a Thread node on another prefix than the one the network favors stayed on an old prefix (a Google TV keeps announcing its own local prefix, which made it look current).
+- **Parent of an unavailable child**: the neighbor that has it as a child, when its own frozen tables name none.
 
 ## [2.33.1] - 2026-11-17
 

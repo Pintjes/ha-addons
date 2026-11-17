@@ -79,7 +79,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.33.1"
+VERSION = "2.34.0"
 OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
 OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
@@ -103,6 +103,7 @@ KNOWN_FILE = "/data/known_nodes.json"
 BR_NAMES_FILE = "/data/br_names.json"
 PREFIXES_FILE = "/data/prefixes.json"
 PROXY_HOST = "mg-proxy-"   # host name of the announcements made in a node's place
+PROXY_HOLD_S = 24 * 3600   # an announcement in a node's place kept until it announces itself, this long at most
 USB_LINK_TOPIC = "usbip_link/state"   # state published by the USB/IP Link add-on
 OMR_FIXED_GRACE_S = 60   # fixed OMR prefix off without an error: a restart of the border router, said after this time
 RENAME_CONFIRM = 5   # announcements in a row giving the same new name before a border router is renamed
@@ -269,6 +270,7 @@ class Watch:
         self.omr_changes = []   # times of the OMR prefix changes (24h)
         self._prefixes_dirty = False   # a node prefix changed: prefixes.json to write again
         self.proxies = {}              # node hex -> ServiceInfo announced in its place (proxy_announce)
+        self.proxy_holds = {}          # node hex -> announcement kept until it announces itself (proxy_hold)
         self.usb_links = None          # last state of the USB/IP Link add-on (usbip_link/state), if any
         self.omr_fixed_off = None      # time the OMR prefix fixed by USB/IP Link was seen no longer in place
         self.omr_fixed_said = False    # its loss was said in the log (omr_fixed_lost)
@@ -451,8 +453,42 @@ class Watch:
                       before=before, after=cand, key=key[:16])
 
     def br_label(self, b):
-        """Confirmed name of a border router, otherwise its mDNS instance name."""
-        return b.get("label") or b.get("instance", "?")
+        """Name a user gave the border router in Home Assistant, else its confirmed name, else its
+        mDNS instance name."""
+        return b.get("user_name") or b.get("label") or b.get("instance", "?")
+
+    def _refresh_user_names_safe(self):
+        try:
+            self.refresh_user_names()
+        except Exception as err:  # noqa: BLE001
+            LOG.debug("border router names from the device registry: %s", err)
+
+    def refresh_user_names(self, devices=None):
+        """Names given in the Home Assistant device registry (name_by_user) to the border routers:
+        the OpenThread border router of Home Assistant by its integration (otbr) or its model, the
+        others (Google TV, Nest Hub…) by the original name of their device, the one they announce."""
+        devs = devices if devices is not None else (self.healer.device_registry() if self.healer else None)
+        if devs is None:
+            return False
+        named = [d for d in devs if isinstance(d, dict) and d.get("name_by_user")]
+        by_name = {str(d.get("name") or "").strip().lower(): d["name_by_user"] for d in named if d.get("name")}
+
+        def is_otbr(d):
+            txt = " ".join(str(d.get(k) or "") for k in ("name", "model", "manufacturer")).lower().replace(" ", "")
+            return any(i and i[0] == "otbr" for i in d.get("identifiers") or []) or "openthreadborderrouter" in txt
+        otbr = next((d["name_by_user"] for d in named if is_otbr(d)), None)
+        changed = False
+        with self.lock:
+            for b in self.br.values():
+                ha = "homeassistant" in f"{b.get('vendor') or ''}{b.get('model') or ''}".lower().replace(" ", "") \
+                    or "openthread" in f"{b.get('vendor') or ''}{b.get('model') or ''}".lower().replace(" ", "")
+                name = otbr if ha and otbr else by_name.get(str(b.get("label") or b.get("instance") or "").strip().lower())
+                if name != b.get("user_name"):
+                    b["user_name"] = name
+                    changed = True
+        if changed:
+            self.dirty = True
+        return changed
 
     def br_display(self, b):
         """Name used in radio tables and on the map (unique, never empty)."""
@@ -1102,12 +1138,51 @@ class Watch:
             p = (n or {}).get("prefix")
             left = self.omr_left.get(p) if p else None
             now_omr = self._omr_now()
-            if not p or p in now_omr:
+            fav = self.favored_omr() if thread else None
+            if not p or (p == fav if fav else p in now_omr):
+                # with Thread Anchor, the prefix the network favors is the only current one: a
+                # Google TV keeps announcing its own local prefix in its TXT even when unused
                 return None
+            if fav and not left:
+                return {"prefix": p, "br": None, "t": None, "at": None}
             if not left:
                 return {"prefix": p, "br": None, "t": None, "at": None} if thread and now_omr else None
             return {"prefix": p, "br": left[1], "t": left[0],
                     "at": time.strftime("%H:%M", time.localtime(left[0]))}
+
+    def favored_omr(self):
+        """The OMR prefix the network favors, as Thread Anchor reads it (br omrprefix), or None."""
+        st = getattr(getattr(self, "anchor", None), "state", None)
+        return st.get("favored") if isinstance(st, dict) and st.get("favored") else None
+
+    # ------------------------------------------------ announcement in a node's place, kept
+    def proxy_hold(self, node, ips, name):
+        """The announcement in the place of a node stays until the node announces itself again on
+        the prefix of the network (its own record, the one the Matter Server reads after a reconnection),
+        PROXY_HOLD_S at most: withdrawn at once, the old record could come back and drop it again."""
+        node = str(node).upper().zfill(16)
+        with self.lock:
+            self.proxy_holds[node] = {"since": time.time(), "ips": list(ips), "name": name}
+
+    def check_proxy_holds(self, now=None):
+        now = time.time() if now is None else now
+        with self.lock:
+            holds = dict(self.proxy_holds)
+        for node, h in holds.items():
+            own = self.matter.get(node) or {}
+            good = self.favored_omr() or next(iter(self._omr_now()), None)
+            fixed = own.get("online") and own.get("prefix") and own.get("prefix") == good
+            if not fixed and now - h["since"] < PROXY_HOLD_S:
+                continue
+            with self.lock:
+                self.proxy_holds.pop(node, None)
+            self.proxy_withdraw(node)
+            if fixed:
+                self.emit("proxy_released", t("{node}: announces itself again on {prefix}, announcement in its place withdrawn",
+                                              node=h["name"], prefix=own["prefix"]), node=h["name"], prefix=own["prefix"])
+            else:
+                self.emit("proxy_expired", t("{node}: still not announcing itself on the prefix of the network after 24 h, "
+                                             "announcement in its place withdrawn", node=h["name"]), node=h["name"])
 
     def omr_episodes_24h(self):
         """OMR prefix changes in the last 24h, as episodes (changes less than 30 min apart are one)."""
@@ -1655,6 +1730,15 @@ class Watch:
                     self.anchor.update()
                 except Exception as err:  # noqa: BLE001
                     LOG.warning("anchor: %s", err)
+            if self.proxy_holds:
+                try:
+                    self.check_proxy_holds()
+                except Exception as err:  # noqa: BLE001
+                    LOG.warning("proxy holds: %s", err)
+            if startup_reported and time.time() - getattr(self, "_names_t", 0) >= 600:
+                # names the user gave the border routers in Home Assistant (device registry)
+                self._names_t = time.time()
+                threading.Thread(target=self._refresh_user_names_safe, daemon=True, name="br-names").start()
             if time.time() - last_hourly >= 3600:
                 last_hourly = time.time()
                 try:
@@ -1850,6 +1934,8 @@ class Watch:
         self.reattach = Reattach(self, self.healer)
         self.reattach.live = self.live
         self.reattach.advisor = self.advisor
+        # option: unavailable nodes heard on the radio recovered by the Thread diagnostic of Thread Anchor
+        self.reattach.auto_diag = bool(OPTIONS.get("thread_diag_recovery", True))
         self.storm = Storm(self)
         self.healer.storm = self.storm
         self.quality = Quality(self, self.healer, self.live, OPTIONS)
@@ -1883,7 +1969,7 @@ class Watch:
                              self.healer.run, self.healer.run_sweeper, self.radio.run, self.radio.run_leader,
                              self.labels.run, self.live.run, self.suplog.run, self.matterlog.run, self.table.run, self.webui.run,
                              self.quality.run_probe, self.quality.run_sniffer, self.quality.run_score,
-                             self.history.run)]
+                             self.history.run, self.reattach.run_auto)]
         for th in threads:
             th.start()
         LOG.info(t("mDNS listening started", types=", ".join((T_MESHCOP, T_MATTER, T_CAST, T_AIRPLAY))))

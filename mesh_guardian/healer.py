@@ -476,6 +476,23 @@ class Healer:
         except Exception:  # noqa: BLE001
             return None
 
+    def device_registry(self):
+        """Devices of the Home Assistant registry (websocket config/device_registry/list): the names
+        the user gave (name_by_user), for the border routers. None when it cannot be read."""
+        if not self.token:
+            return None
+        ws = websocket.create_connection("ws://supervisor/core/websocket", timeout=20)
+        try:
+            json.loads(ws.recv())   # auth_required
+            ws.send(json.dumps({"type": "auth", "access_token": self.token}))
+            if json.loads(ws.recv()).get("type") != "auth_ok":
+                return None
+            ws.send(json.dumps({"id": 1, "type": "config/device_registry/list"}))
+            res = json.loads(ws.recv())
+            return res.get("result") if res.get("success") and isinstance(res.get("result"), list) else None
+        finally:
+            ws.close()
+
     # ------------------------------------------------------------- HA
     def fetch_ha_nodes(self):
         if not self.token:

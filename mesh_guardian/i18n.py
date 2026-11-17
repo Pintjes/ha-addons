@@ -380,19 +380,28 @@ FR = {
     # node left on an OMR prefix the border routers no longer publish
     "{node}: stayed on the old prefix {prefix} after {br} changed it at {at}: its new address is not known":
         "{node} : restée sur l'ancien préfixe {prefix} après le changement fait par {br} à {at} : sa nouvelle adresse n'est pas connue",
+    # gentle way: announcement kept, automatic diagnostic
+    "Automatic Thread diagnostic failed: {err}": "Diagnostic Thread automatique en échec : {err}",
+    "{node}: automatic Thread diagnostic: {diag}": "{node} : diagnostic Thread automatique : {diag}",
+    "{node}: back once announced in its place on its current address":
+        "{node} : revenue une fois annoncée à sa place sur son adresse actuelle",
+    "{node}: announces itself again on {prefix}, announcement in its place withdrawn":
+        "{node} : s'annonce de nouveau elle-même sur {prefix}, annonce à sa place retirée",
+    "{node}: still not announcing itself on the prefix of the network after 24 h, announcement in its place withdrawn":
+        "{node} : ne s'annonce toujours pas elle-même sur le préfixe du réseau après 24 h, annonce à sa place retirée",
     # Thread diagnostic by Thread Anchor (recovery attempt)
     "Network stack stuck: last resort, cut its power for 10s (your call)":
         "Pile réseau figée : dernier recours, couper son alimentation 10 s (à toi de décider)",
     "Only has the old address prefix: a remedy on the border router is possible":
         "N'a que l'ancien préfixe d'adresse : un remède sur le border router est possible",
     "no answer from Thread Anchor": "pas de réponse de Thread Anchor",
-    "Thread diagnostic (RLOC 0x{r:04X}) failed: {why}": "Diagnostic Thread (RLOC 0x{r:04X}) impossible : {why}",
+    "Thread diagnostic ({where}) failed: {why}": "Diagnostic Thread ({where}) impossible : {why}",
     "answers through the mesh ({ms} ms)": "répond par le maillage ({ms} ms)",
     "no answer through the mesh": "pas de réponse par le maillage",
     "not pinged": "pas de ping",
     "no routable address": "aucune adresse routable",
-    "Thread diagnostic (RLOC 0x{r:04X}): {ping}; addresses: {addrs}":
-        "Diagnostic Thread (RLOC 0x{r:04X}) : {ping} ; adresses : {addrs}",
+    "Thread diagnostic ({where}): {ping}; addresses: {addrs}":
+        "Diagnostic Thread ({where}) : {ping} ; adresses : {addrs}",
     "{node}: announced in its place on {ip} (address given by the Thread diagnostic)":
         "{node} : annoncée à sa place sur {ip} (adresse donnée par le diagnostic Thread)",
     "{node}: only has the old prefix ({addrs}): it did not take the prefix of the network. A remedy on the "

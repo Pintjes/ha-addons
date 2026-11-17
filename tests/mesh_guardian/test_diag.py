@@ -34,7 +34,7 @@ class Mq:
         self.sent.append((topic, json.loads(payload)))
         req = json.loads(payload)
         if self.answer is not None:
-            res = dict(self.answer, id=req["id"], rloc16=req["rloc16"])
+            res = dict(self.answer, id=req["id"], rloc16=req.get("rloc16"))
             threading.Timer(0.05, self.anchor.on_diag, args=(A.DIAG_RESULT_TOPIC + req["id"], json.dumps(res))).start()
 
 
@@ -150,6 +150,23 @@ assert advice_of(dict(base, search={"result": "frozen", "text": "x"})) == \
     advice.t("Network stack stuck: last resort, cut its power for 10s (your call)")
 assert advice_of(dict(base, search={"result": "old_prefix_only", "text": "x"})) == \
     advice.t("Only has the old address prefix: a remedy on the border router is possible")
+# ML-EID (adresse mesh-locale stable) depuis les dernieres valeurs de la node, envoyee dans la requete
+import base64  # noqa: E402
+import ipaddress  # noqa: E402
+
+b64 = lambda a: base64.b64encode(ipaddress.IPv6Address(a).packed).decode()   # noqa: E731
+attrs = {"0/53/5": base64.b64encode(bytes([64]) + ipaddress.IPv6Address("fd27:7233:83bf::").packed[:8]).decode(),
+         "0/51/0": [{"7": 4, "6": [b64("fe80::c87a:3480:8b66:e461"), b64("fd27:7233:83bf::ff:fe00:b45c"),
+                                   b64("fd27:7233:83bf:0:1234:5678:9abc:def0"), b64("fdd7:20e4:8187:1:ef69:9a13:7033:2b07")]}]}
+assert R.mleid_of(attrs) == "fd27:7233:83bf:0:1234:5678:9abc:def0"
+assert R.mleid_of(dict(attrs, **{"0/53/5": base64.b64encode(ipaddress.IPv6Address("fd27:7233:83bf::").packed[:8]).decode()})) \
+    == "fd27:7233:83bf:0:1234:5678:9abc:def0"   # prefixe sans l'octet de longueur
+assert R.mleid_of({}) is None
+w, a = anchor_with(ans)
+a.diag(None, MIELE, timeout=2, mleid="fd27:7233:83bf:0:1234:5678:9abc:def0")
+assert w.mqtt.sent[0][1] == {"id": w.mqtt.sent[0][1]["id"], "ping": True, "ext": "ca7a34808b66e461",
+                             "mleid": "fd27:7233:83bf:0:1234:5678:9abc:def0"}, w.mqtt.sent[0][1]
+
 # 2.33.0 en production : HTTP 503 « 'list' object has no attribute 'items' » sur /api/table. Le resultat
 # de heard_map() (un dict) portait le nom « heard », reutilise dans la boucle de build() pour la liste
 # des parents candidats d'un enfant : la node suivante appelait heard_of() sur une liste.

@@ -100,6 +100,10 @@
   .brs { display: flex; flex-wrap: wrap; gap: 8px; }
   .br { padding: 8px 12px; display: flex; gap: 10px; align-items: center; cursor: pointer; }
   .br small { color: var(--mut); display: block; }
+  .br .anc { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line, rgba(127,127,127,.25)); font-size: 12px; }
+  .br .anc p { margin: 2px 0; }
+  .br .anc .facts { display: grid; gap: 2px; }
+  .br .anc .facts div { display: flex; justify-content: space-between; gap: 8px; }
 
   .st { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px 2px 6px; border-radius: 999px; font-size: 12.5px; font-weight: 500; white-space: nowrap; }
   .st.ok { background: var(--ok-soft); } .st.ok svg { color: var(--ok); }
@@ -701,10 +705,11 @@ function renderHero() {
     <div class="score">${score}</div>`;
 }
 
-// OMR prefix kept by Thread Anchor: proposal to fix one, state, report before / since the anchoring
-function renderAnchor() {
-  const a = D.anchor, box = $("#anchor");
-  if (!a) { box.style.display = "none"; box.innerHTML = ""; return; }
+// OMR prefix kept by Thread Anchor: proposal to fix one, state, report before / since the anchoring.
+// Shown in the card of the border router of Home Assistant (it carries the anchoring); in a card of
+// its own only when that border router is not in the list.
+const haBr = () => (D.border_routers || []).some(b => b.ha);
+function anchorLines(a) {
   const lines = [];
   if (a.proposal) lines.push(`<p>${esc(F("anc_prop", {p: a.proposal}))}</p>
     <p><button class="btn" id="ancSet" data-p="${esc(a.proposal)}">${esc(L("anc_btn"))}</button></p>`);
@@ -714,15 +719,24 @@ function renderAnchor() {
   const r = a.report;
   if (r) {
     const row = (k, x) => x ? `<div><span>${esc(F(k, {d: x.days}))}</span><b class="num">${esc(F("anc_rate", {o: x.omr_per_day, l: x.lost_per_day}))}</b></div>` : "";
-    lines.push(`<p class="mut">${esc(F("anc_since", {d: new Date(r.anchored_since).toLocaleString()}))}</p>
+    const when = new Date(r.anchored_since).toLocaleString(LANG, {dateStyle: "short", timeStyle: "short"});
+    lines.push(`<p class="mut">${esc(F("anc_since", {d: when}))}</p>
       <div class="facts">${row("anc_before", r.before)}${row("anc_after", r.after)}</div>`);
   }
-  box.style.display = lines.length ? "" : "none";
-  box.innerHTML = `<h3 title="${esc(L("anc_tip"))}">${esc(L("anc_title"))}</h3>${lines.join("")}`;
+  return lines;
 }
-$("#anchor").addEventListener("click", async e => {
-  const b = e.target.closest("#ancSet");
+function renderAnchor() {
+  const a = D.anchor, box = $("#anchor");
+  const lines = a && !haBr() ? anchorLines(a) : [];
+  box.style.display = lines.length ? "" : "none";
+  box.innerHTML = lines.length ? `<h3 title="${esc(L("anc_tip"))}">${esc(L("anc_title"))}</h3>${lines.join("")}` : "";
+}
+// captured: the button can sit in the card of a border router, whose click opens its panel
+document.addEventListener("click", async e => {
+  const b = e.target.closest && e.target.closest("#ancSet");
   if (!b) return;
+  e.stopPropagation();
+  e.preventDefault();
   const p = b.dataset.p;
   if (!confirm(F("anc_confirm", {p}))) return;
   b.disabled = true;
@@ -732,7 +746,7 @@ $("#anchor").addEventListener("click", async e => {
   } catch (err) { /* said below */ }
   toast(res.ok ? F("anc_done", {p}) : L(res.result === "changed" ? "anc_changed" : res.result === "missing" ? "anc_missing" : "anc_fail"));
   load(true);
-});
+}, true);
 
 // same advice for several nodes (e.g. "add a router near Outdoor"): one card listing the nodes
 function todoGroups(issues) {
@@ -808,8 +822,10 @@ function renderBrs() {
     // radio carried by USB/IP Link: average latency of the link (5 min)
     const u = b.usb_latency;
     if (u && u.avg_ms != null) extra.push(F("br_usb", {v: u.avg_ms < 10 ? dec(u.avg_ms) : Math.round(u.avg_ms)}));
+    // the border router of Home Assistant carries the anchoring of the OMR prefix (Thread Anchor)
+    const anc = b.ha && D.anchor ? anchorLines(D.anchor) : [];
     return `<div class="card br" data-br="${esc(b.id)}" role="button" tabindex="0" title="${esc(L("br_open"))}"><span class="st ${k} ic">${k === "ok" ? IC.ok : k === "bad" ? IC.bad : IC.warn}</span>
-      <div><b>${esc(b.name)}</b>${b.role === "leader" ? ` <span title="Leader">${IC.crown}</span>` : ""}<small>${extra.map(esc).join(" · ")}</small></div></div>`;
+      <div><b>${esc(b.name)}</b>${b.role === "leader" ? ` <span title="Leader">${IC.crown}</span>` : ""}<small>${extra.map(esc).join(" · ")}</small>${anc.length ? `<div class="anc" title="${esc(L("anc_tip"))}"><small><b>${esc(L("anc_title"))}</b></small>${anc.join("")}</div>` : ""}</div></div>`;
   }).join("");
 }
 
