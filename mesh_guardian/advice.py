@@ -226,14 +226,16 @@ def advise(rows, brs, ctx):
             elif bat:
                 out.append((bat, bat, "high"))
             elif r["id"] in ctx["gave_up"]:
-                # nobody hears it on the radio (else the branch above): no power, or a stuck radio
-                out.append((t("Remove the battery for 10s") if r.get("battery") else t("Unplug it for 10s"),
-                            t("it did not come back after the recovery pings"), "high"))
+                # the pings gave up: that proves nothing about the node itself. Cutting its power is
+                # only suggested once the Thread diagnostic proved its network stack stuck ("frozen")
+                pending = (r.get("search") or {}).get("state") == "pending"
+                out.append((t("Thread diagnostic under way") if pending else t("Unreachable: Thread diagnostic to do"),
+                            t("it did not come back after the recovery pings; nothing proves yet that it is stuck: "
+                              "the recovery attempt asks the mesh for it"), "high"))
             elif r.get("ping_ok") is True or (r.get("server") or {}).get("opened_1h", 0) >= 2:
                 # it answered a recovery ping, or the Matter Server opened several sessions within the hour:
                 # it has power, "check its power" would be wrong
-                out.append((t("Answers now and then: remove the battery for 10s") if r.get("battery")
-                            else t("Answers now and then: unplug it for 10s"), "", "high"))
+                out.append((t("Answers now and then: try the recovery attempt"), "", "high"))
             else:
                 out.append((t("Check its batteries") if r.get("battery") else t("Check its power"), "", "high"))
         elif r.get("network") != "thread":

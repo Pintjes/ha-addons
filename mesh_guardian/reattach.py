@@ -75,7 +75,8 @@ BACK_WAIT_S = 60      # s: announced in its place on its current address: time l
 AUTO_EVERY_S = 60     # s: automatic recovery by the Thread diagnostic: candidates looked for this often
 AUTO_NODE_S = 1800    # s: at most one automatic diagnostic per node in this time
 AUTO_PER_HOUR = 5     # nodes at most per hour (automatic)
-AUTO_HEARD_S = 900    # s: only for a node a neighbor heard this recently
+AUTO_HEARD_S = 900    # s: a node a neighbor heard this recently: every AUTO_NODE_S
+AUTO_UNHEARD_S = 7200  # s: a node nobody hears: asked by its mesh-local EID only this often
 
 
 def _ago(s):
@@ -690,11 +691,15 @@ class Reattach:
             if not st and announced is not False:
                 continue   # announced on a current address: the diagnostic would not change anything
             try:
-                ext = ext_of(self._cached(nid))
+                cached = self._cached(nid)
+                ext = ext_of(cached)
             except Exception:  # noqa: BLE001
                 continue
             if not self._hearing(nid, ext, AUTO_HEARD_S):
-                continue   # nobody hears it: not this way (the pings of the recovery go on)
+                # nobody hears it: still asked by its mesh-local EID (Thread Anchor reaches it through
+                # the mesh whatever its RLOC16), but less often. A failure then proves nothing
+                if not mleid_of(cached) or (nid in last and now - last[nid] < AUTO_UNHEARD_S):
+                    continue
             if not self.busy.acquire(blocking=False):
                 return None
             try:
@@ -755,7 +760,8 @@ class Reattach:
             text = t("Thread diagnostic ({where}) failed: {why}", where=where, why=err) + (f" ({pinged})" if ping else "")
             # neither the diagnostic nor the ping answers while a neighbor hears it: its network stack
             # is stuck. Any other error (busy, too soon, another node at this RLOC16…) proves nothing
-            if err.startswith("no answer to the network diagnostic") and not ping.get("ok") and hb:
+            if err.startswith("no answer to the network diagnostic") and not ping.get("ok") and hb \
+                    and hb.get("ago_s", AUTO_HEARD_S + 1) <= AUTO_HEARD_S:
                 return {"text": text, "omr": [], "result": "frozen", "outcome": t(
                     "{node}: heard by {who} but no answer through the mesh: its network stack is stuck. No remote way "
                     "is left: cutting its power for 10 s is the last resort, your call", node=name, who=hb["by"])}
@@ -804,9 +810,10 @@ class Reattach:
                             heard=[[w, round(s), r] for w, s, r in alive["heard"]])
                 st = self.w.stale_prefix(nid, thread=True) if hasattr(self.w, "stale_prefix") else None
                 announced = (self.w.matter.get(nid) or {}).get("online") if hasattr(self.w, "matter") else None
-                if (st or (announced is False and not alive["ok"])) and alive["heard"]:
-                    # address not known or on an old prefix, but its neighbors hear it: Thread Anchor
-                    # reaches it through the mesh (RLOC16) and tells its current addresses
+                if st or (announced is False and not alive["ok"]):
+                    # address not known or on an old prefix: Thread Anchor reaches it through the mesh
+                    # (RLOC16 when a neighbor hears it, else its mesh-local EID) and tells its current
+                    # addresses. Not heard: a failure proves nothing (never "frozen")
                     d = self._thread_diag(nid, name, ext)
                     if d is not None:
                         # once the Thread diagnostic ran, the gentle way only: the fail-safe and

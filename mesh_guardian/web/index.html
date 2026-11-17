@@ -100,10 +100,11 @@
   .brs { display: flex; flex-wrap: wrap; gap: 8px; }
   .br { padding: 8px 12px; display: flex; gap: 10px; align-items: center; cursor: pointer; }
   .br small { color: var(--mut); display: block; }
-  .br .anc { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line, rgba(127,127,127,.25)); font-size: 12px; }
-  .br .anc p { margin: 2px 0; }
-  .br .anc .facts { display: grid; gap: 2px; }
-  .br .anc .facts div { display: flex; justify-content: space-between; gap: 8px; }
+  .br .anc1.warn { color: var(--warn, #b26a00); }
+  .sheet .anc p { margin: 4px 0; }
+  .sheet .anc .facts { display: grid; gap: 4px; }
+  .sheet .anc .facts div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
+  .sheet .anc .facts b { font-weight: 600; text-align: right; }
 
   .st { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px 2px 6px; border-radius: 999px; font-size: 12.5px; font-weight: 500; white-space: nowrap; }
   .st.ok { background: var(--ok-soft); } .st.ok svg { color: var(--ok); }
@@ -325,7 +326,7 @@
 "use strict";
 // ------------------------------------------------------------ texts
 const T = {
-  en: {np_before:"Before: {p}, {r} dBm", a_parent_noanswer:"{n}: no answer (asleep?)", a_parent_new:"{n}: new parent {l}", a_failed:"{n}: action failed", check_bat:"Check its batteries", check_power:"Check its power", flap_power:"Answers now and then. Cut its power for 10 s", flap_bat:"Answers now and then. Remove its battery for 10 s", down_since:"Since {t}.", more_n:"+{n}", refresh:"Refresh", reading:"Reading the nodes again… {d}/{n}", reading0:"Reading the nodes again…", report:"Report", loading:"loading…", error:"error", live:"live", polling:"live link down: values read on demand", updated:"updated at {t}", connecting:"connecting to the Matter Server…", updating:"reading the nodes…", updating_n:"reading the nodes… {d}/{n}",
+  en: {np_before:"Before: {p}, {r} dBm", a_parent_noanswer:"{n}: no answer (asleep?)", a_parent_new:"{n}: new parent {l}", a_failed:"{n}: action failed", check_bat:"Check its batteries", check_power:"Check its power", flap_power:"Answers now and then. Try the recovery attempt", flap_bat:"Answers now and then. Try the recovery attempt", down_since:"Since {t}.", more_n:"+{n}", refresh:"Refresh", reading:"Reading the nodes again… {d}/{n}", reading0:"Reading the nodes again…", report:"Report", loading:"loading…", error:"error", live:"live", polling:"live link down: values read on demand", updated:"updated at {t}", connecting:"connecting to the Matter Server…", updating:"reading the nodes…", updating_n:"reading the nodes… {d}/{n}",
     silent:"silent", w_silent:"Silent",
     silent_tip:"No sign of life for {t} (usually every {u}): probably without power.",
     t_rhythm:"Sign of life", rhythm_v:"every {u} at most · silence flagged after {l}", rhythm_wait:"being measured",
@@ -339,6 +340,9 @@ const T = {
     anc_fail:"The prefix could not be fixed", anc_changed:"The prefix of the network changed meanwhile: look again", anc_missing:"Thread Anchor not found among the add-ons",
     anc_in:"Fixed {p}: in place", anc_out:"Fixed {p}: not in place", anc_fav:"Favored on the network: {p}", anc_since:"Anchored since {d}",
     anc_rate:"{o} prefix changes and {l} nodes lost per day", anc_before:"Before ({d} days)", anc_after:"Since ({d} days)",
+    anc_before0:"Before", anc_after0:"Since", anc_raw:"{o}, {l} in {d}", anc_min:"{m} min", anc_hmin:"{h} h {m} min",
+    anc_omr1:"{n} prefix change", anc_omrN:"{n} prefix changes", anc_lost1:"{n} node lost", anc_lostN:"{n} nodes lost",
+    anc_short_ok:"Fixed OMR prefix: in place", anc_short_out:"Fixed OMR prefix: not in place", anc_short_prop:"OMR prefix: one to fix is proposed",
     quality:"Network quality · last {n} min", q_lab:["poor", "to watch", "good", "excellent"], q_24h:"24h: {v} %", part_tip:"Now {v} % · 24h {v24} % · weight {n} %", q_scale:"≥ 95 excellent · 90–95 good · 80–90 to watch",
     q_capped:"capped: partitioned network", q_wait:"The score starts after a few minutes.", q_parts:{availability:"Availability", radio:"Radio", outages:"Outages", backbone:"Backbone", partition:"Partition"}, weight:"Weight {n} %",
     todo:"Good to know ({n})", new:"new", todo_none:"Nothing to report", w_down:"Unavailable", w_warn:"Action advised", w_info:"Good to know", seen:"Seen", seen_tip:"Hide this note (it comes back if it changes)", w_net:"Network",
@@ -417,7 +421,7 @@ const T = {
     roles:{leader:"Leader router", router:"Router", reed:"End", end_device:"End", sleepy_end_device:"Sleepy end", unassigned:"unassigned", unspecified:"unspecified", detached:"detached", child:"End device", offline:"offline"},
     boot:{unspecified:"unspecified", power_on:"power on", brown_out:"brown-out", software_watchdog:"software watchdog", hardware_watchdog:"hardware watchdog", software_update:"software update", software_reset:"software reset"},
     csrc:{report:"report", event:"event", read:"read", ping:"ping", passive:"packet"}},
-  fr: {np_before:"Avant : {p}, {r} dBm", a_parent_noanswer:"{n} : pas de réponse (endormie ?)", a_parent_new:"{n} : nouveau parent {l}", a_failed:"{n} : action impossible", check_bat:"Vérifier les piles", check_power:"Vérifier l'alimentation", flap_power:"Répond par intermittence. Couper son alimentation 10 s", flap_bat:"Répond par intermittence. Retirer la pile 10 s", down_since:"Depuis {t}.", more_n:"+{n}", refresh:"Actualiser", reading:"Relecture des nodes… {d}/{n}", reading0:"Relecture des nodes…", report:"Rapport", loading:"chargement…", error:"erreur", live:"en direct", polling:"lien direct coupé : valeurs lues à la demande", updated:"mis à jour à {t}", connecting:"connexion au Matter Server…", updating:"lecture des nodes…", updating_n:"lecture des nodes… {d}/{n}",
+  fr: {np_before:"Avant : {p}, {r} dBm", a_parent_noanswer:"{n} : pas de réponse (endormie ?)", a_parent_new:"{n} : nouveau parent {l}", a_failed:"{n} : action impossible", check_bat:"Vérifier les piles", check_power:"Vérifier l'alimentation", flap_power:"Répond par intermittence. Lancer la tentative de récupération", flap_bat:"Répond par intermittence. Lancer la tentative de récupération", down_since:"Depuis {t}.", more_n:"+{n}", refresh:"Actualiser", reading:"Relecture des nodes… {d}/{n}", reading0:"Relecture des nodes…", report:"Rapport", loading:"chargement…", error:"erreur", live:"en direct", polling:"lien direct coupé : valeurs lues à la demande", updated:"mis à jour à {t}", connecting:"connexion au Matter Server…", updating:"lecture des nodes…", updating_n:"lecture des nodes… {d}/{n}",
     silent:"silencieuse", w_silent:"Silencieuse",
     silent_tip:"Aucun signe de vie depuis {t} (d'habitude toutes les {u}) : probablement sans courant.",
     t_rhythm:"Signe de vie", rhythm_v:"toutes les {u} au plus · silence signalé après {l}", rhythm_wait:"mesure en cours",
@@ -431,6 +435,9 @@ const T = {
     anc_fail:"Le préfixe n'a pas pu être imposé", anc_changed:"Le préfixe du réseau a changé entre-temps : regarde à nouveau", anc_missing:"Thread Anchor introuvable parmi les add-ons",
     anc_in:"Imposé {p} : en place", anc_out:"Imposé {p} : pas en place", anc_fav:"Retenu sur le réseau : {p}", anc_since:"Ancré depuis le {d}",
     anc_rate:"{o} changements de préfixe et {l} nodes perdues par jour", anc_before:"Avant ({d} jours)", anc_after:"Depuis ({d} jours)",
+    anc_before0:"Avant", anc_after0:"Depuis", anc_raw:"{o}, {l} en {d}", anc_min:"{m} min", anc_hmin:"{h} h {m} min",
+    anc_omr1:"{n} changement de préfixe", anc_omrN:"{n} changements de préfixe", anc_lost1:"{n} node perdue", anc_lostN:"{n} nodes perdues",
+    anc_short_ok:"Préfixe OMR imposé : en place", anc_short_out:"Préfixe OMR imposé : pas en place", anc_short_prop:"Préfixe OMR : un préfixe à imposer est proposé",
     quality:"Qualité du réseau · dernières {n} min", q_lab:["mauvais", "à surveiller", "bon", "excellent"], q_24h:"24 h : {v} %", part_tip:"Actuel {v} % · 24 h {v24} % · poids {n} %", q_scale:"≥ 95 excellent · 90–95 bon · 80–90 à surveiller",
     q_capped:"plafonnée : réseau partitionné", q_wait:"La note démarre après quelques minutes.", q_parts:{availability:"Disponibilité", radio:"Radio", outages:"Coupures", backbone:"Ossature", partition:"Partition"}, weight:"Poids {n} %",
     todo:"À savoir ({n})", new:"nouveau", todo_none:"Rien à signaler", w_down:"Indisponible", w_warn:"Action conseillée", w_info:"À savoir", seen:"Vu", seen_tip:"Masquer cette note (elle revient si elle change)", w_net:"Réseau",
@@ -718,7 +725,12 @@ function anchorLines(a) {
   if (a.favored && a.favored !== a.wanted) lines.push(`<p class="mut">${esc(F("anc_fav", {p: a.favored}))}</p>`);
   const r = a.report;
   if (r) {
-    const row = (k, x) => x ? `<div><span>${esc(F(k, {d: x.days}))}</span><b class="num">${esc(F("anc_rate", {o: x.omr_per_day, l: x.lost_per_day}))}</b></div>` : "";
+    // under one day: the counts as they are ("1 node lost in 45 min"); a rate per day only from one day on
+    const dur = s => s < 3600 ? F("anc_min", {m: Math.max(1, Math.round(s / 60))}) : F("anc_hmin", {h: Math.floor(s / 3600), m: Math.round(s % 3600 / 60)});
+    const cnt = (n, one, many) => F(n === 1 ? one : many, {n});
+    const row = (k, x) => !x ? "" : (x.seconds ?? x.days * 86400) < 86400
+      ? `<div><span>${esc(L(k + "0"))}</span><b class="num">${esc(F("anc_raw", {o: cnt(x.omr, "anc_omr1", "anc_omrN"), l: cnt(x.lost, "anc_lost1", "anc_lostN"), d: dur(x.seconds ?? x.days * 86400)}))}</b></div>`
+      : `<div><span>${esc(F(k, {d: x.days}))}</span><b class="num">${esc(F("anc_rate", {o: x.omr_per_day, l: x.lost_per_day}))}</b></div>`;
     const when = new Date(r.anchored_since).toLocaleString(LANG, {dateStyle: "short", timeStyle: "short"});
     lines.push(`<p class="mut">${esc(F("anc_since", {d: when}))}</p>
       <div class="facts">${row("anc_before", r.before)}${row("anc_after", r.after)}</div>`);
@@ -822,10 +834,13 @@ function renderBrs() {
     // radio carried by USB/IP Link: average latency of the link (5 min)
     const u = b.usb_latency;
     if (u && u.avg_ms != null) extra.push(F("br_usb", {v: u.avg_ms < 10 ? dec(u.avg_ms) : Math.round(u.avg_ms)}));
-    // the border router of Home Assistant carries the anchoring of the OMR prefix (Thread Anchor)
-    const anc = b.ha && D.anchor ? anchorLines(D.anchor) : [];
+    // the border router of Home Assistant carries the anchoring of the OMR prefix (Thread Anchor):
+    // one short line on the card, the whole of it in its panel
+    const a = b.ha ? D.anchor : null;
+    const anc = !a ? "" : a.proposal ? `<small class="anc1">${esc(L("anc_short_prop"))}</small>`
+      : a.wanted ? `<small class="anc1 ${a.enforced ? "" : "warn"}">${esc(L(a.enforced ? "anc_short_ok" : "anc_short_out"))}</small>` : "";
     return `<div class="card br" data-br="${esc(b.id)}" role="button" tabindex="0" title="${esc(L("br_open"))}"><span class="st ${k} ic">${k === "ok" ? IC.ok : k === "bad" ? IC.bad : IC.warn}</span>
-      <div><b>${esc(b.name)}</b>${b.role === "leader" ? ` <span title="Leader">${IC.crown}</span>` : ""}<small>${extra.map(esc).join(" · ")}</small>${anc.length ? `<div class="anc" title="${esc(L("anc_tip"))}"><small><b>${esc(L("anc_title"))}</b></small>${anc.join("")}</div>` : ""}</div></div>`;
+      <div><b>${esc(b.name)}</b>${b.role === "leader" ? ` <span title="Leader">${IC.crown}</span>` : ""}<small>${extra.map(esc).join(" · ")}</small>${anc}</div></div>`;
   }).join("");
 }
 
@@ -1317,7 +1332,10 @@ function openBr(id) {
   const tech = [[L("br_model"), [b.vendor, b.model].filter(Boolean).map(esc).join(" · ") || "—"], [L("br_id"), c(b.id)], [L("br_ext"), c(b.ext_address)],
     [L("br_xpan"), c(b.ext_pan)], [L("br_part"), c(b.partition)], [L("br_if"), c(b.interface)],
     [L("br_addr"), (b.addresses || []).map(esc).join("<br>") || "—"]];
-  openSheet(head(esc(b.name), [b.vendor, b.model].filter(Boolean).map(esc).join(" · ")) + adv + grid(kv) +
+  // the border router of Home Assistant: the OMR prefix it is kept on (Thread Anchor), under its prefix
+  const anc = b.ha && D.anchor ? anchorLines(D.anchor) : [];
+  const ancHtml = anc.length ? `<h2 title="${esc(L("anc_tip"))}">${esc(L("anc_title"))}</h2><div class="anc">${anc.join("")}</div>` : "";
+  openSheet(head(esc(b.name), [b.vendor, b.model].filter(Boolean).map(esc).join(" · ")) + adv + grid(kv) + ancHtml +
     `<div class="sheet-acts"><button class="btn" id="brRemove" data-brid="${esc(b.id)}" ${b.online ? "disabled" : ""} title="${esc(L(b.online ? "br_remove_online" : "br_remove_tip"))}">${ACT_ICON.remove || ""}<span>${L("br_remove")}</span></button></div>` +
     (b.online ? list("br_through", through) + list("br_children", kids) : "") +
     `<h2>${L("br_detaches")}</h2>${det ? `<ul>${det}</ul>` : `<p class="mut">${L("none")}</p>`}` +

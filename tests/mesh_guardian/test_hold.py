@@ -183,6 +183,7 @@ def setup(answer=ans, back=True):
 
 
 R.ext_of = lambda attrs: 0xCA7A34808B66E461
+R.BACK_WAIT_S = 0.1   # attente de retour apres l'annonce : courte dans l'essai
 r, w, calls = setup()
 assert r.auto_pass(now=1000.0) == MIELE and calls == [MIELE]
 assert w.announced and w.held == [MIELE] and r.results[MIELE]["result"] == "back_announce"
@@ -202,7 +203,18 @@ w.anchor.update()
 assert w.anchor.blocked() and r.auto_pass(now=1000.0) is None and not calls   # radio coupee : pause
 r, w, calls = setup()
 r._hearing = lambda nid, ext, recent: None
-assert r.auto_pass(now=1000.0) is None and not calls                 # personne ne l'entend
+assert r.auto_pass(now=1000.0) is None and not calls                 # personne ne l'entend, pas d'ML-EID connu
+# 2.35.0 : personne ne l'entend mais son ML-EID est connu -> diagnostic quand meme, toutes les 2 h seulement
+real_mleid = R.mleid_of
+R.mleid_of = lambda attrs: "fd27:7233:83bf:0:1234:5678:9abc:def0" if attrs else None
+r, w, calls = setup(back=False)
+r._cached = lambda nid: {"0/53/5": "x"}
+r._hearing = lambda nid, ext, recent: None
+assert r.auto_pass(now=10000.0) == MIELE and calls == [MIELE]
+w.proxy_holds.clear()
+assert r.auto_pass(now=10000.0 + 1801) is None                         # 30 min : trop tot sans voisin
+assert r.auto_pass(now=10000.0 + 7201) == MIELE and calls == [MIELE, MIELE]
+R.mleid_of = real_mleid
 r, w, calls = setup()
 w.matter[MIELE].update(online=True, prefix=P)
 assert r.auto_pass(now=1000.0) is None and not calls                 # annoncee sur le bon prefixe : rien a faire
@@ -226,4 +238,51 @@ for answer, expect in ((ans, "announced"), (dict(ans, omr_addresses=[]), "unknow
     assert r.results[MIELE]["result"] == expect, r.results[MIELE]
     assert not r.busy.locked() and MIELE not in r.recovering
 assert w.held == [] and r.results[MIELE]["text"]
+
+# 2.35.0 : le bouton fait aussi le diagnostic quand aucun voisin ne l'entend (test de vie sans « heard »)
+r, w, calls = setup(answer=ans, back=False)
+r._alive = lambda nid, node_id, ext: {"ok": [], "ko": [], "heard": [], "radio_known": True}
+r._recover_send = lambda *x, **k: (_ for _ in ()).throw(AssertionError("fail-safe sent after a Thread diagnostic"))
+r.busy.acquire()
+r._recover(MIELE, "Prise Lave-linge Miele", "Buanderie", b"net", 0xCA7A34808B66E461)
+assert calls == [MIELE] and r.results[MIELE]["result"] == "announced", r.results[MIELE]
+
+# 2.35.0 : « frozen » seulement si un voisin l'a entendue il y a moins de 15 min
+r, w, calls = setup()
+del r._thread_diag
+r.live = types.SimpleNamespace(lock=threading.Lock(), nodes={})
+w.anchor.diag = lambda *a, **k: {"ping": {"ok": False, "rtt_ms": None}, "error": "no answer to the network diagnostic"}
+for ago, expect in ((60, "frozen"), (1800, "unknown")):
+    r._hearing = lambda nid, ext, recent, ago=ago: {"by": "Prise Chauffe Eau", "rloc16": 0xB45C, "ago_s": ago}
+    assert r._thread_diag(MIELE, "Prise Lave-linge Miele", 0xCA7A34808B66E461)["result"] == expect
+
+# 2.35.0 : le « dernier entendu » survit a un redemarrage (fichier dans /data)
+import nodetable  # noqa: E402
+nodetable.NodeTable.HEARD_FILE = os.path.join(tempfile.mkdtemp(), "last_heard.json")
+t1 = nodetable.NodeTable.__new__(nodetable.NodeTable)
+t1.last_heard()[MIELE] = (time.time() - 600, {"by": "0x59", "rssi": -93, "by_id": "59", "ago_s": 0})
+t1.save_last_heard(force=True)
+t2 = nodetable.NodeTable.__new__(nodetable.NodeTable)
+assert MIELE in t2.last_heard() and t2.last_heard()[MIELE][1]["by"] == "0x59"
+t1.last_heard()["OLD"] = (time.time() - 25 * 3600, {"by": "x"})
+t1.save_last_heard(force=True)
+assert "OLD" not in nodetable.NodeTable.__new__(nodetable.NodeTable).last_heard()   # plus de 24 h : oublie
+
+# Regle de l'utilisateur : aucun conseil de debranchement (couper le courant, retirer la pile) sans
+# « frozen » prouve par le diagnostic Thread. Toutes les combinaisons d'une node indisponible
+import advice  # noqa: E402
+import itertools  # noqa: E402
+cut_words = ("unplug", "remove the battery", "cut its power", "débrancher", "retirer la pile", "couper son alimentation")
+heard = {"by": "Prise Chauffe Eau", "ago_s": 60, "rssi": -60}
+for bat, hb, stale, gave, ping, srch in itertools.product(
+        (False, True), (None, heard), (None, {"prefix": G, "br": None, "t": None, "at": None}), (False, True),
+        (None, True), (None, {"state": "done", "result": "unknown", "text": "x"}, {"state": "pending"},
+                       {"state": "done", "result": "old_prefix_only", "text": "x"}, {"state": "done", "result": "frozen", "text": "x"})):
+    row = {"id": "0x5A", "name": "Miele", "area": "Buanderie", "network": "thread", "available": False, "battery": bat,
+           "since": 1000.0, "heard_by": hb, "stale_prefix": stale, "ping_ok": ping, "search": srch}
+    advice.advise([row], [], {"now": 2000.0, "tried": {}, "forced": {}, "weak_since": {}, "unstable": {},
+                              "history": lambda rid: [], "gave_up": {"0x5A"} if gave else set(), "ghosts": [], "omr_changes": 0})
+    txt = f"{row['advice']} {row['advice_detail']}".lower()
+    proven = hb is not None and (srch or {}).get("result") == "frozen"
+    assert proven or not any(wd in txt for wd in cut_words), (row, txt)
 print("OK")

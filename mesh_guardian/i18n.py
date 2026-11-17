@@ -90,6 +90,11 @@ FR = {
     "Check its power": "Vérifier l'alimentation",
     "Answers now and then: unplug it for 10s": "Répond par intermittence : débrancher 10 s",
     "Answers now and then: remove the battery for 10s": "Répond par intermittence : retirer la pile 10 s",
+    "Answers now and then: try the recovery attempt": "Répond par intermittence : lancer la tentative de récupération",
+    "Thread diagnostic under way": "Diagnostic Thread en cours",
+    "Unreachable: Thread diagnostic to do": "Injoignable : diagnostic Thread à faire",
+    "it did not come back after the recovery pings; nothing proves yet that it is stuck: the recovery attempt asks the mesh for it":
+        "pas revenue après les pings de récupération ; rien ne prouve encore qu'elle est figée : la tentative de récupération interroge le maillage",
     "Weak Wi-Fi signal with {ap}": "Signal Wi-Fi faible avec {ap}",
     "Weak Wi-Fi signal": "Signal Wi-Fi faible",
     "{rssi} dBm: move the node or an access point closer": "{rssi} dBm : rapprocher la node ou une borne",

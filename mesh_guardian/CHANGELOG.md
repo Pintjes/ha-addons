@@ -4,11 +4,24 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## Highlights of 2.9 to 2.34 (16 November 2026)
+## Highlights of 2.9 to 2.35 (16 November 2026)
 
 - **Act on a node from its panel**: recovery attempt on an unavailable node, reset from a distance, pairing codes kept by the add-on (photo or scan of the label), pairing and naming a new device without leaving the page.
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
+
+## [2.35.0] - 2026-11-17
+
+### Changed
+
+- **No advice to cut the power of a node without proof.** "Unplug it for 10s" (or remove the battery) came after the recovery pings gave up, and "Answers now and then: unplug it": neither proves anything. Now: "Unreachable: Thread diagnostic to do" (or "under way"), and "Answers now and then: try the recovery attempt". Cutting the power is only suggested after the Thread diagnostic proved the network stack stuck (`frozen`: heard by a neighbor in the last 15 min, no answer through the mesh). A test goes through every case of an unavailable node.
+- **Thread diagnostic also when nobody hears the node**: by its mesh-local EID (Thread Anchor 0.1.3), from the button and from the automatic recovery (every 2 h at most per node, within the 5 nodes per hour). A failure then proves nothing.
+- **OMR prefix in the panel of the border router of Home Assistant** (the one that opens on a click), under its prefix: state, anchoring date, before / since, proposal. The card only keeps one short line ("Fixed OMR prefix: in place", or not in place).
+- **Before / since under one day: the counts as they are** ("1 node lost in 45 min"), a rate per day only from one day on (an hour extrapolated to a day showed 24 nodes lost per day).
+
+### Fixed
+
+- **The last time each node was heard is kept across restarts** (`/data/last_heard.json`, 24 h): after an update, a node heard within the hour no longer gets "Check its power".
 
 ## [2.34.1] - 2026-11-17
 

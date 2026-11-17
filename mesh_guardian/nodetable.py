@@ -45,6 +45,8 @@ def is_ha_br(b):
 
 HEARD_RECENT_S = 900   # a node heard by a neighbor this recently is alive (its radio works)
 ALIVE_RECENT_S = 3600  # an unavailable node heard within this time is still not "without power"
+HEARD_KEEP_S = 24 * 3600   # the last hearing of each node is kept this long (/data/last_heard.json)
+HEARD_SAVE_S = 300         # ...and written at most this often
 
 
 FUZZY_EXT = 4096   # an extended address that went through a float (JSON of some tools) lost its last ~11 bits
@@ -564,9 +566,9 @@ class NodeTable:
             role = a.get("0/53/1")
             rloc = rlocs.get(nid)
             hb = heard_of(heard_all, ext_of(a))
-            seen = self.__dict__.setdefault("_last_heard", {})
+            seen = self.last_heard()
             if hb:
-                seen[nid] = (now - hb["ago_s"], hb)
+                seen[nid] = (now - hb["ago_s"], {k: hb.get(k) for k in ("by", "by_id", "rssi", "ago_s")})
             elif nid in seen and now - seen[nid][0] <= ALIVE_RECENT_S and m.get("available") is False:
                 # not in a fresh neighbor table now (it may be attaching again, with a new RLOC16):
                 # heard within the hour all the same, so alive. Its old place is not shown as current
@@ -705,6 +707,7 @@ class NodeTable:
             rows.append(self._other_row(nid, v))
         for gone in set(self.parents) - set(thread):
             del self.parents[gone]
+        self.save_last_heard(now)
         return rows
 
     MAC_TEMPLATE = ("{% set ns = namespace(s=[], o=[]) %}{% for st in states %}{% set d = device_id(st.entity_id) %}"
@@ -745,6 +748,31 @@ class NodeTable:
         return out
 
     AP_FILE = "/data/ap_names.json"
+    HEARD_FILE = "/data/last_heard.json"
+
+    def last_heard(self):
+        """node hex -> (time, {"by", "by_id", "rssi"}): the last time a neighbor heard each node. Kept in
+        /data (24 h): a restart of the add-on must not forget that an unavailable node was alive."""
+        if not hasattr(self, "_last_heard"):
+            self._last_heard, self._heard_saved = {}, time.time()
+            data = load_json(self.HEARD_FILE, {})
+            if isinstance(data, dict):
+                for nid, v in data.items():
+                    if isinstance(v, list) and len(v) == 2 and isinstance(v[0], (int, float)) and isinstance(v[1], dict) \
+                            and time.time() - v[0] < HEARD_KEEP_S:
+                        self._last_heard[nid] = (float(v[0]), v[1])
+        return self._last_heard
+
+    def save_last_heard(self, now=None, force=False):
+        now = time.time() if now is None else now
+        if not hasattr(self, "_last_heard") or (not force and now - getattr(self, "_heard_saved", 0) < HEARD_SAVE_S):
+            return
+        self._heard_saved = now
+        keep = {k: [v[0], v[1]] for k, v in self._last_heard.items() if now - v[0] < HEARD_KEEP_S}
+        try:
+            save_json(self.HEARD_FILE, keep)
+        except Exception as err:  # noqa: BLE001
+            LOG.warning(t("Cannot write {file}: {err}", file=self.HEARD_FILE, err=err))
 
     def _ap_names(self):
         if not hasattr(self, "_ap_names_v"):

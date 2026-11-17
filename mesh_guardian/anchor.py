@@ -332,7 +332,8 @@ class Anchor:
             omr = omr_episodes([e[0] for e in evs if e[1] == "omr_change" and t0 <= e[0] < t1])
             lost = [e for e in evs if e[1] == "node_unavailable" and t0 <= e[0] < t1]
             days = max((t1 - t0) / 86400, 1 / 24)
-            return {"days": round((t1 - t0) / 86400, 1), "omr": len(omr), "lost": len(lost),
+            # seconds: under one day the page shows the counts as they are, not a rate per day
+            return {"days": round((t1 - t0) / 86400, 1), "seconds": round(t1 - t0), "omr": len(omr), "lost": len(lost),
                     "omr_per_day": round(len(omr) / days, 1), "lost_per_day": round(len(lost) / days, 1)}
 
         self._report = {"anchored_since": datetime.fromtimestamp(a).astimezone().isoformat(timespec="minutes"),

@@ -214,8 +214,8 @@ base = {"id": "0x5A", "name": "Prise Lave-linge Miele", "area": "Buanderie", "ne
 unplug = advice.t("Unplug it for 10s")
 adv, det = advice_of(dict(base, heard_by=hm[MIELE]), gave_up=["0x5A"])
 assert unplug not in adv and "Chauffe Eau" in det, (adv, det)
-adv, _ = advice_of(dict(base), gave_up=["0x5A"])            # personne ne l'entend : dernier recours
-assert unplug in adv
+adv, _ = advice_of(dict(base), gave_up=["0x5A"])            # personne ne l'entend : toujours pas de preuve (2.35.0)
+assert unplug not in adv and adv == advice.t("Unreachable: Thread diagnostic to do"), adv
 adv, det = advice_of(dict(base, heard_by=hm[MIELE], stale_prefix={"prefix": "fdc0:6359:d5be:1::/64", "br": None,
                                                                     "t": None, "at": None}), gave_up=["0x5A"])
 assert unplug not in adv and "fdc0" in det and "Chauffe Eau" in det, (adv, det)
