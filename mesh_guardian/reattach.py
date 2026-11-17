@@ -809,19 +809,28 @@ class Reattach:
                     # reaches it through the mesh (RLOC16) and tells its current addresses
                     d = self._thread_diag(nid, name, ext)
                     if d is not None:
+                        # once the Thread diagnostic ran, the gentle way only: the fail-safe and
+                        # ConnectNetwork are never sent (17/11, Miele: the fail-safe was not closed,
+                        # it expired and dropped the node again 3 min after it came back)
                         alive_txt += " · " + d["text"]
                         if d["omr"] and self.announce_current(nid, name, d["omr"]):
-                            # the gentle way first: often the Matter Server only needed its address
-                            # (17/11, Miele: back 6 s later). The radio of the node is not restarted
                             if self._wait_back(nid, BACK_WAIT_S):
                                 self._recover_result(nid, name, "back_announce", t(
                                     "{node}: back once announced in its place on its current address", node=name)
                                     + " · " + alive_txt)
-                                return
-                            st = None   # its current address is announced: the command can leave
-                        elif d["result"] in ("old_prefix_only", "frozen"):
+                            else:
+                                self._recover_result(nid, name, "announced", t(
+                                    "{node}: announced in its place on {ip}, waiting for it to come back (the announcement "
+                                    "stays until it announces itself; its radio is not restarted)", node=name,
+                                    ip=", ".join(d["omr"])) + " · " + alive_txt)
+                            return
+                        if d["result"] in ("old_prefix_only", "frozen"):
                             self._recover_result(nid, name, d["result"], d["outcome"] + " · " + alive_txt)
                             return
+                        self._recover_result(nid, name, "unknown", t(
+                            "{node}: the Thread diagnostic gave no way to reach it, nothing else sent", node=name)
+                            + " · " + alive_txt)
+                        return
                 if st:
                     # still on a prefix the border routers left: its address is not known, the
                     # command cannot leave (the Matter Server gives up at once)

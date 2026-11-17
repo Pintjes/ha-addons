@@ -381,6 +381,12 @@ FR = {
     "{node}: stayed on the old prefix {prefix} after {br} changed it at {at}: its new address is not known":
         "{node} : restée sur l'ancien préfixe {prefix} après le changement fait par {br} à {at} : sa nouvelle adresse n'est pas connue",
     # gentle way: announcement kept, automatic diagnostic
+    "{node}: announced in its place on {ip}, waiting for it to come back (the announcement stays until it "
+    "announces itself; its radio is not restarted)":
+        "{node} : annoncée à sa place sur {ip}, en attente de son retour (l'annonce reste jusqu'à ce qu'elle "
+        "s'annonce elle-même ; sa radio n'est pas redémarrée)",
+    "{node}: the Thread diagnostic gave no way to reach it, nothing else sent":
+        "{node} : le diagnostic Thread n'a donné aucun moyen de la joindre, rien d'autre n'est envoyé",
     "Automatic Thread diagnostic failed: {err}": "Diagnostic Thread automatique en échec : {err}",
     "{node}: automatic Thread diagnostic: {diag}": "{node} : diagnostic Thread automatique : {diag}",
     "{node}: back once announced in its place on its current address":

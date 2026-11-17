@@ -477,8 +477,10 @@ class Healer:
             return None
 
     def device_registry(self):
-        """Devices of the Home Assistant registry (websocket config/device_registry/list): the names
-        the user gave (name_by_user), for the border routers. None when it cannot be read."""
+        """Names the user gave in Home Assistant, for the border routers: the devices of the registry
+        (config/device_registry/list, name_by_user) and the entries of the OpenThread Border Router
+        integration (config_entries/get, domain otbr: their title is the name given there).
+        Returns (devices, otbr entries), or None when the registry cannot be read."""
         if not self.token:
             return None
         ws = websocket.create_connection("ws://supervisor/core/websocket", timeout=20)
@@ -487,9 +489,14 @@ class Healer:
             ws.send(json.dumps({"type": "auth", "access_token": self.token}))
             if json.loads(ws.recv()).get("type") != "auth_ok":
                 return None
-            ws.send(json.dumps({"id": 1, "type": "config/device_registry/list"}))
-            res = json.loads(ws.recv())
-            return res.get("result") if res.get("success") and isinstance(res.get("result"), list) else None
+            out = []
+            for i, msg in enumerate(({"type": "config/device_registry/list"}, {"type": "config_entries/get", "domain": "otbr"}), 1):
+                ws.send(json.dumps({"id": i, **msg}))
+                res = json.loads(ws.recv())
+                while res.get("id") != i:   # an event in between (none subscribed, but to be safe)
+                    res = json.loads(ws.recv())
+                out.append(res.get("result") if res.get("success") and isinstance(res.get("result"), list) else None)
+            return None if out[0] is None else (out[0], out[1] or [])
         finally:
             ws.close()
 

@@ -88,19 +88,68 @@ w.proxy_hold(MIELE, ["fdd7::1"], "Prise Lave-linge Miele")
 w.check_proxy_holds(w.proxy_holds[MIELE]["since"] + 24 * 3600 + 1)
 assert w.withdrawn == [MIELE] and w.events[-1][0] == "proxy_expired"
 
-# (E) noms donnes dans Home Assistant
-w = W()
-devs = [{"name": "OpenThread Border Router", "model": "OpenThread Border Router", "name_by_user": "Home Assistant",
-         "identifiers": [["otbr", "abc"]]},
-        {"name": "Google TV Cuisine", "name_by_user": "TV de la cuisine", "identifiers": [["cast", "x"]]},
-        {"name": "Nest Hub", "name_by_user": None}]
-assert w.refresh_user_names(devs) and w.dirty
-assert w.br_label(w.br["ha"]) == "Home Assistant" and w.br_label(w.br["tv"]) == "TV de la cuisine"
-w.refresh_user_names([])                                             # nom retire dans HA : nom d'origine
-assert w.br_label(w.br["ha"]) == "Home Assistant OpenThread Border Router #1950"
-assert w.br_label(w.br["tv"]) == "Google TV Cuisine"
+# (E) noms donnes dans Home Assistant : une regle generique (valeurs fictives)
+AG1, AG2 = "aaaa1111bbbb2222cccc3333dddd4444", "eeee5555ffff6666aaaa7777bbbb8888"
+
+
+def wn(two=False):
+    w = W()
+    w.br["ha"]["agent_id"] = AG1
+    w.br["ha"]["instance"] = "OTBR exemple #1"
+    if two:
+        w.br["ha2"] = {"online": True, "omr": P, "vendor": "OpenThread", "model": "OTBR", "instance": "OTBR exemple #2",
+                       "agent_id": AG2}
+    w.anchor = types.SimpleNamespace(state={"favored": P, "otbr_addon": "repo_otbr"})
+    return w
+
+
+addon = {"name": "Mon OTBR", "model": "Home Assistant App", "name_by_user": None, "identifiers": [["hassio", "repo_otbr"]]}
+tv = {"name": "Google TV Cuisine", "name_by_user": "TV de la cuisine", "identifiers": [["cast", "x"]]}
+e1 = {"domain": "otbr", "entry_id": "E1", "title": "Mon OTBR", "source": "hassio", "unique_id": AG1}
+e2 = {"domain": "otbr", "entry_id": "E2", "title": "Open Thread Border Router", "source": "zeroconf", "unique_id": AG2}
+lab = lambda w, k: w.br_label(w.br[k])   # noqa: E731
+
+# 0 entree otbr : l'OTBR garde son nom mDNS, meme si l'appareil de l'add-on est renomme ; le BR tiers prend le sien
+w = wn()
+assert w.refresh_user_names([dict(addon, name_by_user="Salon"), tv], []) and w.dirty
+assert lab(w, "ha") == "OTBR exemple #1" and lab(w, "tv") == "TV de la cuisine"
+# 1 entree : titre par defaut (= nom de l'add-on) -> nom mDNS ; titre change -> ce titre ; add-on renomme -> passe devant
+w = wn()
+w.refresh_user_names([addon], [e1])
+assert lab(w, "ha") == "OTBR exemple #1"
+w.refresh_user_names([addon], [dict(e1, title="Cave")])
+assert lab(w, "ha") == "Cave"
+w.refresh_user_names([dict(addon, name_by_user="Salon")], [dict(e1, title="Cave")])
+assert lab(w, "ha") == "Salon"
+# un appareil de l'entree renomme (integration otbr) passe devant le titre
+w.refresh_user_names([addon, {"name": "x", "name_by_user": "Grenier", "config_entries": ["E1"]}], [dict(e1, title="Cave")])
+assert lab(w, "ha") == "Grenier"
+# 1 entree, 2 OTBR : seulement celui dont le border agent id correspond ; sans id a comparer : aucun
+w = wn(two=True)
+w.refresh_user_names([addon], [dict(e1, title="Cave")])
+assert lab(w, "ha") == "Cave" and lab(w, "ha2") == "OTBR exemple #2"
+w.refresh_user_names([addon], [dict(e1, title="Cave", unique_id=None)])
+assert lab(w, "ha") == "OTBR exemple #1" and lab(w, "ha2") == "OTBR exemple #2"
+# 1 entree sans id et 1 seul OTBR : pas de doute
+w = wn()
+w.refresh_user_names([addon], [dict(e1, title="Cave", unique_id=None)])
+assert lab(w, "ha") == "Cave"
+# 2 entrees, 2 OTBR : chacun la sienne ; titre par defaut ignore
+w = wn(two=True)
+w.refresh_user_names([addon], [dict(e1, title="Cave"), dict(e2, title="Bureau")])
+assert lab(w, "ha") == "Cave" and lab(w, "ha2") == "Bureau"
+w.refresh_user_names([addon], [dict(e1, title="Cave"), e2])
+assert lab(w, "ha2") == "OTBR exemple #2"
+# sans otbr_addon connu : l'appareil de l'add-on n'est pas utilise
+w = wn()
+w.anchor = types.SimpleNamespace(state={"favored": P})
+w.refresh_user_names([dict(addon, name_by_user="Salon")], [dict(e1, title="Cave")])
+assert lab(w, "ha") == "Cave"
+# nom retire dans HA : nom d'origine ; registre illisible : rien ne change
+w.refresh_user_names([], [])
+assert lab(w, "ha") == "OTBR exemple #1" and lab(w, "tv") == "Google TV Cuisine"
 w.healer = types.SimpleNamespace(device_registry=lambda: None)
-assert w.refresh_user_names() is False                               # registre illisible : rien ne change
+assert w.refresh_user_names() is False
 
 # (C) recuperation automatique : garde-fous, chemin doux, jamais ConnectNetwork
 ans = {"ping": {"ok": True, "rtt_ms": 70}, "addresses": [], "omr_addresses": ["fdd7:20e4:8187:1:ef69:9a13:7033:2b07"],
@@ -164,4 +213,17 @@ for i in range(7):
     w.matter[f"{i:016X}"] = {"online": False, "prefix": None}
 handled = [r.auto_pass(now=1000.0 + k) for k in range(8)]
 assert len([x for x in handled if x]) == 5, handled
+
+# 2.34.1 : le bouton, une fois le diagnostic Thread fait, n'envoie JAMAIS le fail-safe ni ConnectNetwork
+R.BACK_WAIT_S = 0.1
+for answer, expect in ((ans, "announced"), (dict(ans, omr_addresses=[]), "unknown")):
+    r, w, calls = setup(answer=answer, back=False)
+    r._alive = lambda nid, node_id, ext: {"ok": [], "ko": ["fdc0:6359:d5be:1::1"], "heard": [("Prise Chauffe Eau", 30, -60)],
+                                          "radio_known": True}
+    r._recover_send = lambda *x, **k: (_ for _ in ()).throw(AssertionError("fail-safe sent after a Thread diagnostic"))
+    r.busy.acquire()
+    r._recover(MIELE, "Prise Lave-linge Miele", "Buanderie", b"net", 0xCA7A34808B66E461)
+    assert r.results[MIELE]["result"] == expect, r.results[MIELE]
+    assert not r.busy.locked() and MIELE not in r.recovering
+assert w.held == [] and r.results[MIELE]["text"]
 print("OK")

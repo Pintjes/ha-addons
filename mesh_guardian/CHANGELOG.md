@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.34.1] - 2026-11-17
+
+### Changed
+
+- **Recovery attempt: never the fail-safe after a Thread diagnostic.** Once the diagnostic of Thread Anchor ran, the button only goes the gentle way: announced in its place on its current address, then `back_announce` or `announced` (waiting, the announcement stays), or `unknown` when the diagnostic gave no way to reach it. ArmFailSafe and ConnectNetwork stay for a node reachable at its address, without any diagnostic.
+
+### Fixed
+
+- **Names of the border routers given in Home Assistant, one rule for every installation**: an OpenThread border router integrated in Home Assistant is tied to its entry of the OpenThread Border Router integration by its border agent id (unique id of the entry = `id` of its `_meshcop` announcement); with no id to compare, only when there is one entry and one OpenThread border router, never by guess. Its name: the device of the add-on that runs it renamed (the add-on Thread Anchor names, `otbr_addon`), else a device of its entry renamed, else the title of its entry when the user changed it. Other border routers (Google TV, Apple TV…): their device renamed, found by its original name. Otherwise, or when ambiguous: the mDNS name. 2.34.0 looked for a renamed device only, while the name is usually changed on the entry.
+
 ## [2.34.0] - 2026-11-17
 
 ### Added

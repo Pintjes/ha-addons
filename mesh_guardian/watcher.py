@@ -79,7 +79,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.34.0"
+VERSION = "2.34.1"
 OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
 OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
@@ -109,7 +109,7 @@ OMR_FIXED_GRACE_S = 60   # fixed OMR prefix off without an error: a restart of t
 RENAME_CONFIRM = 5   # announcements in a row giving the same new name before a border router is renamed
 MESHCOP_REBROWSE = 5 * 60
 BR_FIELDS = ("instance", "network", "ext_pan", "vendor", "model", "role", "interface", "bbr_primary",
-             "bbr_active", "partition", "omr", "xa", "addrs", "port")
+             "bbr_active", "partition", "omr", "xa", "addrs", "port", "agent_id")
 BR_HEARD_S = 180   # a border router heard by a Matter node within this time is online
 ROLE_SETTLE_S = 60       # a border router role change is reported after this time
 SETTLE_S = 30            # partitions and leader change once the new state held this long
@@ -463,26 +463,66 @@ class Watch:
         except Exception as err:  # noqa: BLE001
             LOG.debug("border router names from the device registry: %s", err)
 
-    def refresh_user_names(self, devices=None):
-        """Names given in the Home Assistant device registry (name_by_user) to the border routers:
-        the OpenThread border router of Home Assistant by its integration (otbr) or its model, the
-        others (Google TV, Nest Hub…) by the original name of their device, the one they announce."""
-        devs = devices if devices is not None else (self.healer.device_registry() if self.healer else None)
-        if devs is None:
-            return False
-        named = [d for d in devs if isinstance(d, dict) and d.get("name_by_user")]
-        by_name = {str(d.get("name") or "").strip().lower(): d["name_by_user"] for d in named if d.get("name")}
+    def refresh_user_names(self, devices=None, entries=None):
+        """Names a user gave the border routers in Home Assistant, the same rule for every installation.
+        An OpenThread border router integrated in Home Assistant (entry of the otbr integration) is tied
+        to its entry by its border agent id (unique id of the entry = TXT "id" of its _meshcop announcement);
+        with no id to compare, only when there is one otbr entry and one OpenThread border router, never
+        by guess. Its name, in this order: the device of the add-on that runs it renamed (add-on given by
+        Thread Anchor, otbr_addon, tied to the entry discovered from an add-on), a device of that entry
+        renamed, the title of the entry when the user changed it (not a default title). Any other border
+        router (Google TV, Apple TV, Nest Hub…): its device renamed, found by its original name, the one
+        it announces. Otherwise, or when it is ambiguous: its mDNS name."""
+        if devices is None:
+            got = self.healer.device_registry() if self.healer else None
+            if got is None:
+                return False
+            devices, entries = got
+        devs = [d for d in devices or [] if isinstance(d, dict)]
+        entries = [e for e in entries or [] if isinstance(e, dict) and e.get("domain", "otbr") == "otbr"]
 
-        def is_otbr(d):
-            txt = " ".join(str(d.get(k) or "") for k in ("name", "model", "manufacturer")).lower().replace(" ", "")
-            return any(i and i[0] == "otbr" for i in d.get("identifiers") or []) or "openthreadborderrouter" in txt
-        otbr = next((d["name_by_user"] for d in named if is_otbr(d)), None)
+        def flat(s):
+            return str(s or "").lower().replace(" ", "").replace("-", "").replace("_", "")
+        by_name = {str(d.get("name") or "").strip().lower(): d["name_by_user"] for d in devs
+                   if d.get("name_by_user") and d.get("name")}
+        st = getattr(getattr(self, "anchor", None), "state", None)
+        addon = st.get("otbr_addon") if isinstance(st, dict) else None
+        addon_dev = next((d for d in devs if addon and any(list(i or [])[:2] == ["hassio", addon]
+                                                            for i in d.get("identifiers") or [])), None)
+        defaults = {"openthreadborderrouter", "otbr", "homeassistantopenthreadborderrouter", "silabsmultiprotocol"}
+        if addon_dev:
+            defaults.add(flat(addon_dev.get("name")))   # an entry discovered from the add-on is titled after it
+
+        def entry_name(e):
+            """Name the user gave this otbr entry: a device of the entry renamed, else its title changed."""
+            dev = next((d["name_by_user"] for d in devs if d.get("name_by_user")
+                        and e.get("entry_id") and e["entry_id"] in (d.get("config_entries") or [])
+                        and d is not addon_dev), None)
+            title = e.get("title")
+            return dev or (title if title and flat(title) not in defaults else None)
+
         changed = False
         with self.lock:
-            for b in self.br.values():
-                ha = "homeassistant" in f"{b.get('vendor') or ''}{b.get('model') or ''}".lower().replace(" ", "") \
-                    or "openthread" in f"{b.get('vendor') or ''}{b.get('model') or ''}".lower().replace(" ", "")
-                name = otbr if ha and otbr else by_name.get(str(b.get("label") or b.get("instance") or "").strip().lower())
+            brs = list(self.br.values())
+            otbrs = [b for b in brs if "openthread" in flat(f"{b.get('vendor') or ''}{b.get('model') or ''}")
+                     or "homeassistant" in flat(f"{b.get('vendor') or ''}{b.get('model') or ''}")]
+            tie = {}   # id(border router) -> otbr entry
+            for e in entries:
+                uid = flat(e.get("unique_id"))
+                hit = [b for b in brs if uid and flat(b.get("agent_id")) == uid]
+                if len(hit) == 1:
+                    tie[id(hit[0])] = e
+            if not tie and len(entries) == 1 and len(otbrs) == 1 and not entries[0].get("unique_id"):
+                tie[id(otbrs[0])] = entries[0]   # one of each and nothing to compare: no doubt
+            for b in brs:
+                e = tie.get(id(b))
+                name = None
+                if e is not None:
+                    from_addon = addon_dev is not None and e.get("source") == "hassio" and \
+                        sum(1 for x in entries if x.get("source") == "hassio") == 1
+                    name = (addon_dev.get("name_by_user") if from_addon else None) or entry_name(e)
+                elif b not in otbrs:
+                    name = by_name.get(str(b.get("label") or b.get("instance") or "").strip().lower())
                 if name != b.get("user_name"):
                     b["user_name"] = name
                     changed = True
@@ -597,6 +637,7 @@ class Watch:
             "bbr_primary": bool(sb is not None and (sb >> 8) & 1),
             "bbr_active": bool(sb is not None and (sb >> 7) & 1),
             "partition": pt_raw.hex() if pt_raw else "",
+            "agent_id": txt_bytes(props, "id").hex(),   # border agent id: unique id of its otbr entry in HA
             "omr": parse_omr(txt_bytes(props, "omr")),
             "xa": int.from_bytes(txt_bytes(props, "xa"), "big") if len(txt_bytes(props, "xa")) == 8 else None,
             "addrs": sorted(info.parsed_addresses(IPVersion.All)),
