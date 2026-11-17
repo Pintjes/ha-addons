@@ -98,3 +98,47 @@ Fields of `thread_anchor/state` (JSON):
 
 **Mesh Guardian** reads this state: it says in *To do* when the anchor is no
 longer in place, and in its log when it is lost and back.
+
+## Diagnostic of a node
+
+To find a node that stayed on an old OMR prefix (it does not answer on the
+current one), Thread Anchor can look at it from the border router. It only
+**reads**: nothing is set on the border router (no `omrconfig`, no route, no
+network data). Needs MQTT.
+
+Request, on `thread_anchor/diag/request` (not retained):
+
+```json
+{"id": "r1", "rloc16": "0xB45C", "ext": "ca7a34808b66e461", "ping": true}
+```
+
+`id` is a unique string (letters, digits, `-`, `_`; no `/`, `+` or `#`), `rloc16`
+the short address of the node, `ext` its extended address (optional: checked
+against the answer), `ping` `false` to skip the ping. In the border router
+container it runs, one after the other (reads only):
+
+1. `ot-ctl ipaddr rloc` — the mesh-local prefix, hence the RLOC address of the
+   node: `<mesh-local prefix>:0:ff:fe00:<rloc16>`;
+2. `ot-ctl ping <rloc address> 16 1` (if `ping`);
+3. `ot-ctl networkdiagnostic get <rloc address> 0 8` — the extended address
+   (TLV 0) and the IPv6 address list (TLV 8) of the node.
+
+Answer, on `thread_anchor/diag/result/<id>` (not retained, JSON):
+
+| Field | |
+|---|---|
+| `id`, `rloc16` | as in the request |
+| `rloc_address` | the RLOC address that was asked (`null` if it could not be built) |
+| `ext` | extended address the node answered with, lowercase (`null`: no answer) |
+| `ping` | `{"ok": bool, "rtt_ms": float or null}`; `null` when no ping was asked |
+| `addresses` | every IPv6 address of the node |
+| `omr_addresses` | those in the anchored prefix (`wanted`) or in the prefix the network favors (`favored`) |
+| `other_prefix_addresses` | global or local (ULA) addresses that are neither mesh-local, nor link-local, nor in the current prefixes: an old OMR prefix the node kept |
+| `error` | `null`, or why it failed: `busy`, `too soon`, `invalid rloc16: …`, `timeout (15 s)`, `no answer to the network diagnostic`, a different `ext` than asked, an `ot-ctl` or Docker error |
+| `at` | time of the answer (ISO 8601 with the time zone) |
+
+Limits: one diagnostic at a time (`busy`), at most one per node every 10 s
+(`too soon`), 15 s at most each. A request without a usable `id` gets no answer
+(only a line in the log). Each diagnostic is one line in the log. A node that
+does not answer the ping may still answer the network diagnostic (it is reached
+by its RLOC address, which does not depend on the OMR prefix).

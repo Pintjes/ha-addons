@@ -299,6 +299,9 @@ class FakeClient:
             raise ValueError("Invalid host.")
         self.log.append(("connect", host, port))
 
+    def subscribe(self, topic):
+        self.log.append(("subscribe", topic))
+
     def loop_start(self):
         self.log.append(("loop_start",))
 
@@ -382,4 +385,239 @@ assert c.log[-2:] == [("disconnect",), ("loop_stop",)] and mq.client is None
 mq.publish()
 mq.stop()
 assert c.sent == [("thread_anchor/state/available", "offline", True)]
+assert ("subscribe", "thread_anchor/diag/request") in c.log
+
+# ---- diagnostic d'une node (lecture seule) : formats verifies dans la doc / le code d'OpenThread
+assert ta.parse_rloc16("0xB45C") == ta.parse_rloc16("b45c") == ta.parse_rloc16(46172) == 0xB45C
+for bad in ("0x10000", "zz", None, True, -1, ""):
+    try:
+        ta.parse_rloc16(bad)
+        raise AssertionError(bad)
+    except (ValueError, TypeError):
+        pass
+assert ta.rloc_address("fdde:ad00:beef:0::/64", 0xB45C) == "fdde:ad00:beef::ff:fe00:b45c"
+assert ta.rloc_address("fdde:ad00:beef:0:0:0:0:0/64", 0xFC00) == "fdde:ad00:beef::ff:fe00:fc00"
+
+PING_OK = ("16 bytes from fdde:ad00:beef:0:0:ff:fe00:b45c: icmp_seq=1 hlim=64 time=12ms\r\n"
+           "1 packets transmitted, 1 packets received. Packet loss = 0.0%. "
+           "Round-trip min/avg/max = 12/12.000/12 ms.\r\nDone\r\n")
+PING_LOST = "1 packets transmitted, 0 packets received. Packet loss = 100.0%.\r\nDone\r\n"
+assert ta.parse_ping(PING_OK) == {"ok": True, "rtt_ms": 12.0}
+assert ta.parse_ping("1 packets transmitted, 1 packets received. Round-trip min/avg/max = 7/7.5/8 ms.\nDone\n") == \
+    {"ok": True, "rtt_ms": 7.5}
+assert ta.parse_ping(PING_LOST) == {"ok": False, "rtt_ms": None}
+for bad in ("Error 13: InvalidState\r\n", "", "Done\r\n"):
+    try:
+        ta.parse_ping(bad)
+        raise AssertionError(bad)
+    except RuntimeError:
+        pass
+
+OLD = "fdc0:6359:d5be:1:aaaa:bbbb:cccc:dddd"
+OMR = "fdd7:20e4:8187:1:1:2:3:4"
+DIAG_OK = ("DIAG_GET.rsp/ans from fdde:ad00:beef:0:0:ff:fe00:b45c: 000800ca7a34808b66e461\r\n"
+           "Ext Address: 'ca7a34808b66e461'\r\n"
+           "IP6 Address List:\r\n"
+           "    - fdde:ad00:beef:0:0:ff:fe00:b45c\r\n"
+           f"    - {OLD}\r\n"
+           f"    - {OMR}\r\n"
+           "    - fdde:ad00:beef:0:1:2:3:4\r\n"
+           "    - fe80:0:0:0:c87a:3480:8b66:e461\r\n"
+           f"    - {OLD}\r\n"
+           "Done\r\n")
+d = ta.parse_diag(DIAG_OK)
+assert d["answered"] and d["ext"] == "ca7a34808b66e461" and len(d["addresses"]) == 5, d   # sans doublon
+assert d["addresses"][1] == OLD
+assert ta.parse_diag("Done\r\n") == {"answered": False, "ext": None, "addresses": []}
+assert ta.parse_diag("DIAG_GET.rsp/ans from fd00::1: 00\r\nExt Address: 'AABBCCDDEEFF0011'\r\nDone\r\n") == \
+    {"answered": True, "ext": "aabbccddeeff0011", "addresses": []}
+try:
+    ta.parse_diag("Error 28: ResponseTimeout\r\n")
+    raise AssertionError("Error")
+except RuntimeError:
+    pass
+
+MLP = "fdde:ad00:beef::/64"
+omr, other = ta.classify(d["addresses"], MLP, (P, None))
+assert omr == [OMR] and other == [OLD], (omr, other)
+assert ta.classify(["2001:db8::1", "fe80::1", "fdde:ad00:beef::1", "ff02::1", "::1"], MLP, (P,)) == ([], ["2001:db8::1"])
+# prefixe voulu et prefixe retenu : tous deux comptent comme OMR
+assert ta.classify([OLD, OMR], MLP, (P, "fdc0:6359:d5be:1::/64")) == ([OLD, OMR], [])
+
+
+class Clk:
+    now = 10000.0
+
+    def __call__(self):
+        return self.now
+
+
+class FakeOtbr:
+    """ot-ctl en lecture : ipaddr rloc, ping, networkdiagnostic get. Note tout ce qui est lance."""
+    def __init__(self, clk):
+        self.clk, self.calls, self.timeouts, self.running = clk, [], [], True
+        self.ping_out, self.diag_out, self.ping_takes, self.diag_takes = PING_OK, DIAG_OK, 0, 0
+
+    def started_at(self, container):
+        return "2026-11-17T10:57:34Z"
+
+    def exec(self, container, cmd, timeout=30):
+        if container != "app_core_openthread_border_router":
+            raise ta.DockerError(f"404 No such container: {container}")
+        if not self.running:
+            raise ta.DockerError("409 container is not running")
+        assert cmd[0] == "ot-ctl", cmd
+        self.calls.append(cmd[1:])
+        self.timeouts.append(timeout)
+        if cmd[1:3] == ["ipaddr", "rloc"]:
+            return 0, "fdde:ad00:beef:0:0:ff:fe00:fc00\r\nDone\r\n"
+        if cmd[1] == "ping":
+            self.clk.now += self.ping_takes
+            return 0, self.ping_out
+        if cmd[1:3] == ["networkdiagnostic", "get"]:
+            self.clk.now += self.diag_takes
+            return 0, self.diag_out
+        raise AssertionError(f"command not allowed in a diagnostic: {cmd}")
+
+
+def make_diag(**kw):
+    clk = Clk()
+    otbr = FakeOtbr(clk)
+    an = ta.Anchor({"omr_prefix": P}, docker=otbr, clock=clk)
+    an.favored, an.favored_prf = P, "high"
+    out = []
+    dg = ta.Diag(an, lambda topic, res: out.append((topic, res)), clock=clk, spawn=kw.get("spawn", lambda fn: fn()))
+    return clk, otbr, dg, out
+
+
+def req(**kw):
+    return json.dumps(dict({"id": "r1", "rloc16": "0xB45C", "ext": "ca7a34808b66e461", "ping": True}, **kw))
+
+
+# cas normal : une node restee sur l'ancien prefixe
+clk, otbr, dg, out = make_diag()
+dg.submit(req())
+assert len(out) == 1 and out[0][0] == "thread_anchor/diag/result/r1"
+r = out[0][1]
+assert r["id"] == "r1" and r["rloc16"] == "0xB45C" and r["rloc_address"] == "fdde:ad00:beef::ff:fe00:b45c"
+assert r["ext"] == "ca7a34808b66e461" and r["ping"] == {"ok": True, "rtt_ms": 12.0} and r["error"] is None
+assert len(r["addresses"]) == 5 and r["omr_addresses"] == [OMR] and r["other_prefix_addresses"] == [OLD]
+assert datetime.fromisoformat(r["at"]).tzinfo is not None
+assert otbr.calls == [["ipaddr", "rloc"], ["ping", "fdde:ad00:beef::ff:fe00:b45c", "16", "1"],
+                      ["networkdiagnostic", "get", "fdde:ad00:beef::ff:fe00:b45c", "0", "8"]], otbr.calls
+assert all(1 <= tm <= ta.DIAG_TIMEOUT_S for tm in otbr.timeouts), otbr.timeouts
+assert not dg.running
+# rien d'ecrit sur le border router : aucune des commandes n'est une ecriture
+assert not [c for c in otbr.calls if c[0] not in ("ipaddr", "ping", "networkdiagnostic")]
+# ping demande a faux : pas de ping, "ping": null
+clk, otbr, dg, out = make_diag()
+dg.submit(req(ping=False))
+assert out[0][1]["ping"] is None and out[0][1]["error"] is None and not [c for c in otbr.calls if c[0] == "ping"]
+# ping sans reponse : la node reste interrogee, ping ok=false
+clk, otbr, dg, out = make_diag()
+otbr.ping_out = PING_LOST
+dg.submit(req())
+assert out[0][1]["ping"] == {"ok": False, "rtt_ms": None} and out[0][1]["error"] is None and out[0][1]["addresses"]
+# ping en erreur ot-ctl : ok=false, le diagnostic continue
+clk, otbr, dg, out = make_diag()
+otbr.ping_out = "Error 13: InvalidState\r\n"
+dg.submit(req())
+assert out[0][1]["ping"] == {"ok": False, "rtt_ms": None} and out[0][1]["addresses"]
+# ext sans controle (absent) ; ext qui ne correspond pas : erreur, adresses rendues quand meme
+clk, otbr, dg, out = make_diag()
+dg.submit(req(ext=None))
+assert out[0][1]["error"] is None and out[0][1]["ext"] == "ca7a34808b66e461"
+clk, otbr, dg, out = make_diag()
+dg.submit(req(ext="0011223344556677"))
+assert "ca7a34808b66e461" in out[0][1]["error"] and "0011223344556677" in out[0][1]["error"] and out[0][1]["addresses"]
+# pas de reponse au diagnostic, erreur de diagnostic, border router arrete
+clk, otbr, dg, out = make_diag()
+otbr.diag_out = "Done\r\n"
+dg.submit(req())
+assert out[0][1]["error"] == "no answer to the network diagnostic" and out[0][1]["addresses"] == []
+assert out[0][1]["ping"]["ok"] is True
+clk, otbr, dg, out = make_diag()
+otbr.diag_out = "Error 28: ResponseTimeout\r\n"
+dg.submit(req())
+assert "ResponseTimeout" in out[0][1]["error"]
+clk, otbr, dg, out = make_diag()
+otbr.running = False
+dg.submit(req())
+assert "409" in out[0][1]["error"] and out[0][1]["rloc_address"] is None and not dg.running
+# delai maximal de 15 s : le ping a tout pris, le diagnostic n'est pas lance
+clk, otbr, dg, out = make_diag()
+otbr.ping_takes = 16
+dg.submit(req())
+assert out[0][1]["error"] == "timeout (15 s)" and out[0][1]["ping"]["ok"] is True and out[0][1]["addresses"] == []
+assert not [c for c in otbr.calls if c[0] == "networkdiagnostic"] and not dg.running
+# demandes inutilisables : pas d'id -> rien ; rloc16 invalide -> reponse en erreur
+clk, otbr, dg, out = make_diag()
+for raw in ("pas du json", "null", "[]", "{}", json.dumps({"id": "", "rloc16": "0xb45c"}),
+            json.dumps({"id": "a/b", "rloc16": "0xb45c"}), json.dumps({"id": "a#", "rloc16": "0xb45c"})):
+    dg.submit(raw)
+assert out == [] and otbr.calls == []
+dg.submit(json.dumps({"id": "x", "rloc16": "zz"}))
+dg.submit(json.dumps({"id": "y"}))
+assert [(tp, r["error"][:14]) for tp, r in out] == [("thread_anchor/diag/result/x", "invalid rloc16"),
+                                                    ("thread_anchor/diag/result/y", "invalid rloc16")]
+assert otbr.calls == [] and "ping" in out[0][1] and out[0][1]["addresses"] == []
+# une seule a la fois : « busy » ; au plus une par node toutes les 10 s : « too soon »
+later = []
+clk, otbr, dg, out = make_diag(spawn=later.append)
+dg.submit(req(id="a"))
+assert dg.running and out == [] and len(later) == 1
+dg.submit(req(id="b", rloc16="0x1800"))
+assert [(tp, r["error"]) for tp, r in out] == [("thread_anchor/diag/result/b", "busy")] and out[0][1]["rloc_address"] is None
+later.pop()()
+assert [tp for tp, _ in out] == ["thread_anchor/diag/result/b", "thread_anchor/diag/result/a"] and not dg.running
+assert out[1][1]["error"] is None
+clk.now += 9
+dg.submit(req(id="c"))
+assert out[-1][0] == "thread_anchor/diag/result/c" and out[-1][1]["error"] == "too soon" and len(later) == 0
+dg.submit(req(id="d", rloc16="0x1800"))          # autre node : permis
+assert len(later) == 1
+later.pop()()
+assert out[-1][1]["error"] is None and out[-1][1]["rloc_address"] == "fdde:ad00:beef::ff:fe00:1800"
+clk.now += 2                                      # 11 s apres la premiere demande de B45C
+dg.submit(req(id="e"))
+assert len(later) == 1
+later.pop()()
+assert out[-1][0] == "thread_anchor/diag/result/e" and out[-1][1]["error"] is None
+# demande refusee (« busy ») : pas comptee comme faite pour la node
+clk, otbr, dg, out = make_diag(spawn=later.append)
+dg.submit(req(id="f"))
+dg.submit(req(id="g", rloc16="0x2000"))
+later.pop()()
+dg.submit(req(id="h", rloc16="0x2000"))
+assert len(later) == 1 and out[0][1]["id"] == "g" and out[0][1]["error"] == "busy"
+later.pop()()
+assert out[-1][0] == "thread_anchor/diag/result/h" and out[-1][1]["error"] is None
+
+# par MQTT : demande sur thread_anchor/diag/request, reponse non retenue
+b2 = Broker()
+b2.up = True
+clk2 = Clk()
+otbr2 = FakeOtbr(clk2)
+an2 = ta.Anchor({"omr_prefix": P}, docker=otbr2, clock=clk2)
+mq2 = ta.Mqtt(an2, service=b2.service, factory=b2.factory, clock=clk2)
+mq2.diag.spawn = lambda fn: fn()
+assert mq2.start()
+c2 = mq2.client
+assert c2.log.count(("subscribe", "thread_anchor/diag/request")) == 0     # a la connexion seulement
+mq2.on_connect(c2, None, None, 0)
+assert ("subscribe", "thread_anchor/diag/request") in c2.log
+
+
+class Msg:
+    def __init__(self, topic, payload):
+        self.topic, self.payload = topic, payload
+
+
+c2.sent = []
+mq2.on_message(c2, None, Msg("thread_anchor/other", req(id="z").encode()))
+assert c2.sent == []
+mq2.on_message(c2, None, Msg("thread_anchor/diag/request", req(id="z").encode()))
+assert [(tp, retain) for tp, _, retain in c2.sent] == [("thread_anchor/diag/result/z", False)]
+res = json.loads(c2.sent[0][1])
+assert res["id"] == "z" and res["other_prefix_addresses"] == [OLD] and res["error"] is None
 print("OK")

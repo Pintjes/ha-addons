@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.2] - 2026-11-17
+
+### Added
+
+- Diagnostic of one Thread node, on request over MQTT (`thread_anchor/diag/request`, answer on
+  `thread_anchor/diag/result/<id>`): ping of its RLOC address and its IPv6 addresses read with a
+  network diagnostic, sorted into addresses in the OMR prefix and addresses on another prefix
+  (a node that kept an old one). Read only: nothing is set on the border router. One request at a
+  time, at most one per node every 10 s, 15 s at most each; one line in the log per diagnostic.
+
 ## [0.1.1] - 2026-11-17
 
 ### Added

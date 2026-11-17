@@ -32,7 +32,7 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 LOG = logging.getLogger("thread_anchor")
 STATE_TOPIC = "thread_anchor/state"
 DISCOVERY = "homeassistant"
@@ -44,6 +44,10 @@ MEMORY_FILE = "/data/anchor.json"         # since when the prefix is anchored: k
 TICK_S = 5               # s between two looks at the border router container (restart detection)
 HEARTBEAT_S = 300        # the state is published again this often, even unchanged
 MQTT_RETRY_S = 60        # s before the MQTT broker is looked for again when it was not found
+DIAG_REQUEST_TOPIC = "thread_anchor/diag/request"
+DIAG_RESULT_TOPIC = "thread_anchor/diag/result"
+DIAG_TIMEOUT_S = 15      # at most this long for one diagnostic
+DIAG_GAP_S = 10          # at most one diagnostic of the same node this often
 
 TEXTS = {
     "fr": {
@@ -72,6 +76,15 @@ TEXTS = {
         "No access to the Docker API ({err}); turn Protection mode off":
             "Pas d'accès à l'API Docker ({err}) ; désactiver le mode protection",
         "Connected to MQTT": "Connecté à MQTT",
+        "Diagnostic request ignored (no usable id): {err}": "Demande de diagnostic ignorée (pas d'id utilisable) : {err}",
+        "invalid rloc16: {v}": "rloc16 invalide : {v}",
+        "no answer to the network diagnostic": "pas de réponse au diagnostic réseau",
+        "another node answers at this RLOC16: ext {got} instead of {want}":
+            "une autre node répond à ce RLOC16 : ext {got} au lieu de {want}",
+        "ping ok {ms} ms": "ping ok {ms} ms",
+        "no ping answer": "pas de réponse au ping",
+        "Diagnostic {r} ({rloc}): {ping}, {n} addresses, {o} OMR, {x} on another prefix{err}":
+            "Diagnostic {r} ({rloc}) : {ping}, {n} adresses, {o} OMR, {x} sur un autre préfixe{err}",
     },
 }
 LANG = "en"
@@ -394,6 +407,176 @@ class Anchor:
                 "error": self.error, "anchored_since": self.anchored_since, "followed": self.followed()}
 
 
+# ---------------------------------------------------------------- diagnostic of one node (read only)
+LINK_LOCAL = ipaddress.IPv6Network("fe80::/10")
+GLOBAL = ipaddress.IPv6Network("2000::/3")
+EXT_RE = re.compile(r"Ext Address:\s*'?([0-9a-fA-F]{16})'?")
+SENT_RE = re.compile(r"(\d+) packets transmitted, (\d+) packets received")
+RTT_RE = re.compile(r"Round-trip min/avg/max = [\d.]+/([\d.]+)/[\d.]+ ms")
+REPLY_RE = re.compile(r"bytes from \S+: icmp_seq=\d+ hlim=\d+ time=(\d+)ms")
+
+
+def parse_rloc16(value):
+    """"0xB45C", "b45c" or 46172 -> 0xb45c; ValueError otherwise."""
+    if isinstance(value, bool):
+        raise ValueError(value)
+    n = value if isinstance(value, int) else int(str(value).strip(), 16)
+    if not 0 <= n <= 0xFFFE:
+        raise ValueError(value)
+    return n
+
+
+def rloc_address(mesh_local, rloc16):
+    """RLOC address of a node: <mesh-local prefix>:0:ff:fe00:<rloc16>."""
+    net = ipaddress.IPv6Network(mesh_local, strict=False)
+    return str(ipaddress.IPv6Address(int(net.network_address) | 0xFFFE000000 | rloc16))
+
+
+def parse_ping(text):
+    """`ping` output -> {"ok": bool, "rtt_ms": float|None}; RuntimeError on `Error …`."""
+    _lines(text)
+    m = SENT_RE.search(text or "")
+    if not m:
+        raise RuntimeError(f"unexpected ping answer: {(text or '').strip()[-80:] or '(empty)'}")
+    ok = int(m.group(2)) > 0
+    rtt = RTT_RE.search(text) or REPLY_RE.search(text)
+    return {"ok": ok, "rtt_ms": float(rtt.group(1)) if ok and rtt else None}
+
+
+def parse_diag(text):
+    """`networkdiagnostic get <addr> 0 8` -> {"answered", "ext", "addresses"}.
+    The answer comes as `DIAG_GET.rsp/ans from …`; without it the node did not answer in time."""
+    lines = _lines(text)
+    out = {"answered": any(ln.startswith("DIAG_GET.rsp/ans") for ln in lines), "ext": None, "addresses": []}
+    in_list = False
+    for ln in lines:
+        m = EXT_RE.search(ln)
+        if m:
+            out["ext"] = m.group(1).lower()
+        if ln.startswith("IP6 Address List"):
+            in_list = True
+            continue
+        if in_list:
+            try:
+                addr = str(ipaddress.IPv6Address(ln.lstrip("- ").strip()))
+            except ValueError:
+                in_list = False
+                continue
+            if addr not in out["addresses"]:
+                out["addresses"].append(addr)
+    return out
+
+
+def classify(addresses, mesh_local, prefixes):
+    """omr_addresses: in the wanted or favored prefix; other_prefix_addresses: other GUA / ULA,
+    neither mesh-local nor link-local: an old OMR prefix the node kept."""
+    mlp = ipaddress.IPv6Network(mesh_local, strict=False) if mesh_local else None
+    nets = [ipaddress.IPv6Network(p) for p in prefixes if p]
+    omr, other = [], []
+    for a in addresses:
+        ip = ipaddress.IPv6Address(a)
+        if any(ip in n for n in nets):
+            omr.append(a)
+        elif (ip in ULA or ip in GLOBAL) and ip not in LINK_LOCAL and not (mlp and ip in mlp):
+            other.append(a)
+    return omr, other
+
+
+class Diag:
+    """Diagnostic of one node asked on MQTT (`thread_anchor/diag/request`): ping of its RLOC address
+    and its IPv6 addresses read with a network diagnostic. Reads only: nothing is set on the
+    border router. One at a time, at most one per node every DIAG_GAP_S, DIAG_TIMEOUT_S each."""
+
+    def __init__(self, anchor, reply, clock=time.time, spawn=None):
+        self.anchor, self.reply, self.clock = anchor, reply, clock
+        self.spawn = spawn or (lambda fn: threading.Thread(target=fn, daemon=True).start())
+        self.lock = threading.Lock()
+        self.running = False
+        self.last = {}   # rloc16 -> time of the last accepted request
+
+    def submit(self, raw):
+        """A request from MQTT: answered at once when refused, else run in the background."""
+        try:
+            req = json.loads(raw)
+            rid = str(req["id"]).strip()
+            if not rid or "/" in rid or "+" in rid or "#" in rid:
+                raise ValueError("id")
+        except (ValueError, TypeError, KeyError) as err:
+            LOG.warning(t("Diagnostic request ignored (no usable id): {err}", err=err))
+            return
+        base = {"id": rid, "rloc16": req.get("rloc16"), "rloc_address": None, "ext": None, "ping": None,
+                "addresses": [], "omr_addresses": [], "other_prefix_addresses": []}
+        try:
+            rloc16 = parse_rloc16(req.get("rloc16"))
+        except (ValueError, TypeError):
+            return self._done(base, t("invalid rloc16: {v}", v=req.get("rloc16")))
+        with self.lock:
+            if self.running:
+                return self._done(base, "busy")
+            last = self.last.get(rloc16)
+            if last is not None and self.clock() - last < DIAG_GAP_S:
+                return self._done(base, "too soon")
+            self.running, self.last[rloc16] = True, self.clock()
+        ext = str(req.get("ext") or "").strip().lower() or None
+        self.spawn(lambda: self.run(base, rloc16, ext, req.get("ping", True) is not False))
+
+    def run(self, res, rloc16, ext, ping):
+        try:
+            self._run(res, rloc16, ext, ping)
+        except Exception as err:  # noqa: BLE001 - always an answer
+            res["error"] = str(err) or type(err).__name__
+        finally:
+            with self.lock:
+                self.running = False
+        self._done(res, res.get("error"))
+
+    def _otctl(self, deadline, *args):
+        left = deadline - self.clock()
+        if left < 1:
+            raise RuntimeError(f"timeout ({DIAG_TIMEOUT_S} s)")
+        code, out = self.anchor._call(self.anchor.docker.exec, ["ot-ctl", *args], left)
+        if code not in (0, None) and "Done" not in out:
+            raise RuntimeError((out.strip().splitlines() or [f"exit {code}"])[-1])
+        return out
+
+    def _run(self, res, rloc16, ext, ping):
+        deadline = self.clock() + DIAG_TIMEOUT_S
+        # mesh-local prefix from the RLOC address of the border router itself (no secret in it,
+        # unlike `dataset active`)
+        own = _lines(self._otctl(deadline, "ipaddr", "rloc"))
+        mlp = str(ipaddress.IPv6Network(f"{ipaddress.IPv6Address(own[0])}/64", strict=False))
+        res["rloc_address"] = addr = rloc_address(mlp, rloc16)
+        if ping:
+            try:
+                res["ping"] = parse_ping(self._otctl(deadline, "ping", addr, "16", "1"))
+            except RuntimeError as err:
+                if "timeout" in str(err):
+                    raise
+                res["ping"] = {"ok": False, "rtt_ms": None}
+                LOG.debug("ping: %s", err)
+        diag = parse_diag(self._otctl(deadline, "networkdiagnostic", "get", addr, "0", "8"))
+        if not diag["answered"]:
+            res["error"] = t("no answer to the network diagnostic")
+            return
+        res["ext"], res["addresses"] = diag["ext"], diag["addresses"]
+        a = self.anchor
+        res["omr_addresses"], res["other_prefix_addresses"] = classify(diag["addresses"], mlp, (a.prefix, a.favored))
+        if ext and diag["ext"] and diag["ext"] != ext:
+            res["error"] = t("another node answers at this RLOC16: ext {got} instead of {want}", got=diag["ext"], want=ext)
+
+    def _done(self, res, error):
+        res["error"] = error
+        res["at"] = datetime.fromtimestamp(self.clock(), timezone.utc).astimezone().isoformat(timespec="seconds")
+        p = res.get("ping")
+        short = (t("ping ok {ms} ms", ms=p["rtt_ms"]) if p and p["ok"] else t("no ping answer") if p else "-")
+        LOG.info(t("Diagnostic {r} ({rloc}): {ping}, {n} addresses, {o} OMR, {x} on another prefix{err}",
+                   r=res.get("rloc16"), rloc=res.get("rloc_address") or "-", ping=short, n=len(res["addresses"]),
+                   o=len(res["omr_addresses"]), x=len(res["other_prefix_addresses"]),
+                   err=f" — {error}" if error else ""))
+        self.reply(f"{DIAG_RESULT_TOPIC}/{res['id']}", res)
+        return res
+
+
 # ---------------------------------------------------------------- Home Assistant side
 def supervisor(path, method="GET", timeout=30):
     token = os.environ.get("SUPERVISOR_TOKEN")
@@ -419,6 +602,16 @@ class Mqtt:
         self.service = service or (lambda: supervisor("/services/mqtt"))
         self.factory = factory
         self.next_try, self.last_error = 0.0, None
+        self.diag = Diag(anchor, self._reply, clock=clock)
+
+    def _reply(self, topic, payload):
+        c = self.client
+        if c is not None:
+            c.publish(topic, json.dumps(payload))   # not retained: one answer for one request
+
+    def on_message(self, client, userdata, message):
+        if message.topic == DIAG_REQUEST_TOPIC:
+            self.diag.submit(message.payload)
 
     def start(self):
         """True when the MQTT client exists (made now or before)."""
@@ -434,6 +627,7 @@ class Mqtt:
                 c.username_pw_set(conf["username"], conf.get("password"))
             c.will_set(STATE_TOPIC + "/available", "offline", retain=True)
             c.on_connect = self.on_connect
+            c.on_message = self.on_message
             c.reconnect_delay_set(1, 60)
             c.connect_async(conf.get("host", "core-mosquitto"), int(conf.get("port", 1883)), keepalive=60)
             c.loop_start()
@@ -468,6 +662,7 @@ class Mqtt:
             return
         LOG.info(t("Connected to MQTT"))
         client.publish(STATE_TOPIC + "/available", "online", retain=True)
+        client.subscribe(DIAG_REQUEST_TOPIC)
         dev = {"identifiers": ["thread_anchor"], "name": "Thread Anchor", "manufacturer": "Pintjes", "sw_version": VERSION}
         common = {"state_topic": STATE_TOPIC, "availability_topic": STATE_TOPIC + "/available",
                   "json_attributes_topic": STATE_TOPIC, "device": dev}
