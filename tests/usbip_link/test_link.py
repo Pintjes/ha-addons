@@ -152,7 +152,7 @@ def run4(args, timeout=20):
 
 
 resolves = [set(), {"192.168.1.10"}]   # DNS pas pret au premier passage
-link4 = ul.Link({"server": "desktop-serveur.local", "devices": [{"name": "ZBT-2", "hardware_id": "303a:831a"}]},
+link4 = ul.Link({"server": "usbip-host.local", "devices": [{"name": "ZBT-2", "hardware_id": "303a:831a"}]},
                 runner=run4, probe=f4.probe, clock=f4.clock, resolver=lambda host: resolves.pop(0))
 link4.check()                          # nom pas encore resolu : le port n'est pas reconnu, l'attachement est refuse
 st = link4.public()["devices"][0]
