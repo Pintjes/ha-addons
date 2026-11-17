@@ -4,11 +4,23 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## Highlights of 2.9 to 2.31 (16 November 2026)
+## Highlights of 2.9 to 2.32 (16 November 2026)
 
 - **Act on a node from its panel**: recovery attempt on an unavailable node, reset from a distance, pairing codes kept by the add-on (photo or scan of the label), pairing and naming a new device without leaving the page.
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
+
+## [2.32.0] - 2026-11-17
+
+### Added
+
+- **Thread Anchor**: the fixed OMR prefix is now read from the new **Thread Anchor** add-on (`thread_anchor/state`, and its availability), the add-on that keeps the OpenThread border router of Home Assistant on it. The `omr` of `usbip_link/state` (USB/IP Link up to 0.2) is still read when Thread Anchor says nothing.
+- **Proposal of the prefix**: Thread Anchor installed without a prefix: the page proposes the OMR prefix the network uses now (nothing to renumber) and a button writes it into the options of Thread Anchor and restarts it (event `omr_anchor_set`).
+- **No recovery for nothing**: while the radio of the border router is cut off (USB/IP Link) or the fixed prefix is out with an error, lost nodes are not pinged and the sweep waits (`recovery_paused`, note in *To do*).
+- **Catch-up**: once radio and prefix are back (`recovery_resumed`), the nodes that dropped during the cut, and only them, get their pings back and one ping 60 s later (`recovery_catchup`).
+- **Report before / since the anchoring**: an *OMR prefix* card with the prefix changes and the nodes lost per day, before the anchoring (up to 7 days of the event log) and since.
+- **Latency of the USB/IP link** (USB/IP Link 0.3.0): the average over 5 min on the card of the border router of Home Assistant ("radio over USB/IP 0.9 ms"), and an orange note in *To do* when the link is slow (50 ms or more on average) or jumpy (a worst of 200 ms or more, 5× the average or more): the radio protocol waits for each answer and a slow link drops the border router.
+- **Takeover**: when the other border routers (Google TV…) favor their own prefix again, an event `omr_takeover` / `omr_takeover_end` and an orange note counting the nodes that took it.
 
 ## [2.31.0] - 2026-11-17
 

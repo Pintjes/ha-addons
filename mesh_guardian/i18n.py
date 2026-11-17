@@ -319,6 +319,42 @@ FR = {
     "{name}: USB/IP link back ({server})": "{name} : lien USB/IP rétabli ({server})",
     "{name}: USB/IP link cut ({server})": "{name} : lien USB/IP coupé ({server})",
     "{server} does not answer": "{server} ne répond pas",
+    # USB/IP Link: latency of the link that carries the radio
+    "USB/IP link to {server} slow: {avg} ms on average (worst {max} ms), the radio of the border router "
+    "can drop: check the network between Home Assistant and that computer (Wi-Fi, cable, load)":
+        "Lien USB/IP vers {server} lent : {avg} ms en moyenne (pire {max} ms), la radio du border router "
+        "peut décrocher : vérifier le réseau entre Home Assistant et cet ordinateur (Wi-Fi, câble, charge)",
+    "USB/IP link to {server} with peaks: {max} ms at worst for {avg} ms on average, the radio of the border "
+    "router can drop: check the network between Home Assistant and that computer (Wi-Fi, cable, load)":
+        "Lien USB/IP vers {server} avec des pics : jusqu'à {max} ms pour {avg} ms en moyenne, la radio du border "
+        "router peut décrocher : vérifier le réseau entre Home Assistant et cet ordinateur (Wi-Fi, câble, charge)",
+    # Thread Anchor: pause, catch-up, takeover, proposal
+    "Thread Anchor is stopped": "Thread Anchor est arrêté",
+    "radio {names} cut off (USB/IP)": "radio {names} coupée (USB/IP)",
+    "OMR prefix no longer in place ({err})": "préfixe OMR plus en place ({err})",
+    "Recovery of lost nodes paused: {why}": "Récupération des nodes perdues en pause : {why}",
+    "Recovery of lost nodes resumed after {m} min: {n} node that dropped meanwhile pinged in {s} s":
+        "Récupération des nodes perdues reprise après {m} min : {n} node tombée entre-temps sera relancée dans {s} s",
+    "Recovery of lost nodes resumed after {m} min: {n} nodes that dropped meanwhile pinged in {s} s":
+        "Récupération des nodes perdues reprise après {m} min : {n} nodes tombées entre-temps seront relancées dans {s} s",
+    "The other border routers took over the OMR prefix: {fav} instead of {wanted}":
+        "Les autres border routers ont repris la main sur le préfixe OMR : {fav} au lieu de {wanted}",
+    "OMR prefix {wanted} favored again on the network ({m} min)":
+        "Préfixe OMR {wanted} de nouveau retenu sur le réseau ({m} min)",
+    "Thread Anchor: OMR prefix {p} fixed, add-on restarted": "Thread Anchor : préfixe OMR {p} imposé, add-on redémarré",
+    "Sweep skipped: {why}": "Balayage sauté : {why}",
+    "Catch-up after the cut: every node that dropped is back": "Rattrapage après la coupure : toutes les nodes tombées sont revenues",
+    "Catch-up after the cut: {n} nodes pinged ({names})": "Rattrapage après la coupure : {n} nodes relancées ({names})",
+    "The other border routers (Google TV…) took over the OMR prefix: {fav} instead of {wanted}; "
+    "{n} node took it, it comes back to {wanted} with the border router of Home Assistant":
+        "Les autres border routers (Google TV…) ont repris la main sur le préfixe OMR : {fav} au lieu de {wanted} ; "
+        "{n} node l'a pris, elle reviendra sur {wanted} avec le border router de Home Assistant",
+    "The other border routers (Google TV…) took over the OMR prefix: {fav} instead of {wanted}; "
+    "{n} nodes took it, they come back to {wanted} with the border router of Home Assistant":
+        "Les autres border routers (Google TV…) ont repris la main sur le préfixe OMR : {fav} au lieu de {wanted} ; "
+        "{n} nodes l'ont pris, elles reviendront sur {wanted} avec le border router de Home Assistant",
+    "Recovery of lost nodes paused while {why}: the nodes that drop meanwhile are pinged once it is back":
+        "Récupération des nodes perdues en pause, cause : {why} ; les nodes qui tombent entre-temps seront relancées à son retour",
     "Fixed OMR prefix {p} back in place on the border router":
         "Préfixe OMR imposé {p} de nouveau en place sur le border router",
     "Fixed OMR prefix {p} no longer in place on the border router (now: {cur})":

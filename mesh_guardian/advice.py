@@ -36,6 +36,28 @@ GOOD_GAIN = 6          # dB: gain from which a change counts as "better"
 UNSTABLE_DETACHES = 3  # detaches over about 24h from which a parent counts as unstable
 OMR_CHANGES_WARN = 2   # OMR prefix changes (episodes) over 24h from which the network gets a note
 OMR_FIXED_GRACE_S = 60   # fixed OMR prefix (USB/IP Link) off without an error: a note after this time
+# USB/IP link of the radio (time to open a TCP connection to the server, ~1 ms on a wired LAN):
+# the radio protocol (Spinel) waits for each answer, a slow or jumpy link drops the border router
+USB_LAT_AVG_WARN_MS = 50     # average over 5 min from which the link is slow
+USB_LAT_PEAK_WARN_MS = 200   # worst over 5 min from which a peak counts, when also USB_LAT_PEAK_RATIO × the average
+USB_LAT_PEAK_RATIO = 5
+
+
+def usb_latency_note(links):
+    """Orange note when the USB/IP link of the radio is slow (average) or jumpy (peaks), else None."""
+    avg, peak = links.get("latency_avg_ms"), links.get("latency_max_ms")
+    if not isinstance(avg, (int, float)):
+        return None
+    server = links.get("server") or "?"
+    if avg >= USB_LAT_AVG_WARN_MS:
+        return t("USB/IP link to {server} slow: {avg} ms on average (worst {max} ms), the radio of the border router "
+                 "can drop: check the network between Home Assistant and that computer (Wi-Fi, cable, load)",
+                 server=server, avg=round(avg), max=round(peak) if isinstance(peak, (int, float)) else "?")
+    if isinstance(peak, (int, float)) and peak >= USB_LAT_PEAK_WARN_MS and peak >= USB_LAT_PEAK_RATIO * avg:
+        return t("USB/IP link to {server} with peaks: {max} ms at worst for {avg} ms on average, the radio of the border "
+                 "router can drop: check the network between Home Assistant and that computer (Wi-Fi, cable, load)",
+                 server=server, avg=round(avg), max=round(peak))
+    return None
 UNSTABLE_REBOOTS = 2   # crashes over 24h from which a node counts as unstable (power cuts never count)
 UNKNOWN_REBOOTS = 3    # restarts of unknown cause over 24h from which the power of the node is to check
 CRASH_BOOT = ("brown_out", "software_watchdog", "hardware_watchdog", "software_reset")
@@ -313,7 +335,12 @@ def advise(rows, brs, ctx):
                else d.get("error") or "")
         notes.append(("bad", t("{name}: USB/IP link cut since {at}, the radio it carries is out", name=d.get("name") or "?",
                                at=since) + (f" ({why})" if why else "")))
-    omr = links.get("omr")
+    if links.get("server_ok") is not False and all(d.get("attached") for d in links.get("devices") or []):
+        lat = usb_latency_note(links)   # a cut link already has its red note
+        if lat:
+            notes.append(("warn", lat))
+    # fixed OMR prefix: Thread Anchor (ctx "omr_fixed"), else the older "omr" of USB/IP Link
+    omr = ctx["omr_fixed"] if "omr_fixed" in ctx else links.get("omr")
     off = ctx.get("omr_fixed_off")
     if isinstance(omr, dict) and not omr.get("enforced") and (
             omr.get("error") or (off is not None and ctx["now"] - off >= OMR_FIXED_GRACE_S)):
@@ -322,6 +349,16 @@ def advise(rows, brs, ctx):
                       t("Fixed OMR prefix {p} no longer in place on the border router (now: {cur}): the other border "
                         "routers (Google TV…) can publish their prefixes again and the network change its prefix",
                         p=omr.get("wanted"), cur=cur) + (f" ({omr['error']})" if omr.get("error") else "")))
+    anc = ctx.get("anchor") or {}
+    if anc.get("takeover"):
+        notes.append(("warn", tn("The other border routers (Google TV…) took over the OMR prefix: {fav} instead of {wanted}; "
+                                 "{n} node took it, it comes back to {wanted} with the border router of Home Assistant",
+                                 "The other border routers (Google TV…) took over the OMR prefix: {fav} instead of {wanted}; "
+                                 "{n} nodes took it, they come back to {wanted} with the border router of Home Assistant",
+                                 anc.get("renumbered") or 0, fav=anc.get("favored"), wanted=anc.get("wanted"))))
+    if anc.get("paused"):
+        notes.append(("info", t("Recovery of lost nodes paused while {why}: the nodes that drop meanwhile are pinged "
+                                "once it is back", why=anc["paused"])))
     n_omr = ctx.get("omr_changes") or 0
     if n_omr >= OMR_CHANGES_WARN:
         notes.append(("warn", t("The border routers changed the address prefix {n}× in 24h: each time every node must "

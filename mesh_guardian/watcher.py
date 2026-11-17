@@ -64,6 +64,7 @@ i18n.set_language(OPTIONS.get("language", "en"))
 from i18n import t, tn  # noqa: E402
 
 from advice import Advisor  # noqa: E402
+from anchor import ANCHOR_AVAIL_TOPIC, ANCHOR_TOPIC, Anchor  # noqa: E402
 from healer import Healer  # noqa: E402
 from labels import LabelSync  # noqa: E402
 from matterlive import MatterLive  # noqa: E402
@@ -78,7 +79,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.31.0"
+VERSION = "2.32.0"
 OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
 OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
@@ -271,6 +272,7 @@ class Watch:
         self.usb_links = None          # last state of the USB/IP Link add-on (usbip_link/state), if any
         self.omr_fixed_off = None      # time the OMR prefix fixed by USB/IP Link was seen no longer in place
         self.omr_fixed_said = False    # its loss was said in the log (omr_fixed_lost)
+        self.anchor = None             # Anchor: radio and OMR prefix of the border router of HA (anchor.py)
         self.dirty = True
         self.discovered_br = set()
         self.mqtt = None
@@ -1641,12 +1643,12 @@ class Watch:
                 self.check_global()
                 self.check_node_prefixes()
                 self.cleanup_discovery()
-            if self.omr_fixed_off is not None and not self.omr_fixed_said:
-                # USB/IP Link publishes on a change only: the grace time ends here
+            if self.anchor:
+                # Thread Anchor and USB/IP Link publish on a change: grace times and takeover end here
                 try:
-                    self.omr_fixed((self.usb_links or {}).get("omr"))
+                    self.anchor.update()
                 except Exception as err:  # noqa: BLE001
-                    LOG.warning("omr_fixed: %s", err)
+                    LOG.warning("anchor: %s", err)
             if time.time() - last_hourly >= 3600:
                 last_hourly = time.time()
                 try:
@@ -1730,6 +1732,8 @@ class Watch:
         client.subscribe(f"{BASE}/reset/set")
         client.subscribe(f"{DISCOVERY}/+/{BASE}/+/config")
         client.subscribe(USB_LINK_TOPIC)   # USB/IP Link add-on: a radio plugged into another computer
+        client.subscribe(ANCHOR_TOPIC)     # Thread Anchor add-on: OMR prefix of the border router of HA
+        client.subscribe(ANCHOR_AVAIL_TOPIC)
         self.publish_discovery()
         self.dirty = True
 
@@ -1753,7 +1757,10 @@ class Watch:
             else:
                 self.emit("usb_link_lost", t("{name}: USB/IP link cut ({server})", name=name, server=data.get("server")),
                           device=name, server=data.get("server"), error=d.get("error"))
-        self.omr_fixed(data.get("omr"))
+        if getattr(self, "anchor", None):
+            self.anchor.update()   # radio cut: recovery paused; prefix (Thread Anchor, else "omr" here)
+        else:
+            self.omr_fixed(data.get("omr"))
         self.dirty = True
 
     def omr_fixed(self, omr, now=None):
@@ -1784,6 +1791,10 @@ class Watch:
             return
         if msg.topic == USB_LINK_TOPIC:
             self.usb_link(msg.payload)
+            return
+        if msg.topic in (ANCHOR_TOPIC, ANCHOR_AVAIL_TOPIC):
+            if self.anchor:
+                (self.anchor.on_state if msg.topic == ANCHOR_TOPIC else self.anchor.on_available)(msg.payload)
             return
         if msg.topic == f"{BASE}/rename/set" and getattr(self, "labels", None) and msg.payload:
             threading.Thread(target=self.labels.rename, args=(t("the button in Home Assistant"),),
@@ -1816,6 +1827,8 @@ class Watch:
         client.on_disconnect = self.on_disconnect
         client.on_message = self.on_message
         self.healer = Healer(self, OPTIONS)
+        self.anchor = Anchor(self, event_files=[EVENT_FILE + ".1", EVENT_FILE])
+        self.healer.anchor = self.anchor
         self.radio = Radio(self, self.healer, OPTIONS)
         self.labels = LabelSync(self, self.healer, OPTIONS)
         self.advisor = Advisor(self)

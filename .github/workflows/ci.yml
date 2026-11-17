@@ -85,7 +85,7 @@ jobs:
         if: matrix.arch == 'amd64' && matrix.addon == 'mesh_guardian'
         run: |
           docker build -t mg-test mesh_guardian
-          docker run --rm --entrypoint python3 mg-test -c "import sys; sys.path.insert(0, '/'); import i18n, healer, radio, advice, labels, matterlive, nodetable, storm, webui, reattach, suplog, matterlog, pairing, store, quality, history, report; import zeroconf, paho.mqtt.client, websocket; print('modules OK', zeroconf.__version__)"
+          docker run --rm --entrypoint python3 mg-test -c "import sys; sys.path.insert(0, '/'); import i18n, healer, radio, advice, labels, matterlive, nodetable, storm, webui, reattach, suplog, matterlog, pairing, store, quality, history, report, anchor; import zeroconf, paho.mqtt.client, websocket; print('modules OK', zeroconf.__version__)"
       - name: Start test (USB/IP Link)
         if: matrix.arch == 'amd64' && matrix.addon == 'usbip_link'
         run: |

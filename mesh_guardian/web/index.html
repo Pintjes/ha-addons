@@ -297,6 +297,7 @@
   <section class="card hero" id="hero"><div class="empty" id="loading"></div></section>
   <h2 id="todoTitle"></h2>
   <div class="todo" id="todo"></div>
+  <section class="card anchor" id="anchor" style="display:none"></section>
   <h2 id="brTitle"></h2>
   <div class="brs" id="brs"></div>
   <h2 id="nodesTitle"></h2>
@@ -328,6 +329,12 @@ const T = {
     down_sub:"{name}, since {t}.", down_sub_pl:"{names}.", act_sub:"See the advice below.",
     f_avail:"Available nodes", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Automatic recovery", on:"on", off:"off",
     f_omr:"Prefix changes · 24h", f_omr_tip:"Times the border routers changed the address prefix of the Thread network: each time every node must take a new address, the ones that do not follow drop",
+    anc_title:"OMR prefix", anc_tip:"Address prefix of the Thread network, kept on the border router of Home Assistant by the Thread Anchor add-on",
+    anc_prop:"Stable prefix to fix: {p}. It is the one the network uses now: no device changes its address.", anc_btn:"Fix this prefix",
+    anc_confirm:"Write {p} into the options of Thread Anchor and restart it?", anc_done:"Prefix {p} fixed, Thread Anchor restarts",
+    anc_fail:"The prefix could not be fixed", anc_changed:"The prefix of the network changed meanwhile: look again", anc_missing:"Thread Anchor not found among the add-ons",
+    anc_in:"Fixed {p}: in place", anc_out:"Fixed {p}: not in place", anc_fav:"Favored on the network: {p}", anc_since:"Anchored since {d}",
+    anc_rate:"{o} prefix changes and {l} nodes lost per day", anc_before:"Before ({d} days)", anc_after:"Since ({d} days)",
     quality:"Network quality · last {n} min", q_lab:["poor", "to watch", "good", "excellent"], q_24h:"24h: {v} %", part_tip:"Now {v} % · 24h {v24} % · weight {n} %", q_scale:"≥ 95 excellent · 90–95 good · 80–90 to watch",
     q_capped:"capped: partitioned network", q_wait:"The score starts after a few minutes.", q_parts:{availability:"Availability", radio:"Radio", outages:"Outages", backbone:"Backbone", partition:"Partition"}, weight:"Weight {n} %",
     todo:"Good to know ({n})", new:"new", todo_none:"Nothing to report", w_down:"Unavailable", w_warn:"Action advised", w_info:"Good to know", seen:"Seen", seen_tip:"Hide this note (it comes back if it changes)", w_net:"Network",
@@ -338,7 +345,7 @@ const T = {
     br_through:"Nodes going through it ({n})", br_children:"Nodes attached to it ({n})", br_model:"Model", br_id:"Identifier", br_ext:"Extended address", br_xpan:"Extended PAN ID", br_part:"Partition", br_addr:"Addresses", br_if:"Thread interface",
     br_src:{mdns:"announcement", thread:"heard over Thread"}, br_remove:"Remove", br_remove_tip:"Remove this border router from the list. It comes back by itself if it is heard again.", br_remove_online:"Only an offline border router can be removed",
     br_remove_confirm:"{n}: remove this border router from the list? It comes back by itself if it is heard again.", br_removed:"{n} removed from the list", br_offline_adv:"Check its power and its network, or remove it from the list if you took it away on purpose.",
-    brs:"Border routers", br_seen:"seen {t}", br_never:"never seen", br_primary:"primary", offline:"offline", other_subnet:"other subnet than Home Assistant",
+    brs:"Border routers", br_usb:"radio over USB/IP {v} ms", br_seen:"seen {t}", br_never:"never seen", br_primary:"primary", offline:"offline", other_subnet:"other subnet than Home Assistant",
     nodes:"Nodes", search:"Filter: name, area, model…", c_all:"All", c_issues:"To handle", c_bat:"On battery",
     h_node:"Node", h_status:"Status · role", h_link:"Attachment · signal", h_resp:"Response", h_bat:"Power", h_last:"Last contact", h_adv:"Advice",
     available:"available", unavailable:"unavailable", unav_since:"unavailable since {t}", no_answer:"no answer", avg:"avg. {v}", contact:"Contact ",
@@ -414,6 +421,12 @@ const T = {
     down_sub:"{name}, depuis {t}.", down_sub_pl:"{names}.", act_sub:"Voir les conseils ci-dessous.",
     f_avail:"Nodes disponibles", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Récupération auto.", on:"activée", off:"désactivée",
     f_omr:"Changements de préfixe · 24 h", f_omr_tip:"Nombre de fois où les border routers ont changé le préfixe d'adresse du réseau Thread : à chaque fois, toutes les nodes doivent prendre une nouvelle adresse, celles qui ne suivent pas décrochent",
+    anc_title:"Préfixe OMR", anc_tip:"Préfixe d'adresse du réseau Thread, maintenu sur le border router de Home Assistant par l'add-on Thread Anchor",
+    anc_prop:"Préfixe stable à imposer : {p}. C'est celui que le réseau utilise maintenant : aucun appareil ne change d'adresse.", anc_btn:"Imposer ce préfixe",
+    anc_confirm:"Écrire {p} dans les options de Thread Anchor et le redémarrer ?", anc_done:"Préfixe {p} imposé, Thread Anchor redémarre",
+    anc_fail:"Le préfixe n'a pas pu être imposé", anc_changed:"Le préfixe du réseau a changé entre-temps : regarde à nouveau", anc_missing:"Thread Anchor introuvable parmi les add-ons",
+    anc_in:"Imposé {p} : en place", anc_out:"Imposé {p} : pas en place", anc_fav:"Retenu sur le réseau : {p}", anc_since:"Ancré depuis le {d}",
+    anc_rate:"{o} changements de préfixe et {l} nodes perdues par jour", anc_before:"Avant ({d} jours)", anc_after:"Depuis ({d} jours)",
     quality:"Qualité du réseau · dernières {n} min", q_lab:["mauvais", "à surveiller", "bon", "excellent"], q_24h:"24 h : {v} %", part_tip:"Actuel {v} % · 24 h {v24} % · poids {n} %", q_scale:"≥ 95 excellent · 90–95 bon · 80–90 à surveiller",
     q_capped:"plafonnée : réseau partitionné", q_wait:"La note démarre après quelques minutes.", q_parts:{availability:"Disponibilité", radio:"Radio", outages:"Coupures", backbone:"Ossature", partition:"Partition"}, weight:"Poids {n} %",
     todo:"À savoir ({n})", new:"nouveau", todo_none:"Rien à signaler", w_down:"Indisponible", w_warn:"Action conseillée", w_info:"À savoir", seen:"Vu", seen_tip:"Masquer cette note (elle revient si elle change)", w_net:"Réseau",
@@ -424,7 +437,7 @@ const T = {
     br_through:"Nodes qui passent par lui ({n})", br_children:"Nodes rattachées à lui ({n})", br_model:"Modèle", br_id:"Identifiant", br_ext:"Adresse étendue", br_xpan:"Extended PAN ID", br_part:"Partition", br_addr:"Adresses", br_if:"Interface Thread",
     br_src:{mdns:"annonce", thread:"entendu en Thread"}, br_remove:"Retirer", br_remove_tip:"Retirer ce border router de la liste. Il revient tout seul s'il est de nouveau entendu.", br_remove_online:"Seul un border router hors ligne peut être retiré",
     br_remove_confirm:"{n} : retirer ce border router de la liste ? Il revient tout seul s'il est de nouveau entendu.", br_removed:"{n} retiré de la liste", br_offline_adv:"Vérifier son alimentation et son réseau, ou le retirer de la liste s'il a été enlevé exprès.",
-    brs:"Border routers", br_seen:"vu {t}", br_never:"jamais vu", br_primary:"primaire", offline:"hors ligne", other_subnet:"autre sous-réseau que Home Assistant",
+    brs:"Border routers", br_usb:"radio via USB/IP {v} ms", br_seen:"vu {t}", br_never:"jamais vu", br_primary:"primaire", offline:"hors ligne", other_subnet:"autre sous-réseau que Home Assistant",
     nodes:"Nodes", search:"Filtrer : nom, pièce, modèle…", c_all:"Toutes", c_issues:"À traiter", c_bat:"Sur pile",
     h_node:"Node", h_status:"Statut · rôle", h_link:"Rattachement · signal", h_resp:"Réponse", h_bat:"Alimentation", h_last:"Dernier contact", h_adv:"Conseil",
     available:"disponible", unavailable:"indisponible", unav_since:"indisponible depuis {t}", no_answer:"pas de réponse", avg:"moy. {v}", contact:"Contact ",
@@ -688,6 +701,39 @@ function renderHero() {
     <div class="score">${score}</div>`;
 }
 
+// OMR prefix kept by Thread Anchor: proposal to fix one, state, report before / since the anchoring
+function renderAnchor() {
+  const a = D.anchor, box = $("#anchor");
+  if (!a) { box.style.display = "none"; box.innerHTML = ""; return; }
+  const lines = [];
+  if (a.proposal) lines.push(`<p>${esc(F("anc_prop", {p: a.proposal}))}</p>
+    <p><button class="btn" id="ancSet" data-p="${esc(a.proposal)}">${esc(L("anc_btn"))}</button></p>`);
+  if (a.wanted) lines.push(`<p><span class="st ${a.enforced ? "ok" : "warn"}">${a.enforced ? IC.ok : IC.warn}</span>
+    ${esc(F(a.enforced ? "anc_in" : "anc_out", {p: a.wanted}))}${a.error ? ` <span class="mut">(${esc(a.error)})</span>` : ""}</p>`);
+  if (a.favored && a.favored !== a.wanted) lines.push(`<p class="mut">${esc(F("anc_fav", {p: a.favored}))}</p>`);
+  const r = a.report;
+  if (r) {
+    const row = (k, x) => x ? `<div><span>${esc(F(k, {d: x.days}))}</span><b class="num">${esc(F("anc_rate", {o: x.omr_per_day, l: x.lost_per_day}))}</b></div>` : "";
+    lines.push(`<p class="mut">${esc(F("anc_since", {d: new Date(r.anchored_since).toLocaleString()}))}</p>
+      <div class="facts">${row("anc_before", r.before)}${row("anc_after", r.after)}</div>`);
+  }
+  box.style.display = lines.length ? "" : "none";
+  box.innerHTML = `<h3 title="${esc(L("anc_tip"))}">${esc(L("anc_title"))}</h3>${lines.join("")}`;
+}
+$("#anchor").addEventListener("click", async e => {
+  const b = e.target.closest("#ancSet");
+  if (!b) return;
+  const p = b.dataset.p;
+  if (!confirm(F("anc_confirm", {p}))) return;
+  b.disabled = true;
+  let res = {};
+  try {
+    res = await (await fetch("api/anchor", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({prefix: p})})).json();
+  } catch (err) { /* said below */ }
+  toast(res.ok ? F("anc_done", {p}) : L(res.result === "changed" ? "anc_changed" : res.result === "missing" ? "anc_missing" : "anc_fail"));
+  load(true);
+});
+
 // same advice for several nodes (e.g. "add a router near Outdoor"): one card listing the nodes
 function todoGroups(issues) {
   const groups = [];
@@ -759,6 +805,9 @@ function renderBrs() {
     if (b.primary) extra.push(L("br_primary"));
     if (b.same_subnet === false) extra.push(L("other_subnet"));
     extra.push(b.last_contact ? F("br_seen", {t: ago(b.last_contact)}) : L("br_never"));
+    // radio carried by USB/IP Link: average latency of the link (5 min)
+    const u = b.usb_latency;
+    if (u && u.avg_ms != null) extra.push(F("br_usb", {v: u.avg_ms < 10 ? dec(u.avg_ms) : Math.round(u.avg_ms)}));
     return `<div class="card br" data-br="${esc(b.id)}" role="button" tabindex="0" title="${esc(L("br_open"))}"><span class="st ${k} ic">${k === "ok" ? IC.ok : k === "bad" ? IC.bad : IC.warn}</span>
       <div><b>${esc(b.name)}</b>${b.role === "leader" ? ` <span title="Leader">${IC.crown}</span>` : ""}<small>${extra.map(esc).join(" · ")}</small></div></div>`;
   }).join("");
@@ -1605,7 +1654,7 @@ function texts() {
 }
 function renderAll() {
   if (!D) return;
-  keepFocus(() => { renderHero(); renderTodo(); renderBrs(); renderList(); });
+  keepFocus(() => { renderHero(); renderTodo(); renderAnchor(); renderBrs(); renderList(); });
   $("#codes").style.display = D.pair_free ? "" : "none";   // only while a code waits for its device
   const rd = D.reading;
   $("#live").className = "live" + (D.live ? "" : " poll") + (rd && D.live ? " reading" : "");
@@ -1755,7 +1804,7 @@ layout(); theme(); texts();
 $("#loading").textContent = L("loading");
 reread().then(() => load(false));
 setInterval(() => { if (!document.hidden) load(false); }, 60000);
-setInterval(() => { if (D && !document.hidden) keepFocus(() => { renderHero(); renderTodo(); renderBrs(); renderList(); }); }, 30000);
+setInterval(() => { if (D && !document.hidden) keepFocus(() => { renderHero(); renderTodo(); renderAnchor(); renderBrs(); renderList(); }); }, 30000);
 </script>
 </body>
 </html>

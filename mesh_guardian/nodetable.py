@@ -36,6 +36,13 @@ OLD_S = 2 * 3600   # a value the node gave longer ago than this (or nobody knows
 BACKGROUND_S = 20
 
 
+def is_ha_br(b):
+    """Border router of Home Assistant (OpenThread Border Router add-on: vendor "HomeAssistant",
+    model "OpenThreadBorderRouter" in its _meshcop._udp announcement)."""
+    txt = f"{b.get('vendor') or ''} {b.get('model') or ''}".lower().replace(" ", "")
+    return "homeassistant" in txt or "openthread" in txt
+
+
 def nb_rssi(nb):
     """Signal of a neighbor entry: average RSSI (field 6), or the last RSSI (field 7) when
     the average is implausible — some firmwares report e.g. -21dBm for a link heard at -77."""
@@ -797,12 +804,25 @@ class NodeTable:
             x["primary"] = x["primary"] and x["_seen"] == latest.get(x["partition"])
             del x["_seen"]
         brs.sort(key=lambda x: (not x["online"], x["name"].lower()))
+        # USB/IP Link: latency of the link that carries the radio, shown on the border router of
+        # Home Assistant (OpenThread Border Router add-on, the only one whose radio can be remote)
+        links = getattr(self.w, "usb_links", None) or {}
+        usb = {"avg_ms": links.get("latency_avg_ms"), "max_ms": links.get("latency_max_ms"),
+               "last_ms": links.get("latency_ms"), "server": links.get("server")} if links.get("devices") else None
+        for x in brs:
+            x["usb_latency"] = usb if usb and is_ha_br(x) else None
         with self.h.lock:
             unavailable = sum(1 for n in self.h.nodes.values() if not n["available"])
             total = len(self.h.nodes)
         storm = self.w.storm.summary() if getattr(self.w, "storm", None) else {}
         q = getattr(self, "quality", None)
-        return {"quality": q.summary() if q else None, "border_routers": brs,
+        anchor = getattr(self.w, "anchor", None)
+        try:
+            anc = anchor.public() if anchor else None
+        except Exception as err:  # noqa: BLE001 - the page without this card rather than no page
+            LOG.warning("anchor: %s", err)
+            anc = None
+        return {"quality": q.summary() if q else None, "border_routers": brs, "anchor": anc,
                 "network": {"partitions": s["partitions"], "omr": s["omr_list"], "leader": s["leader"],
                             "omr_changes_24h": s.get("omr_changes_24h"),
                             "unavailable": unavailable, "nodes": total, "storm": storm.get("state") == "ON",
@@ -872,13 +892,16 @@ class NodeTable:
                     return []
                 with hist.lock:
                     return list(hist.data.get(f"{int(rid, 16):016X}", []))
+            anchor = getattr(self.w, "anchor", None)
             ctx = {"now": time.time(), "tried": adv.tried if adv else {}, "forced": adv.forced if adv else {},
                    "weak_since": adv.weak_since if adv else self.__dict__.setdefault("_weak_since", {}),
                    "unstable": adv.unstable if adv else {}, "history": points, "gave_up": gave_up,
                    "ghosts": ["0x" + (k.lstrip("0") or "0") for k in getattr(self.w, "ghosts", [])],
                    "omr_changes": self.w.omr_episodes_24h() if hasattr(self.w, "omr_episodes_24h") else 0,
                    "usb_links": getattr(self.w, "usb_links", None),
-                   "omr_fixed_off": getattr(self.w, "omr_fixed_off", None)}
+                   "omr_fixed_off": getattr(self.w, "omr_fixed_off", None),
+                   "anchor": anchor.public() if anchor else None,
+                   "omr_fixed": anchor.omr() if anchor else None}
             notes = advise(rows, self.header()["border_routers"], ctx)
             if not getattr(self.w, "advice_on", True):
                 # option "advice" off: nothing for the available nodes (an unavailable node keeps

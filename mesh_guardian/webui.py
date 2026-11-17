@@ -332,6 +332,17 @@ class WebUI:
                     except Exception as err:  # noqa: BLE001
                         LOG.warning("pairing code: %s", type(err).__name__)
                         return self._send(200, '{"ok": false, "error": "error"}')
+                if path == "/api/anchor":   # fix the proposed OMR prefix in Thread Anchor (its options), restart it
+                    try:
+                        anchor = getattr(ui.w, "anchor", None)
+                        if not anchor:
+                            raise RuntimeError("no anchor")
+                        out = anchor.apply(text_of(self._body(), "prefix"))
+                        ui.table.cache_t = 0
+                        return self._send(200, json.dumps(out, ensure_ascii=False))
+                    except Exception as err:  # noqa: BLE001
+                        LOG.warning("anchor: %s", err)
+                        return self._send(200, json.dumps({"ok": False, "result": "error", "error": str(err)}, ensure_ascii=False))
                 if path == "/api/br_forget":   # remove an offline border router from the list
                     try:
                         body = self._body()

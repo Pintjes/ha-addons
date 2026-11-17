@@ -107,6 +107,7 @@ class Healer:
         self.outages_file = "/data/outages.json"
         self._sweep_lock = threading.Lock()
         self.storm = None        # storm detector (storm.py), plugged in by watcher
+        self.anchor = None       # radio and OMR prefix of the border router of HA (anchor.py), plugged in by watcher
         self.started = time.time()
         self.session = {"pings_sent": 0, "recovered_by_ping": 0, "back_on_their_own": 0, "gave_up": 0}
         self.recent = []         # [time, kind] of the last 24h (same kinds as self.session)
@@ -371,6 +372,9 @@ class Healer:
             return
         if self.storm and self.storm.active:
             LOG.info(t("Sweep skipped (storm)"))
+            return
+        if self.anchor and self.anchor.blocked():
+            LOG.info(t("Sweep skipped: {why}", why=self.anchor.blocked()))
             return
         # a node Home Assistant still lists but the Matter Server no longer knows (removed or
         # reset) is left out: the server would only answer "does not exist"
@@ -738,6 +742,15 @@ class Healer:
                 self.mass = {"t": min(n_since for n_since in (self.nodes[d[2]["node_hex"]]["since"] for d in downs)),
                              "cause": cause, "nodes": [d[2]["node_hex"] for d in downs]}
                 self._save_state()
+        if self.anchor and self.anchor.blocked():
+            # the radio or the OMR prefix of the border router of HA is out: pinging is pointless,
+            # the nodes that drop now get one targeted pass once it is back (catch-up)
+            self.anchor.note_dropped([d[2]["node_hex"] for d in downs if d[2].get("node_hex")])
+            due = []
+        elif self.anchor:
+            back = self.anchor.take_catchup(now)
+            if back:
+                threading.Thread(target=self.catchup, args=(back,), daemon=True, name="catchup").start()
         if len(downs) >= mass:
             for kind, txt, d, _ in downs:  # not counted in the per-node statistics
                 d.pop("node_hex", None)
@@ -779,6 +792,29 @@ class Healer:
                 break
             self.ping(node)
         self.check_routing()
+        self.w.dirty = True
+
+    def catchup(self, nodes):
+        """After a cut of the radio or of the OMR prefix: the nodes that dropped meanwhile and are
+        still unavailable get their pings back (counter at zero) and one ping now, and only them."""
+        with self.lock:
+            todo = [k for k in nodes if k in self.nodes and not self.nodes[k]["available"]]
+            for k in todo:
+                self.nodes[k].update({"pings": 0, "last_ping": None, "gave_up": False})
+        if not todo:
+            self.w.emit("recovery_catchup", t("Catch-up after the cut: every node that dropped is back"), total=0, back=len(nodes))
+            return
+        for k in todo:
+            if self.w.stop.is_set():
+                return
+            try:
+                self.ping(k)
+            except Exception as err:  # noqa: BLE001
+                LOG.debug("catch-up, %s: %s", k, err)
+        names = [self.nodes.get(k, {}).get("name", short_id(k)) for k in todo]
+        self.w.emit("recovery_catchup", t("Catch-up after the cut: {n} nodes pinged ({names})", n=len(todo), names=", ".join(names)),
+                    total=len(todo), back=len(nodes) - len(todo), nodes=names)
+        self._save_state()
         self.w.dirty = True
 
     def run(self):
