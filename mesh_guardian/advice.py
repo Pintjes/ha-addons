@@ -34,6 +34,7 @@ STATE_FILE = "/data/advice_state.json"
 WEAK_RSSI = -90        # dBm: weak link when the link quality is not known
 GOOD_GAIN = 6          # dB: gain from which a change counts as "better"
 UNSTABLE_DETACHES = 3  # detaches over about 24h from which a parent counts as unstable
+OMR_CHANGES_WARN = 2   # OMR prefix changes (episodes) over 24h from which the network gets a note
 UNSTABLE_REBOOTS = 2   # crashes over 24h from which a node counts as unstable (power cuts never count)
 UNKNOWN_REBOOTS = 3    # restarts of unknown cause over 24h from which the power of the node is to check
 CRASH_BOOT = ("brown_out", "software_watchdog", "hardware_watchdog", "software_reset")
@@ -168,7 +169,14 @@ def advise(rows, brs, ctx):
             if not r.get("battery") and r.get("area") and r.get("since"):
                 cut = sum(1 for o in rows if o is not r and not o.get("available") and not o.get("battery")
                           and o.get("area") == r["area"] and o.get("since") and abs(o["since"] - r["since"]) <= POWER_CUT_S)
-            if par is not None and not par.get("available"):
+            st = r.get("stale_prefix")
+            if st:
+                # the border routers changed the address prefix and this node did not follow: the
+                # cause is known, "check its power" would be wrong
+                out.append((t("Stayed on the old address prefix after {br} changed it at {at}", br=st["br"], at=st["at"]),
+                            t("{prefix}: its new address is not known, no command reaches it until it announces itself again",
+                              prefix=st["prefix"]), "high"))
+            elif par is not None and not par.get("available"):
                 out.append((t("Comes back with {parent}", parent=par["name"]),
                             t("its parent {parent} is unavailable too", parent=par["name"]), "high"))
             elif cut >= 2:
@@ -295,6 +303,10 @@ def advise(rows, brs, ctx):
         when = last[11:16] if last else None
         notes.append(("info", t("{names} detached in the last 24h, the last time at {t}", names=names, t=when)
                       if when else t("{names} detached in the last 24h", names=names)))
+    n_omr = ctx.get("omr_changes") or 0
+    if n_omr >= OMR_CHANGES_WARN:
+        notes.append(("warn", t("The border routers changed the address prefix {n}× in 24h: each time every node must "
+                                "take a new address, the ones that do not follow drop", n=n_omr)))
     if ctx["ghosts"]:
         notes.append(("info", t("Announced but unknown to the Matter Server: {ids} (removed without a factory reset?)",
                                 ids=", ".join(ctx["ghosts"]))))

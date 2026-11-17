@@ -530,6 +530,13 @@ class Reattach:
             network = connected_network(attrs.get("0/49/1"))
             if network is None or CONNECT_NETWORK not in (attrs.get("0/49/65529") or []):
                 return {"result": "unsupported"}
+            st = self.w.stale_prefix(nid) if hasattr(self.w, "stale_prefix") else None
+            if st:
+                # still on a prefix the border routers left: its address is not known, the command
+                # cannot leave (the Matter Server gives up at once); say why instead of trying
+                LOG.info("recovery of %s not tried: still on the old prefix %s (left by %s at %s)",
+                         name, st["prefix"], st["br"], st["at"])
+                return {"result": "stale", "prefix": st["prefix"], "br": st["br"], "at": st["at"]}
             # the thread is created first: when it cannot start (no thread left), the node is not
             # left marked "recovering" for good, with a result "pending" that never ends
             th = threading.Thread(target=self._recover, args=(nid, name, area, network), daemon=True, name="recover")
@@ -609,8 +616,11 @@ class Reattach:
                                 timeout=RECOVER_WAIT_S)
         except Exception as err:  # noqa: BLE001 - no session: nothing reaches the node
             LOG.info("recovery of %s, no answer to ArmFailSafe: %s", name, err)
+            announced = (self.w.matter.get(nid) or {}).get("online") if hasattr(self.w, "matter") else None
             self._recover_result(nid, name, "unreachable",
-                                 t("{node}: out of reach, the recovery attempt could not be sent", node=name))
+                                 t("{node}: no longer announced on the network, its address is not known: "
+                                   "the recovery attempt could not be sent", node=name) if announced is False
+                                 else t("{node}: out of reach, the recovery attempt could not be sent", node=name))
             return False
         if _field(res, "errorCode", "0") != 0:
             LOG.info("recovery of %s, ArmFailSafe refused: %s", name, res)

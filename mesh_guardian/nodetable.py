@@ -617,6 +617,8 @@ class NodeTable:
                 "rtt_ms": rtt_last, "rtt_avg_ms": rtt_avg, "rtt_fail": rtt_fail,
                 "last_report": v["node"].get("last"), "last_radio": v["node"].get("radio"),
                 "search": self.w.reattach.result_of(nid) if getattr(self.w, "reattach", None) else None,
+                # unavailable and still on an OMR prefix the border routers left: unreachable
+                "stale_prefix": self.w.stale_prefix(nid) if not avail and hasattr(self.w, "stale_prefix") else None,
             })
         for nid, v in other.items():
             rows.append(self._other_row(nid, v))
@@ -802,6 +804,7 @@ class NodeTable:
         q = getattr(self, "quality", None)
         return {"quality": q.summary() if q else None, "border_routers": brs,
                 "network": {"partitions": s["partitions"], "omr": s["omr_list"], "leader": s["leader"],
+                            "omr_changes_24h": s.get("omr_changes_24h"),
                             "unavailable": unavailable, "nodes": total, "storm": storm.get("state") == "ON",
                             "routing_problem": self.h.routing.get("details") if self.h.routing.get("problem") else None,
                             "auto_recovery": self.h.enabled}}
@@ -872,7 +875,8 @@ class NodeTable:
             ctx = {"now": time.time(), "tried": adv.tried if adv else {}, "forced": adv.forced if adv else {},
                    "weak_since": adv.weak_since if adv else self.__dict__.setdefault("_weak_since", {}),
                    "unstable": adv.unstable if adv else {}, "history": points, "gave_up": gave_up,
-                   "ghosts": ["0x" + (k.lstrip("0") or "0") for k in getattr(self.w, "ghosts", [])]}
+                   "ghosts": ["0x" + (k.lstrip("0") or "0") for k in getattr(self.w, "ghosts", [])],
+                   "omr_changes": self.w.omr_episodes_24h() if hasattr(self.w, "omr_episodes_24h") else 0}
             notes = advise(rows, self.header()["border_routers"], ctx)
             if not getattr(self.w, "advice_on", True):
                 # option "advice" off: nothing for the available nodes (an unavailable node keeps

@@ -4,11 +4,22 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## Highlights of 2.9 to 2.27 (16 November 2026)
+## Highlights of 2.9 to 2.28 (16 November 2026)
 
 - **Act on a node from its panel**: recovery attempt on an unavailable node, reset from a distance, pairing codes kept by the add-on (photo or scan of the label), pairing and naming a new device without leaving the page.
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
+
+## [2.28.0] - 2026-11-17
+
+### Added
+
+- **Node left on an old address prefix**: when the border routers change the OMR prefix (the prefix of the addresses of the Thread network), every node must take a new address. A node that does not follow is unreachable: the Matter Server no longer knows its address. Mesh Guardian now recognizes it and says so: an event `node_stale_prefix` ("stayed on the old prefix … after <border router> changed it at <time>"), the card of the unavailable node gives this cause instead of "check its power", and the recovery attempt is not tried for nothing: the page says why. The prefixes left by the border routers and the prefix of each node are kept across restarts (`/data/prefixes.json`).
+- **Prefix changes in 24 hours**: shown with the network facts (a burst within 30 minutes counts as one change), with a network note from 2 changes a day: frequent changes are a usual cause of nodes that drop every day.
+
+### Changed
+
+- Recovery attempt: when the node no longer announces itself on the network, the result says so ("no longer announced, its address is not known") instead of "out of reach", which made one think of distance.
 
 ## [2.27.0] - 2026-11-16
 

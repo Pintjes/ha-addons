@@ -77,7 +77,9 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.27.0"
+VERSION = "2.28.0"
+OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
+OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
 _MQ = _load_mqtt()
 MQTT_HOST = _MQ.get("host") or os.environ.get("MQTT_HOST", "core-mosquitto")
@@ -97,6 +99,7 @@ EVENT_FILE = os.path.join(EVENT_DIR, "events.jsonl")
 EVENT_FILE_MAX = 5 * 1024 * 1024
 KNOWN_FILE = "/data/known_nodes.json"
 BR_NAMES_FILE = "/data/br_names.json"
+PREFIXES_FILE = "/data/prefixes.json"
 RENAME_CONFIRM = 5   # announcements in a row giving the same new name before a border router is renamed
 MESHCOP_REBROWSE = 5 * 60
 BR_FIELDS = ("instance", "network", "ext_pan", "vendor", "model", "role", "interface", "bbr_primary",
@@ -130,6 +133,7 @@ STYLE = {  # event kind -> (icon, color)
     "global_return": ("🟢", "green"),
     "ping": ("🟠", "yellow"), "sweep": ("🟠", "yellow"),
     "burst": ("⚡", "magenta"),
+    "stale_prefix": ("🧭", "yellow"),
     "leader": ("👑", "cyan"), "partition": ("🧩", "cyan"), "omr": ("🧭", "cyan"), "prefix": ("🧭", "cyan"),
     "br_change": ("🔁", "cyan"), "br_detach": ("🔁", "yellow"), "renamed": ("🏷️ ", "cyan"),
     "radio_survey": ("📡", "blue"), "statistics": ("📊", "blue"), "startup": ("🚀", "blue"),
@@ -255,6 +259,8 @@ class Watch:
         self._short_detaches = []  # (key, label, seconds): border routers back before SETTLE_S
         self.prev_omr = None
         self.prev_node_prefixes = None
+        self.omr_left = {}      # OMR prefix a border router stopped publishing -> (time, border router)
+        self.omr_changes = []   # times of the OMR prefix changes (24h)
         self.dirty = True
         self.discovered_br = set()
         self.mqtt = None
@@ -275,6 +281,7 @@ class Watch:
         self.br_names = {}       # border agent key -> {"name": confirmed name, "detached": [times]}
         self._load_known()
         self._load_br_names()
+        self._load_prefixes()
         self.restore_brs()
 
     # ---------------------------------------------------------------- known
@@ -299,6 +306,32 @@ class Watch:
             save_json(KNOWN_FILE, nodes)
         except Exception as err:  # noqa: BLE001
             LOG.warning(t("Cannot write {file}: {err}", file=KNOWN_FILE, err=err))
+
+    def _load_prefixes(self):
+        """OMR prefixes left by the border routers, their changes, the prefix of each node:
+        kept across restarts (a node stuck on an old prefix stays recognized)."""
+        d = load_json(PREFIXES_FILE)
+        if not isinstance(d, dict):
+            return
+        try:
+            now = time.time()
+            self.omr_left = {p: (float(v[0]), str(v[1])) for p, v in (d.get("omr_left") or {}).items()
+                             if isinstance(v, list) and len(v) == 2 and now - float(v[0]) < OMR_LEFT_KEEP_S}
+            self.omr_changes = [float(x) for x in d.get("omr_changes") or [] if now - float(x) < 86400]
+            for node, p in (d.get("nodes") or {}).items():
+                if node in self.matter and isinstance(p, str) and not self.matter[node].get("prefix"):
+                    self.matter[node]["prefix"] = p
+        except (TypeError, ValueError) as err:
+            LOG.warning(t("Cannot read {file}: {err}", file=PREFIXES_FILE, err=err))
+
+    def _save_prefixes(self):
+        try:
+            with self.lock:
+                d = {"omr_left": {p: list(v) for p, v in self.omr_left.items()}, "omr_changes": self.omr_changes,
+                     "nodes": {k: n["prefix"] for k, n in self.matter.items() if n.get("prefix")}}
+            save_json(PREFIXES_FILE, d)
+        except Exception as err:  # noqa: BLE001
+            LOG.warning(t("Cannot write {file}: {err}", file=PREFIXES_FILE, err=err))
 
     def _load_br_names(self):
         names = load_json(BR_NAMES_FILE)
@@ -588,6 +621,7 @@ class Watch:
                 if role == "detached" and old.get("role") != "detached":
                     self.br_names.setdefault(key, {"name": None, "detached": []}).setdefault("detached", []).append(now)
                     self._save_br_names()
+                omr_was = old.get("omr") if old.get("omr") and old.get("omr") != new["omr"] else None
                 b.update(new)
                 b["fails"] = 0
                 b["last_seen"] = now
@@ -595,6 +629,11 @@ class Watch:
                 self.confirm_label(key, b)
                 label = self.br_label(b)
                 relevant = self.br_relevant(b)
+                if omr_was and relevant:
+                    # the nodes on this prefix must change their address: the ones that do not
+                    # follow are unreachable (stale_prefix)
+                    self.omr_left[omr_was] = (now, label)
+                    self._save_prefixes()
                 if not was_online:
                     down = now - (b.get("since") or now)
                     b["online"] = True
@@ -949,8 +988,11 @@ class Watch:
             n["seen"] = True
             n["fails"] = 0
             n["addrs"] = addrs
-            n["prefix"] = prefixes[0] if prefixes else n.get("prefix")
+            before = n.get("prefix")
+            n["prefix"] = prefixes[0] if prefixes else before
             self.dirty = True
+        if n["prefix"] != before:
+            self._save_prefixes()
 
     def node_name(self, node):
         """"Name (area)" of the node according to Home Assistant, or None."""
@@ -980,6 +1022,39 @@ class Watch:
                 return
             self.emit("matter_offline", t("{node} missing from mDNS", node=self.node_disp(node), reason=reason),
                       node=node, name=self.node_name(node), reason=reason)
+            st = self.stale_prefix(node)
+            if st:
+                self.emit("node_stale_prefix",
+                          t("{node}: stayed on the old prefix {prefix} after {br} changed it at {at}: its new address is not known",
+                            node=self.node_disp(node), prefix=st["prefix"], br=st["br"], at=st["at"]),
+                          node=node, name=self.node_name(node), prefix=st["prefix"], br=st["br"])
+
+    def _omr_now(self):
+        return {b["omr"] for b in self.br.values() if b.get("online") and b.get("omr") and self.br_relevant(b)}
+
+    def stale_prefix(self, node):
+        """{"prefix", "br", "at", "t"} when the last address announced by this node is on an OMR
+        prefix the border routers no longer publish: it did not take the new prefix, so nothing
+        (Matter Server, recovery attempt) can reach it until it announces itself again. Else None."""
+        with self.lock:
+            n = self.matter.get(str(node).upper().zfill(16))
+            p = (n or {}).get("prefix")
+            left = self.omr_left.get(p) if p else None
+            if not left or p in self._omr_now():
+                return None
+            return {"prefix": p, "br": left[1], "t": left[0],
+                    "at": time.strftime("%H:%M", time.localtime(left[0]))}
+
+    def omr_episodes_24h(self):
+        """OMR prefix changes in the last 24h, as episodes (changes less than 30 min apart are one)."""
+        now, n, last = time.time(), 0, None
+        with self.lock:
+            for x in self.omr_changes:
+                if now - x < 86400:
+                    if last is None or x - last > OMR_EPISODE_S:
+                        n += 1
+                    last = x
+        return n
 
     # ---------------------------------------------------------------- companions
     def update_cast(self, type_, name, info):
@@ -1064,6 +1139,7 @@ class Watch:
                 "partition_ids": partitions,
                 "omr": ", ".join(omr) if omr else t("none"),
                 "omr_list": omr,
+                "omr_changes_24h": self.omr_episodes_24h(),
                 "matter_online": len(nodes_on),
                 "matter_known": len(self.matter),
                 "matter_missing": len(nodes_off),
@@ -1135,6 +1211,11 @@ class Watch:
                       else t("Thread partitions: {before} → {after}", before=len(self.prev_partitions), after=len(parts)),
                       before=list(self.prev_partitions), after=list(parts))
         if self.prev_omr is not None and omr != self.prev_omr:
+            now = time.time()
+            with self.lock:
+                self.omr_changes = [x for x in self.omr_changes if now - x < 86400] + [now]
+                self.omr_left = {p: v for p, v in self.omr_left.items() if now - v[0] < OMR_LEFT_KEEP_S}
+            self._save_prefixes()
             self.emit("omr_change", t("OMR prefix: {before} → {after}", before=", ".join(self.prev_omr) or t("none"),
                                       after=", ".join(omr) or t("none")),
                       before=list(self.prev_omr), after=list(omr))

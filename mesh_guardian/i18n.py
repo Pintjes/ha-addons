@@ -313,6 +313,17 @@ FR = {
     "{node}: out of reach, the recovery attempt could not be sent":
         "{node} : hors de portée, la tentative de récupération n'a pas pu être envoyée",
     "{node}: recovery attempt refused": "{node} : tentative de récupération refusée",
+    "{node}: no longer announced on the network, its address is not known: the recovery attempt could not be sent":
+        "{node} : ne s'annonce plus sur le réseau, son adresse n'est pas connue : la tentative de récupération n'a pas pu être envoyée",
+    # node left on an OMR prefix the border routers no longer publish
+    "{node}: stayed on the old prefix {prefix} after {br} changed it at {at}: its new address is not known":
+        "{node} : restée sur l'ancien préfixe {prefix} après le changement fait par {br} à {at} : sa nouvelle adresse n'est pas connue",
+    "Stayed on the old address prefix after {br} changed it at {at}":
+        "Restée sur l'ancien préfixe d'adresse après le changement fait par {br} à {at}",
+    "{prefix}: its new address is not known, no command reaches it until it announces itself again":
+        "{prefix} : sa nouvelle adresse n'est pas connue, aucune commande ne l'atteint tant qu'elle ne s'annonce pas à nouveau",
+    "The border routers changed the address prefix {n}× in 24h: each time every node must take a new address, the ones that do not follow drop":
+        "Les border routers ont changé le préfixe d'adresse {n}× en 24 h : à chaque fois, toutes les nodes doivent prendre une nouvelle adresse, celles qui ne suivent pas décrochent",
     "{node}: reset from a distance, to pair again": "{node} : réinitialisée à distance, à appairer à nouveau",
     "{node}: removed from Home Assistant": "{node} : supprimée de Home Assistant",
     "{what} failed, started again: {err}": "{what} en échec, relancé : {err}",

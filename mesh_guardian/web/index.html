@@ -327,6 +327,7 @@ const T = {
     all_ok:"All good", all_ok_sub:"All nodes are available.", n_down:"{n} node unavailable", n_down_pl:"{n} nodes unavailable", n_act:"{n} action advised", n_act_pl:"{n} actions advised",
     down_sub:"{name}, since {t}.", down_sub_pl:"{names}.", act_sub:"See the advice below.",
     f_avail:"Available nodes", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Automatic recovery", on:"on", off:"off",
+    f_omr:"Prefix changes · 24h", f_omr_tip:"Times the border routers changed the address prefix of the Thread network: each time every node must take a new address, the ones that do not follow drop",
     quality:"Network quality · last {n} min", q_lab:["poor", "to watch", "good", "excellent"], q_24h:"24h: {v} %", part_tip:"Now {v} % · 24h {v24} % · weight {n} %", q_scale:"≥ 95 excellent · 90–95 good · 80–90 to watch",
     q_capped:"capped: partitioned network", q_wait:"The score starts after a few minutes.", q_parts:{availability:"Availability", radio:"Radio", outages:"Outages", backbone:"Backbone", partition:"Partition"}, weight:"Weight {n} %",
     todo:"Good to know ({n})", new:"new", todo_none:"Nothing to report", w_down:"Unavailable", w_warn:"Action advised", w_info:"Good to know", seen:"Seen", seen_tip:"Hide this note (it comes back if it changes)", w_net:"Network",
@@ -357,6 +358,7 @@ const T = {
     a_recover_confirm:"{n}: try to recover it? Its Thread connection is restarted if the command reaches it.",
     a_recover_pending:"{n}: recovery attempt started, result within a few minutes",
     a_recover_unsupported:"{n}: recovery attempt not possible (its Thread network is not known)",
+    a_recover_stale:"{n}: not tried. It stayed on the old address prefix {p} after {br} changed it at {at}: its new address is not known, so no command can reach it until it announces itself again",
     a_recover_busy:"A recovery attempt or a parent search is already running", ap_ph:"Name of this access point", save:"Save", saved:"Saved", ap:"Access point", ap_unknown:"Unnamed access point: name it in the node panel",
     to_ha:"Path to Home Assistant", r_direct:"{br} directly", r_via:"{br} via {via}", r_parent:"parent {p}, then ", r_cost:"cost {c}",
     r_cost_tip:"Path cost: 1 per good hop, up to 4 for a weak link. The nearest border router is the one with the lowest cost.", r_unknown:"not known yet", 
@@ -411,6 +413,7 @@ const T = {
     all_ok:"Tout va bien", all_ok_sub:"Toutes les nodes sont disponibles.", n_down:"{n} node indisponible", n_down_pl:"{n} nodes indisponibles", n_act:"{n} action conseillée", n_act_pl:"{n} actions conseillées",
     down_sub:"{name}, depuis {t}.", down_sub_pl:"{names}.", act_sub:"Voir les conseils ci-dessous.",
     f_avail:"Nodes disponibles", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Récupération auto.", on:"activée", off:"désactivée",
+    f_omr:"Changements de préfixe · 24 h", f_omr_tip:"Nombre de fois où les border routers ont changé le préfixe d'adresse du réseau Thread : à chaque fois, toutes les nodes doivent prendre une nouvelle adresse, celles qui ne suivent pas décrochent",
     quality:"Qualité du réseau · dernières {n} min", q_lab:["mauvais", "à surveiller", "bon", "excellent"], q_24h:"24 h : {v} %", part_tip:"Actuel {v} % · 24 h {v24} % · poids {n} %", q_scale:"≥ 95 excellent · 90–95 bon · 80–90 à surveiller",
     q_capped:"plafonnée : réseau partitionné", q_wait:"La note démarre après quelques minutes.", q_parts:{availability:"Disponibilité", radio:"Radio", outages:"Coupures", backbone:"Ossature", partition:"Partition"}, weight:"Poids {n} %",
     todo:"À savoir ({n})", new:"nouveau", todo_none:"Rien à signaler", w_down:"Indisponible", w_warn:"Action conseillée", w_info:"À savoir", seen:"Vu", seen_tip:"Masquer cette note (elle revient si elle change)", w_net:"Réseau",
@@ -441,6 +444,7 @@ const T = {
     a_recover_confirm:"{n} : tenter de la récupérer ? Sa connexion Thread est relancée si la commande lui parvient.",
     a_recover_pending:"{n} : tentative de récupération lancée, résultat dans quelques minutes",
     a_recover_unsupported:"{n} : tentative de récupération impossible (son réseau Thread n'est pas connu)",
+    a_recover_stale:"{n} : pas tentée. Elle est restée sur l'ancien préfixe d'adresse {p} après le changement fait par {br} à {at} : sa nouvelle adresse n'est pas connue, aucune commande ne peut l'atteindre tant qu'elle ne s'annonce pas à nouveau",
     a_recover_busy:"Une tentative de récupération ou une recherche de parent est déjà en cours", ap_ph:"Nom de ce point d'accès", save:"Enregistrer", saved:"Enregistré", ap:"Point d'accès", ap_unknown:"Point d'accès sans nom : à nommer dans la fiche",
     to_ha:"Chemin vers Home Assistant", r_direct:"{br} en direct", r_via:"{br} via {via}", r_parent:"parent {p}, puis ", r_cost:"coût {c}",
     r_cost_tip:"Coût du chemin : 1 par bon saut, jusqu'à 4 pour un lien faible. Le border router le plus proche est celui de plus bas coût.", r_unknown:"inconnu pour l'instant", 
@@ -662,6 +666,8 @@ function renderHero() {
     [L("f_brs"), `${brs.filter(b => b.online).length} / ${brs.length}`],
     [L("f_part"), n.partitions > 1 ? `<span class="st bad">${IC.warn}${n.partitions}</span>` : n.partitions ?? "—"],
     [L("f_leader"), esc(n.leader || "—")],
+    [`<span title="${esc(L("f_omr_tip"))}">${L("f_omr")}</span>`, n.omr_changes_24h == null ? "—"
+      : n.omr_changes_24h >= 2 ? `<span class="st warn">${IC.warn}${n.omr_changes_24h}</span>` : n.omr_changes_24h],
     [L("f_recov"), n.auto_recovery ? L("on") : L("off")]];
   let score = `<span class="mut" style="font-size:12px">${L("q_wait")}</span>`;
   if (q && q.score != null) {
@@ -978,6 +984,7 @@ async function runAction(btn) {
     else if (a === "remove") msg = res.result === "busy" ? L("rs_r_busy") : F("a_remove_ok", {n: r.name});
     else if (a === "recover") {   // sent in the background: the result comes with the table
       msg = res.result === "failed" ? F("a_failed", {n: r.name})
+        : res.result === "stale" ? F("a_recover_stale", {n: r.name, p: res.prefix, br: res.br, at: res.at})
         : F("a_recover_" + (["unsupported", "busy"].includes(res.result) ? res.result : "pending"), {n: r.name});
       if (res.result === "pending") followSearch(id, 10);
     } else {
