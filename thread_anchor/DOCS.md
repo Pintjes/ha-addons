@@ -40,7 +40,7 @@ routers follow.
    routers).
 2. Install Thread Anchor, turn **Protection mode** off, start it **without**
    `omr_prefix`: it only watches. The entity *Favored OMR prefix* (and Mesh
-   Guardian) shows the prefix the network uses now, e.g. `fdd7:20e4:8187:1::/64`.
+   Guardian) shows the prefix the network uses now, e.g. `fd00:aaaa:bbbb:1::/64`.
 3. Put **that** prefix in `omr_prefix` and restart the add-on. The log says
    `OMR prefix … set on the border router (it was: auto)`, then
    `The network favors … (high)`. The devices keep their addresses: nothing was
@@ -114,7 +114,7 @@ network data). Needs MQTT.
 Request, on `thread_anchor/diag/request` (not retained):
 
 ```json
-{"id": "r1", "rloc16": "0xB45C", "ext": "ca7a34808b66e461", "ping": true}
+{"id": "r1", "rloc16": "0x6C05", "ext": "1a2b3c4d5e6f7081", "ping": true}
 ```
 
 `id` is a unique string (letters, digits, `-`, `_`; no `/`, `+` or `#`), `rloc16`
@@ -175,8 +175,8 @@ Reads only, but it is radio traffic: a request for every router.
   `Busy` answer still stops it;
 - the routers are asked in the order of the topology, the border router itself
   left out (its children are in `child table`), after the ones named in the
-  request's `routers` (RLOC16 of routers, or of their children: `"0xB45C"`
-  stands for the router `0xB400`); it stops as soon as the extended address
+  request's `routers` (RLOC16 of routers, or of their children: `"0x6C05"`
+  stands for the router `0x6C00`); it stops as soon as the extended address
   is found, or after 90 s (`stopped`), or when a router answers `Busy`;
 - a router that does not answer `meshdiag childtable` (`ResponseTimeout`; some
   firmwares do not know the Diagnostic Query it needs) is not skipped: its
@@ -188,21 +188,21 @@ Reads only, but it is radio traffic: a request for every router.
   with at once, the other silent ones after all the routers that answer. A child
   that sleeps answers late (its parent hands it the question when it wakes up),
   many do not answer in time: the step says how many were asked and how many
-  answered (`children of 0xb400: 12 children asked, 7 answered, ext not among
-  them; silent: 0xb403, 0xb40a`). The children that answered are kept with the
+  answered (`children of 0x6c00: 12 children asked, 7 answered, ext not among
+  them; silent: 0x6c03, 0x6c0a`). The children that answered are kept with the
   scan, and those that did not are named in `silent_children` of the answer.
   For a router named in the request, the silent ones are asked once more, if
   there is time left, as soon as the routers that answer have been read and
-  before the other silent routers (`children of 0xb400 (again)`);
+  before the other silent routers (`children of 0x6c00 (again)`);
 - a scan that stopped before its end (the 90 s are used, or a hit) is carried on
   by the next scans for 30 minutes: the routers whose children are all known,
   and the children that answered, are not asked again; the routers not read yet
   come first, then those with silent children; a router named in the request is
   read again anyway. After a scan that went to the end with every router known,
   or when the border router started again, the next scan is complete;
-- when a request names an old RLOC16 of a child in `routers` (`"0xB45C"`) and
-  the list of children of its router (`0xB400`) was read, `search` says whether
-  that RLOC16 is still listed there (`old RLOC16 0xb45c`: `old_listed` or
+- when a request names an old RLOC16 of a child in `routers` (`"0x6C05"`) and
+  the list of children of its router (`0x6C00`) was read, `search` says whether
+  that RLOC16 is still listed there (`old RLOC16 0x6c05`: `old_listed` or
   `old_gone`, `detail`: the router);
 - at most one scan every 5 minutes; in between, the answer of the last scan is
   read again without any traffic (`too soon` in `search` when the node was not
@@ -218,12 +218,12 @@ Answer, on `thread_anchor/diag/result/<id>` (not retained, JSON):
 | Field | |
 |---|---|
 | `id` | as in the request |
-| `rloc16` | as in the request; when it was left out: the RLOC16 found, like `"0xb45c"` (`null`: not found) |
+| `rloc16` | as in the request; when it was left out: the RLOC16 found, like `"0x6c05"` (`null`: not found) |
 | `rloc16_from` | how it is known: `request`, `mleid`, `child table`, `neighbor table`, `router table` or `meshdiag`; `null` when not found or the request was refused |
 | `parent` | with `meshdiag`: RLOC16 of the router whose child table lists the node (`null` when the node is a router itself, or not found by `meshdiag`) |
 | `alive` | `true` only if the ping or the network diagnostic answered (and the node that answers has the `ext` asked); `false` when the RLOC16 is known (even from a table) but nobody answered, or another node answers there; `null` when there is no RLOC16 (not found, request refused) |
-| `search` | the steps of the search for the RLOC16, in order: `[{"step": "child table", "result": "found", "rows": 4, "detail": "0xb45c"}, …]`; `step` is `mleid`, `child table`, `neighbor table`, `router table`, `meshdiag help`, `meshdiag`, `meshdiag topology`, `meshdiag childtable 0x…`, `meshdiag topology children`, `children of 0x…` (also `children of 0x… (again)`) or `old RLOC16 0x…`; `result` is `found`, `not_found`, `no_answer`, `ext_differs`, `error`, `not_supported`, `too_soon`, `stopped`, `kids`, `no_list`, `asked`, `old_listed` or `old_gone`; `rows`: lines read (tables, topology: routers; `children of`: children asked); `detail`: RLOC16, extended address received, error or reason. Empty when `rloc16` was given |
-| `silent_children` | children of routers read by `meshdiag topology children` that did not answer the request for their extended address: `[{"rloc16": "0xb45d", "parent": "0xb400"}]`, as known at the end of the scan (carried over from the last scans while they are carried on); `[]` when none, or when there was no meshdiag step. A silent child is not proved dead: it may be asleep |
+| `search` | the steps of the search for the RLOC16, in order: `[{"step": "child table", "result": "found", "rows": 4, "detail": "0x6c05"}, …]`; `step` is `mleid`, `child table`, `neighbor table`, `router table`, `meshdiag help`, `meshdiag`, `meshdiag topology`, `meshdiag childtable 0x…`, `meshdiag topology children`, `children of 0x…` (also `children of 0x… (again)`) or `old RLOC16 0x…`; `result` is `found`, `not_found`, `no_answer`, `ext_differs`, `error`, `not_supported`, `too_soon`, `stopped`, `kids`, `no_list`, `asked`, `old_listed` or `old_gone`; `rows`: lines read (tables, topology: routers; `children of`: children asked); `detail`: RLOC16, extended address received, error or reason. Empty when `rloc16` was given |
+| `silent_children` | children of routers read by `meshdiag topology children` that did not answer the request for their extended address: `[{"rloc16": "0x6c06", "parent": "0x6c00"}]`, as known at the end of the scan (carried over from the last scans while they are carried on); `[]` when none, or when there was no meshdiag step. A silent child is not proved dead: it may be asleep |
 | `rloc_address` | the RLOC address that was asked (`null` if it could not be built) |
 | `ext` | extended address the node answered with, lowercase (`null`: no answer) |
 | `ping` | `{"ok": bool, "rtt_ms": float or null}`; `null` when no ping was asked |

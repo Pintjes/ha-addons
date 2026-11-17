@@ -571,7 +571,7 @@ REPLY_RE = re.compile(r"bytes from \S+: icmp_seq=\d+ hlim=\d+ time=(\d+)ms")
 
 
 def parse_rloc16(value):
-    """"0xB45C", "b45c" or 46172 -> 0xb45c; ValueError otherwise."""
+    """"0x6C05", "6c05" or 27653 -> 0x6c05; ValueError otherwise."""
     if isinstance(value, bool):
         raise ValueError(value)
     n = value if isinstance(value, int) else int(str(value).strip(), 16)
@@ -581,7 +581,7 @@ def parse_rloc16(value):
 
 
 def parse_ext(value):
-    """"CA7A34808B66E461" or "0xca7a…" -> "ca7a34808b66e461"; ValueError otherwise."""
+    """"1A2B3C4D5E6F7081" or "0x1a2b…" -> "1a2b3c4d5e6f7081"; ValueError otherwise."""
     m = EXT_ADDR_RE.fullmatch(str(value).strip())
     if not m:
         raise ValueError(value)
@@ -619,7 +619,7 @@ def parse_help(text):
 
 def parse_topology(text):
     """`meshdiag topology` -> routers [{"rloc16", "ext", "me"}] ("me": the border router itself).
-    Lines look like `id:02 rloc16:0x0800 ext-addr:8aa57d2c603fe16c ver:4 - me - leader`."""
+    Lines look like `id:02 rloc16:0x0800 ext-addr:6f70819203142536 ver:4 - me - leader`."""
     out = []
     for ln in _lines(text):
         m = MESHDIAG_RE.search(ln) if ln.startswith("id:") else None
@@ -630,7 +630,7 @@ def parse_topology(text):
 
 def parse_childtable(text):
     """`meshdiag childtable <router>` -> {extended address: rloc16} of its children.
-    Each child starts with `rloc16:0x6402 ext-addr:8e6f4d323bbed1fe ver:4`; the lines under it are details."""
+    Each child starts with `rloc16:0x6402 ext-addr:4d5e6f7081920314 ver:4`; the lines under it are details."""
     out = {}
     for ln in _lines(text):
         m = MESHDIAG_RE.match(ln)

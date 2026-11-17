@@ -11,14 +11,14 @@ from datetime import datetime
 sys.path.insert(0, os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "thread_anchor"))
 import thread_anchor as ta  # noqa: E402
 
-P = "fdd7:20e4:8187:1::/64"
+P = "fd00:aaaa:bbbb:1::/64"
 
 # reponses de la CLI OpenThread
 assert ta.parse_omrconfig("auto\r\nDone\r\n") == ("auto", None, None)
 assert ta.parse_omrconfig("disabled\nDone\n") == ("disabled", None, None)
-assert ta.parse_omrconfig("custom (fdd7:20e4:8187:1:0:0:0:0/64, prf:high)\nDone\n") == ("custom", P, "high")
-assert ta.parse_omrprefix("Local: fd10:6d6a:dd8f:1::/64\r\nFavored: fdd7:20e4:8187:1:0:0:0:0/64 prf:high\r\nDone\r\n") == \
-    {"local": "fd10:6d6a:dd8f:1::/64", "favored": P, "favored_preference": "high"}
+assert ta.parse_omrconfig("custom (fd00:aaaa:bbbb:1:0:0:0:0/64, prf:high)\nDone\n") == ("custom", P, "high")
+assert ta.parse_omrprefix("Local: fd00:1111:2222:1::/64\r\nFavored: fd00:aaaa:bbbb:1:0:0:0:0/64 prf:high\r\nDone\r\n") == \
+    {"local": "fd00:1111:2222:1::/64", "favored": P, "favored_preference": "high"}
 assert ta.parse_omrprefix("Local: fd10::/64\nFavored: \nDone\n") == {"local": "fd10::/64", "favored": None,
                                                                     "favored_preference": None}
 for bad in ("Error 35: InvalidCommand\n", "", "nimporte\n"):
@@ -39,7 +39,7 @@ class FakeDocker:
 
     def __init__(self):
         self.running, self.config, self.calls, self.old, self.now = True, "auto", [], False, 1000.0
-        self.start, self.google = "2026-11-17T10:57:34Z", ("fdc0:6359:d5be:1::/64", "low")
+        self.start, self.google = "2026-11-17T10:57:34Z", ("fd00:eeee:ffff:1::/64", "low")
         self.rival = None      # prefixe qu'un autre border router fait retenir malgre le notre
         self.refuse = False    # le border router refuse `omrconfig custom`
         self.role, self.router_ids = "child", "8 24 50"    # lectures du role (`state`, `router list`)
@@ -78,7 +78,7 @@ class FakeDocker:
             if self.config.startswith("custom"):
                 fav = (P, self.config.split("prf:")[1].rstrip(")"))
             fav = self.rival or fav
-            return 0, f"Local: fd10:6d6a:dd8f:5d7f::/64\r\nFavored: {fav[0]} prf:{fav[1]}\r\nDone\r\n"
+            return 0, f"Local: fd00:1111:2222:5555::/64\r\nFavored: {fav[0]} prf:{fav[1]}\r\nDone\r\n"
         if len(cmd) == 3:
             return 0, f"{self.config}\r\nDone\r\n"
         if self.refuse:
@@ -98,10 +98,10 @@ d0 = FakeDocker()
 a0 = ta.Anchor({}, docker=d0, clock=d0.clock)
 assert not a0.enabled and a0.config_error is None and a0.check()
 assert d0.calls == ["br omrconfig", "br omrprefix"] and not a0.public()["enforced"]
-assert a0.public()["favored"] == "fdc0:6359:d5be:1::/64" and a0.public()["wanted"] is None
+assert a0.public()["favored"] == "fd00:eeee:ffff:1::/64" and a0.public()["wanted"] is None
 
 # options invalides
-for opts in ({"omr_prefix": "fdd7:20e4:8187:1::/48"}, {"omr_prefix": "abc"}, {"omr_prefix": P, "omr_preference": "max"}):
+for opts in ({"omr_prefix": "fd00:aaaa:bbbb:1::/48"}, {"omr_prefix": "abc"}, {"omr_prefix": P, "omr_preference": "max"}):
     a = ta.Anchor(opts, docker=FakeDocker())
     assert not a.enabled and a.config_error, opts
 
@@ -116,14 +116,14 @@ for glob in ("2001:db8:1:2::/64", "2a02:a03f:1:2::/64", "fe80::/64"):
 assert ta.Anchor({"omr_prefix": "fc00:1:2:3::/64"}, docker=FakeDocker()).enabled
 
 d = FakeDocker()
-a = ta.Anchor({"omr_prefix": "FDD7:20E4:8187:1::/64"}, docker=d, clock=d.clock)
+a = ta.Anchor({"omr_prefix": "FD00:AAAA:BBBB:1::/64"}, docker=d, clock=d.clock)
 assert a.enabled and a.prefix == P and a.preference == "high" and a.interval == 30 and a.due()
 # premier passage : lu en auto, impose, relu, puis prefixe retenu par le reseau
 assert a.check()
 assert d.calls == ["br omrconfig", f"br omrconfig custom {P} high", "br omrconfig", "br omrprefix"], d.calls
 st = a.public()
 assert st["enforced"] and st["applied"] == 1 and st["favored"] == P and st["favored_preference"] == "high"
-assert st["local"] == "fd10:6d6a:dd8f:5d7f::/64" and st["error"] is None
+assert st["local"] == "fd00:1111:2222:5555::/64" and st["error"] is None
 assert [k for k, _ in a.events] == ["anchor_set", "favored"], a.events
 # pas encore l'heure ; puis lecture seule, rien de neuf
 a.events, d.calls = [], []
@@ -186,7 +186,7 @@ assert a4.public()["otbr_addon"] == "abc_otbr"
 # ---- date d'ancrage (anchored_since), gardee dans un fichier
 tmp = tempfile.mkdtemp()
 mem = os.path.join(tmp, "anchor.json")
-CUSTOM = "custom (fdd7:20e4:8187:1:0:0:0:0/64, prf:high)"
+CUSTOM = "custom (fd00:aaaa:bbbb:1:0:0:0:0/64, prf:high)"
 # cas de la production : prefixe deja en place au premier passage (impose par un autre outil)
 d5 = FakeDocker()
 d5.config = CUSTOM
@@ -256,7 +256,7 @@ assert a7.public()["enforced"] and a7.public()["anchored_since"]
 # ---- le reseau suit-il ? (followed)
 d8 = FakeDocker()
 a8 = ta.Anchor({"omr_prefix": P}, docker=d8, clock=d8.clock)
-d8.rival = ("fd00:aaaa:bbbb:1::/64", "high")
+d8.rival = ("fd00:cccc:dddd:1::/64", "high")
 # passage qui impose : pas d'alerte tout de suite (le reseau a besoin d'un moment)
 a8.check()
 assert a8.public()["enforced"] and not a8.public()["followed"]
@@ -266,7 +266,7 @@ a8.events = []
 for _ in range(3):
     d8.now += 30
     a8.check()
-assert [k for k, _ in a8.events] == ["follow_lost"] and "fd00:aaaa:bbbb:1::/64" in a8.events[0][1], a8.events
+assert [k for k, _ in a8.events] == ["follow_lost"] and "fd00:cccc:dddd:1::/64" in a8.events[0][1], a8.events
 assert a8.public()["enforced"] and not a8.public()["followed"] and a8.public()["error"] is None
 # le reseau suit de nouveau : dit une fois
 a8.events = []
@@ -407,17 +407,17 @@ assert c.sent == [("thread_anchor/state/available", "offline", True)]
 assert ("subscribe", "thread_anchor/diag/request") in c.log
 
 # ---- diagnostic d'une node (lecture seule) : formats verifies dans la doc / le code d'OpenThread
-assert ta.parse_rloc16("0xB45C") == ta.parse_rloc16("b45c") == ta.parse_rloc16(46172) == 0xB45C
+assert ta.parse_rloc16("0x6C05") == ta.parse_rloc16("6c05") == ta.parse_rloc16(27653) == 0x6C05
 for bad in ("0x10000", "zz", None, True, -1, ""):
     try:
         ta.parse_rloc16(bad)
         raise AssertionError(bad)
     except (ValueError, TypeError):
         pass
-assert ta.rloc_address("fdde:ad00:beef:0::/64", 0xB45C) == "fdde:ad00:beef::ff:fe00:b45c"
+assert ta.rloc_address("fdde:ad00:beef:0::/64", 0x6C05) == "fdde:ad00:beef::ff:fe00:6c05"
 assert ta.rloc_address("fdde:ad00:beef:0:0:0:0:0/64", 0xFC00) == "fdde:ad00:beef::ff:fe00:fc00"
 
-PING_OK = ("16 bytes from fdde:ad00:beef:0:0:ff:fe00:b45c: icmp_seq=1 hlim=64 time=12ms\r\n"
+PING_OK = ("16 bytes from fdde:ad00:beef:0:0:ff:fe00:6c05: icmp_seq=1 hlim=64 time=12ms\r\n"
            "1 packets transmitted, 1 packets received. Packet loss = 0.0%. "
            "Round-trip min/avg/max = 12/12.000/12 ms.\r\nDone\r\n")
 PING_LOST = "1 packets transmitted, 0 packets received. Packet loss = 100.0%.\r\nDone\r\n"
@@ -432,12 +432,12 @@ for bad in ("Error 13: InvalidState\r\n", "", "Done\r\n"):
     except RuntimeError:
         pass
 
-OLD = "fdc0:6359:d5be:1:aaaa:bbbb:cccc:dddd"
-OMR = "fdd7:20e4:8187:1:1:2:3:4"
-DIAG_OK = ("DIAG_GET.rsp/ans from fdde:ad00:beef:0:0:ff:fe00:b45c: 000800ca7a34808b66e461\r\n"
-           "Ext Address: 'ca7a34808b66e461'\r\n"
+OLD = "fd00:eeee:ffff:1:aaaa:bbbb:cccc:dddd"
+OMR = "fd00:aaaa:bbbb:1:1:2:3:4"
+DIAG_OK = ("DIAG_GET.rsp/ans from fdde:ad00:beef:0:0:ff:fe00:6c05: 0008001a2b3c4d5e6f7081\r\n"
+           "Ext Address: '1a2b3c4d5e6f7081'\r\n"
            "IP6 Address List:\r\n"
-           "    - fdde:ad00:beef:0:0:ff:fe00:b45c\r\n"
+           "    - fdde:ad00:beef:0:0:ff:fe00:6c05\r\n"
            f"    - {OLD}\r\n"
            f"    - {OMR}\r\n"
            "    - fdde:ad00:beef:0:1:2:3:4\r\n"
@@ -445,7 +445,7 @@ DIAG_OK = ("DIAG_GET.rsp/ans from fdde:ad00:beef:0:0:ff:fe00:b45c: 000800ca7a348
            f"    - {OLD}\r\n"
            "Done\r\n")
 d = ta.parse_diag(DIAG_OK)
-assert d["answered"] and d["ext"] == "ca7a34808b66e461" and len(d["addresses"]) == 5, d   # sans doublon
+assert d["answered"] and d["ext"] == "1a2b3c4d5e6f7081" and len(d["addresses"]) == 5, d   # sans doublon
 assert d["addresses"][1] == OLD
 assert ta.parse_diag("Done\r\n") == {"answered": False, "ext": None, "rloc16": None, "addresses": []}
 assert ta.parse_diag("DIAG_GET.rsp/ans from fd00::1: 00\r\nExt Address: 'AABBCCDDEEFF0011'\r\nDone\r\n") == \
@@ -454,16 +454,16 @@ assert ta.parse_diag("DIAG_GET.rsp/ans from fd00::1: 00\r\nExt Address: 'aabbccd
                      "IP6 Address List:\r\n    - fd00::5\r\nDone\r\n") == \
     {"answered": True, "ext": "aabbccddeeff0011", "rloc16": 0x0C00, "addresses": ["fd00::5"]}
 # adresse etendue : majuscules, 0x, espaces
-assert ta.parse_ext(" 0xCA7A34808B66E461 ") == "ca7a34808b66e461"
-for bad in ("ca7a34808b66e46", "ca7a34808b66e4611", "zz7a34808b66e461", "", None):
+assert ta.parse_ext(" 0x1A2B3C4D5E6F7081 ") == "1a2b3c4d5e6f7081"
+for bad in ("1a2b3c4d5e6f708", "1a2b3c4d5e6f70811", "zz7a34808b66e461", "", None):
     try:
         ta.parse_ext(bad)
         raise AssertionError(bad)
     except ValueError:
         pass
 
-TARGET, ML = "ca7a34808b66e461", "fdde:ad00:beef:0:5d1c:7a22:9e01:33aa"
-ADDR = "fdde:ad00:beef::ff:fe00:b45c"
+TARGET, ML = "1a2b3c4d5e6f7081", "fdde:ad00:beef:0:2a3b:4c5d:6e7f:8091"
+ADDR = "fdde:ad00:beef::ff:fe00:6c05"
 
 
 def child_table(*rows):
@@ -487,11 +487,11 @@ def router_table(*rows):
                           for r, e in rows) + "Done\r\n"
 
 
-assert ta.parse_table(child_table(("0xfc01", "4ecede68435358ac"), ("0xb45c", TARGET.upper()))) == \
-    {"4ecede68435358ac": 0xFC01, TARGET: 0xB45C}
-assert ta.parse_table(neighbor_table(("0xb400", TARGET))) == {TARGET: 0xB400}
-assert ta.parse_table(router_table(("0x0800", "8aa57d2c603fe16c"), ("0xb800", "fe109d277e0175cc"))) == \
-    {"8aa57d2c603fe16c": 0x0800, "fe109d277e0175cc": 0xB800}
+assert ta.parse_table(child_table(("0xfc01", "3c4d5e6f70819203"), ("0x6c05", TARGET.upper()))) == \
+    {"3c4d5e6f70819203": 0xFC01, TARGET: 0x6C05}
+assert ta.parse_table(neighbor_table(("0x6c00", TARGET))) == {TARGET: 0x6C00}
+assert ta.parse_table(router_table(("0x0800", "6f70819203142536"), ("0xb800", "5e6f708192031425"))) == \
+    {"6f70819203142536": 0x0800, "5e6f708192031425": 0xB800}
 assert ta.parse_table("Done\r\n") == {} and ta.parse_table(child_table()) == {}
 assert ta.parse_table("| junk |\r\n| 1 | 2 |\r\nDone\r\n") == {}     # sans en-tete reconnu
 try:
@@ -510,7 +510,7 @@ omr, other = ta.classify(d["addresses"], MLP, (P, None))
 assert omr == [OMR] and other == [OLD], (omr, other)
 assert ta.classify(["2001:db8::1", "fe80::1", "fdde:ad00:beef::1", "ff02::1", "::1"], MLP, (P,)) == ([], ["2001:db8::1"])
 # prefixe voulu et prefixe retenu : tous deux comptent comme OMR
-assert ta.classify([OLD, OMR], MLP, (P, "fdc0:6359:d5be:1::/64")) == ([OLD, OMR], [])
+assert ta.classify([OLD, OMR], MLP, (P, "fd00:eeee:ffff:1::/64")) == ([OLD, OMR], [])
 
 
 HELP_OLD = "child\r\nneighbor\r\nping\r\nrouter\r\nDone\r\n"
@@ -594,7 +594,7 @@ def make_diag(**kw):
 
 
 def req(**kw):
-    return json.dumps(dict({"id": "r1", "rloc16": "0xB45C", "ext": "ca7a34808b66e461", "ping": True}, **kw))
+    return json.dumps(dict({"id": "r1", "rloc16": "0x6C05", "ext": "1a2b3c4d5e6f7081", "ping": True}, **kw))
 
 
 # cas normal : une node restee sur l'ancien prefixe
@@ -602,12 +602,12 @@ clk, otbr, dg, out = make_diag()
 dg.submit(req())
 assert len(out) == 1 and out[0][0] == "thread_anchor/diag/result/r1"
 r = out[0][1]
-assert r["id"] == "r1" and r["rloc16"] == "0xB45C" and r["rloc_address"] == "fdde:ad00:beef::ff:fe00:b45c"
-assert r["ext"] == "ca7a34808b66e461" and r["ping"] == {"ok": True, "rtt_ms": 12.0} and r["error"] is None
+assert r["id"] == "r1" and r["rloc16"] == "0x6C05" and r["rloc_address"] == "fdde:ad00:beef::ff:fe00:6c05"
+assert r["ext"] == "1a2b3c4d5e6f7081" and r["ping"] == {"ok": True, "rtt_ms": 12.0} and r["error"] is None
 assert len(r["addresses"]) == 5 and r["omr_addresses"] == [OMR] and r["other_prefix_addresses"] == [OLD]
 assert datetime.fromisoformat(r["at"]).tzinfo is not None
-assert otbr.calls == [["ipaddr", "rloc"], ["ping", "fdde:ad00:beef::ff:fe00:b45c", "16", "1"],
-                      ["networkdiagnostic", "get", "fdde:ad00:beef::ff:fe00:b45c", "0", "8"]], otbr.calls
+assert otbr.calls == [["ipaddr", "rloc"], ["ping", "fdde:ad00:beef::ff:fe00:6c05", "16", "1"],
+                      ["networkdiagnostic", "get", "fdde:ad00:beef::ff:fe00:6c05", "0", "8"]], otbr.calls
 assert all(1 <= tm <= ta.DIAG_TIMEOUT_S for tm in otbr.timeouts), otbr.timeouts
 assert not dg.running
 # rien d'ecrit sur le border router : aucune des commandes n'est une ecriture
@@ -630,10 +630,10 @@ assert out[0][1]["ping"] == {"ok": False, "rtt_ms": None} and out[0][1]["address
 # ext sans controle (absent) ; ext qui ne correspond pas : erreur, adresses rendues quand meme
 clk, otbr, dg, out = make_diag()
 dg.submit(req(ext=None))
-assert out[0][1]["error"] is None and out[0][1]["ext"] == "ca7a34808b66e461"
+assert out[0][1]["error"] is None and out[0][1]["ext"] == "1a2b3c4d5e6f7081"
 clk, otbr, dg, out = make_diag()
 dg.submit(req(ext="0011223344556677"))
-assert "ca7a34808b66e461" in out[0][1]["error"] and "0011223344556677" in out[0][1]["error"] and out[0][1]["addresses"]
+assert "1a2b3c4d5e6f7081" in out[0][1]["error"] and "0011223344556677" in out[0][1]["error"] and out[0][1]["addresses"]
 # pas de reponse au diagnostic, erreur de diagnostic, border router arrete
 clk, otbr, dg, out = make_diag()
 otbr.diag_out = "Done\r\n"
@@ -656,8 +656,8 @@ assert out[0][1]["error"] == "timeout (15 s)" and out[0][1]["ping"]["ok"] is Tru
 assert not [c for c in otbr.calls if c[0] == "networkdiagnostic"] and not dg.running
 # demandes inutilisables : pas d'id -> rien ; rloc16 invalide -> reponse en erreur
 clk, otbr, dg, out = make_diag()
-for raw in ("pas du json", "null", "[]", "{}", json.dumps({"id": "", "rloc16": "0xb45c"}),
-            json.dumps({"id": "a/b", "rloc16": "0xb45c"}), json.dumps({"id": "a#", "rloc16": "0xb45c"})):
+for raw in ("pas du json", "null", "[]", "{}", json.dumps({"id": "", "rloc16": "0x6c05"}),
+            json.dumps({"id": "a/b", "rloc16": "0x6c05"}), json.dumps({"id": "a#", "rloc16": "0x6c05"})):
     dg.submit(raw)
 assert out == [] and otbr.calls == []
 dg.submit(json.dumps({"id": "x", "rloc16": "zz"}))
@@ -665,7 +665,7 @@ dg.submit(json.dumps({"id": "y"}))
 assert [(tp, r["error"][:14]) for tp, r in out] == [("thread_anchor/diag/result/x", "invalid rloc16"),
                                                     ("thread_anchor/diag/result/y", "rloc16, ext or")]
 assert otbr.calls == [] and "ping" in out[0][1] and out[0][1]["addresses"] == []
-for i, extra in enumerate(({"ext": "pas-une-ext"}, {"ext": "ca7a34808b66e46"}, {"mleid": "pas-une-adresse"},
+for i, extra in enumerate(({"ext": "pas-une-ext"}, {"ext": "1a2b3c4d5e6f708"}, {"mleid": "pas-une-adresse"},
                            {"mleid": "fdde:ad00:beef::/64"}, {"rloc16": "zz", "ext": TARGET})):
     dg.submit(json.dumps(dict({"id": f"bad{i}"}, **extra)))
     assert out[-1][0] == f"thread_anchor/diag/result/bad{i}" and out[-1][1]["error"].split(":")[0].startswith("invalid"), out[-1]
@@ -688,17 +688,17 @@ PING = ["ping", ADDR, "16", "1"]
 DIAG = ["networkdiagnostic", "get", ADDR, "0", "8"]
 OWN = ["ipaddr", "rloc"]
 # dans la table des enfants : les autres tables ne sont pas lues ; ext en majuscules, ping et diagnostic suivent
-r, calls, _ = ask(lambda o: o.tables.update(child=child_table(("0xfc01", "4ecede68435358ac"), ("0xb45c", TARGET))),
+r, calls, _ = ask(lambda o: o.tables.update(child=child_table(("0xfc01", "3c4d5e6f70819203"), ("0x6c05", TARGET))),
                   ext=TARGET.upper())
-assert r["rloc16"] == "0xb45c" and r["rloc16_from"] == "child table" and r["rloc_address"] == ADDR and r["error"] is None
+assert r["rloc16"] == "0x6c05" and r["rloc16_from"] == "child table" and r["rloc_address"] == ADDR and r["error"] is None
 assert calls == [OWN, ["child", "table"], PING, DIAG], calls
 assert r["ping"]["ok"] and r["ext"] == TARGET and r["other_prefix_addresses"] == [OLD] and len(r["addresses"]) == 5
 # pas chez les enfants : table des voisins, puis table des routeurs
-r, calls, _ = ask(lambda o: o.tables.update(child=child_table(("0xfc01", "4ecede68435358ac")),
-                                            neighbor=neighbor_table(("0xb45c", TARGET))), ext=TARGET)
-assert r["rloc16"] == "0xb45c" and r["rloc16_from"] == "neighbor table" and r["error"] is None
+r, calls, _ = ask(lambda o: o.tables.update(child=child_table(("0xfc01", "3c4d5e6f70819203")),
+                                            neighbor=neighbor_table(("0x6c05", TARGET))), ext=TARGET)
+assert r["rloc16"] == "0x6c05" and r["rloc16_from"] == "neighbor table" and r["error"] is None
 assert calls == [OWN, ["child", "table"], ["neighbor", "table"], PING, DIAG], calls
-r, calls, _ = ask(lambda o: o.tables.update(router=router_table(("0xb45c", TARGET))), ext=TARGET, ping=False)
+r, calls, _ = ask(lambda o: o.tables.update(router=router_table(("0x6c05", TARGET))), ext=TARGET, ping=False)
 assert r["rloc16_from"] == "router table" and r["ping"] is None and r["error"] is None
 assert calls == [OWN, ["child", "table"], ["neighbor", "table"], ["router", "table"], DIAG], calls
 # introuvable : « not found », ni ping ni diagnostic, rien d'autre que des lectures de tables
@@ -712,17 +712,17 @@ assert [(s["step"], s["result"], s["rows"]) for s in r["search"]] == [
 assert r["alive"] is None and r["parent"] is None
 # une table en erreur (OpenThread ancien…) : on passe a la suivante
 r, calls, _ = ask(lambda o: o.tables.update(child="Error 35: InvalidCommand\r\n",
-                                            router=router_table(("0xb45c", TARGET))), ext=TARGET)
+                                            router=router_table(("0x6c05", TARGET))), ext=TARGET)
 assert r["rloc16_from"] == "router table" and r["error"] is None
 # la meme adresse etendue ne vaut qu'une fois : le premier trouve gagne
 r, _, _ = ask(lambda o: o.tables.update(child=child_table(("0x1111", TARGET)), router=router_table(("0x2222", TARGET))),
               ext=TARGET)
 assert r["rloc16"] == "0x1111" and r["rloc_address"] == "fdde:ad00:beef::ff:fe00:1111"
 # ML-EID : une seule requete donne ext, RLOC16 et adresses ; pas de seconde requete, pas de table
-ML_OK = DIAG_OK.replace("Ext Address: 'ca7a34808b66e461'\r\n", "Ext Address: 'ca7a34808b66e461'\r\nRloc16: 0xb45c\r\n")
+ML_OK = DIAG_OK.replace("Ext Address: '1a2b3c4d5e6f7081'\r\n", "Ext Address: '1a2b3c4d5e6f7081'\r\nRloc16: 0x6c05\r\n")
 ML_CALL = ["networkdiagnostic", "get", ML, "0", "1", "8"]
 r, calls, _ = ask(lambda o: setattr(o, "ml_out", ML_OK), mleid=ML, ext=TARGET)
-assert r["rloc16"] == "0xb45c" and r["rloc16_from"] == "mleid" and r["error"] is None and r["rloc_address"] == ADDR
+assert r["rloc16"] == "0x6c05" and r["rloc16_from"] == "mleid" and r["error"] is None and r["rloc_address"] == ADDR
 assert calls == [OWN, ML_CALL, PING], calls
 assert r["ext"] == TARGET and len(r["addresses"]) == 5 and r["other_prefix_addresses"] == [OLD]
 # ML-EID seul (ext pas fourni) ; l'ancien nom ml_eid reste accepte
@@ -732,10 +732,10 @@ r, calls, _ = ask(lambda o: setattr(o, "ml_out", ML_OK), ml_eid=ML)
 assert r["rloc16_from"] == "mleid"
 # l'adresse repond avec une autre ext : plus la bonne node -> les tables
 r, calls, _ = ask(lambda o: (setattr(o, "ml_out", ML_OK.replace(TARGET, "0011223344556677")),
-                             o.tables.update(child=child_table(("0xb45c", TARGET)))), mleid=ML, ext=TARGET)
+                             o.tables.update(child=child_table(("0x6c05", TARGET)))), mleid=ML, ext=TARGET)
 assert r["rloc16_from"] == "child table" and r["error"] is None and calls == [OWN, ML_CALL, ["child", "table"], PING, DIAG]
 # ML-EID sans reponse : tables si ext, sinon « not found »
-r, calls, _ = ask(lambda o: o.tables.update(neighbor=neighbor_table(("0xb45c", TARGET))), mleid=ML, ext=TARGET)
+r, calls, _ = ask(lambda o: o.tables.update(neighbor=neighbor_table(("0x6c05", TARGET))), mleid=ML, ext=TARGET)
 assert r["rloc16_from"] == "neighbor table" and calls[:4] == [OWN, ML_CALL, ["child", "table"], ["neighbor", "table"]]
 r, calls, _ = ask(mleid=ML)
 assert r["error"] == "not found" and calls == [OWN, ML_CALL], calls
@@ -743,20 +743,20 @@ assert r["error"] == "not found" and calls == [OWN, ML_CALL], calls
 r, calls, _ = ask(mleid="2001:db8::1", ext=TARGET)
 assert r["error"] == "mleid is not in the mesh-local prefix" and calls == [OWN] and r["rloc16_from"] is None
 # rloc16 fourni : il l'emporte, rien n'est cherche
-r, calls, _ = ask(lambda o: setattr(o, "ml_out", ML_OK), rloc16="0xB45C", mleid=ML, ext=TARGET)
+r, calls, _ = ask(lambda o: setattr(o, "ml_out", ML_OK), rloc16="0x6C05", mleid=ML, ext=TARGET)
 assert r["rloc16_from"] == "request" and calls == [OWN, PING, DIAG], calls
 # delai de 15 s : lire les tables a tout pris
 r, calls, _ = ask(lambda o: setattr(o, "table_takes", 16), ext=TARGET)
 assert r["error"] == "timeout (15 s)" and calls == [OWN, ["child", "table"]] and r["rloc16_from"] is None
 # limites : « too soon » par adresse etendue (dix secondes), « busy » comme avant
 clk, otbr, dg, out = make_diag()
-otbr.tables["child"] = child_table(("0xb45c", TARGET))
+otbr.tables["child"] = child_table(("0x6c05", TARGET))
 dg.submit(json.dumps({"id": "u1", "ext": TARGET}))
 dg.submit(json.dumps({"id": "u2", "ext": TARGET.upper()}))
 assert out[0][1]["error"] is None and out[1][1]["error"] == "too soon", out
 clk.now += 10
 dg.submit(json.dumps({"id": "u3", "ext": TARGET}))
-assert out[2][1]["error"] is None and out[2][1]["rloc16"] == "0xb45c"
+assert out[2][1]["error"] is None and out[2][1]["rloc16"] == "0x6c05"
 # une seule a la fois : « busy » ; au plus une par node toutes les 10 s : « too soon »
 later = []
 clk, otbr, dg, out = make_diag(spawn=later.append)
@@ -774,7 +774,7 @@ dg.submit(req(id="d", rloc16="0x1800"))          # autre node : permis
 assert len(later) == 1
 later.pop()()
 assert out[-1][1]["error"] is None and out[-1][1]["rloc_address"] == "fdde:ad00:beef::ff:fe00:1800"
-clk.now += 2                                      # 11 s apres la premiere demande de B45C
+clk.now += 2                                      # 11 s apres la premiere demande de 6C05
 dg.submit(req(id="e"))
 assert len(later) == 1
 later.pop()()
@@ -790,26 +790,26 @@ later.pop()()
 assert out[-1][0] == "thread_anchor/diag/result/h" and out[-1][1]["error"] is None
 
 # ---- journal des etapes (`search`), `alive`, et etape meshdiag
-TOPO = ("id:02 rloc16:0x0800 ext-addr:8aa57d2c603fe16c ver:4 - me - leader\r\n"
+TOPO = ("id:02 rloc16:0x0800 ext-addr:6f70819203142536 ver:4 - me - leader\r\n"
         "   3-links:{ 22 45 }\r\n"
         "id:22 rloc16:0x5800 ext-addr:1111111111111111 ver:4\r\n"
         "   3-links:{ 02 }\r\n"
-        "id:45 rloc16:0xb400 ext-addr:2222222222222222 ver:4\r\n"
+        "id:45 rloc16:0x6c00 ext-addr:2222222222222222 ver:4\r\n"
         "   3-links:{ 02 46 }\r\n"
         "id:46 rloc16:0xb800 ext-addr:3333333333333333 ver:4\r\n"
         "   3-links:{ 45 }\r\n"
         "Done\r\n")
 CT_5800 = ("rloc16:0x5801 ext-addr:aaaaaaaaaaaaaaaa ver:4\r\n    timeout:120 age:36 supvn:129 q-msg:0\r\n"
            "    rx-on:no type:mtd full-net:no\r\nDone\r\n")
-CT_B400 = ("rloc16:0xb401 ext-addr:ee24e64ecf8c079a ver:4\r\n    timeout:120 age:19 supvn:129 q-msg:0\r\n"
-           f"rloc16:0xb45c ext-addr:{TARGET} ver:4\r\n    timeout:120 age:2 supvn:129 q-msg:0\r\n"
+CT_6C00 = ("rloc16:0x6c01 ext-addr:2b3c4d5e6f708192 ver:4\r\n    timeout:120 age:19 supvn:129 q-msg:0\r\n"
+           f"rloc16:0x6c05 ext-addr:{TARGET} ver:4\r\n    timeout:120 age:2 supvn:129 q-msg:0\r\n"
            "    rx-on:no type:mtd full-net:no\r\n    csl - sync:no period:0 timeout:0 channel:0\r\nDone\r\n")
 assert ta.parse_help(HELP_MD) == {"child", "meshdiag", "neighbor", "ping", "router", "Done"} and "meshdiag" not in ta.parse_help(HELP_OLD)
 topo = ta.parse_topology(TOPO)
 assert [(r["rloc16"], r["ext"], r["me"]) for r in topo] == [
-    (0x0800, "8aa57d2c603fe16c", True), (0x5800, "1111111111111111", False),
-    (0xB400, "2222222222222222", False), (0xB800, "3333333333333333", False)], topo
-assert ta.parse_childtable(CT_B400) == {"ee24e64ecf8c079a": 0xB401, TARGET: 0xB45C}
+    (0x0800, "6f70819203142536", True), (0x5800, "1111111111111111", False),
+    (0x6C00, "2222222222222222", False), (0xB800, "3333333333333333", False)], topo
+assert ta.parse_childtable(CT_6C00) == {"2b3c4d5e6f708192": 0x6C01, TARGET: 0x6C05}
 assert ta.parse_childtable("Done\r\n") == {} and ta.parse_topology("Done\r\n") == []
 # avec « children » : les enfants n'ont pas d'ext, ils ne sont pas pris pour des routeurs
 assert len(ta.parse_topology(TOPO.replace("   3-links:{ 22 45 }\r\n", "   children:\r\n       rloc16:0x0803 lq:0, mode:rn\r\n"))) == 4
@@ -825,7 +825,7 @@ for bad in ("Error 5: Busy\r\n", "Error 28: ResponseTimeout\r\n"):
 def scan_diag(**kw):
     clk, otbr, dg, out = make_diag(**kw)
     otbr.help_out, otbr.topology_out = HELP_MD, TOPO
-    otbr.childtables = {"0x5800": CT_5800, "0xb400": CT_B400}
+    otbr.childtables = {"0x5800": CT_5800, "0x6c00": CT_6C00}
     return clk, otbr, dg, out
 
 
@@ -844,20 +844,20 @@ TABLES = [["child", "table"], ["neighbor", "table"], ["router", "table"]]
 CT = lambda r: ["meshdiag", "childtable", r]  # noqa: E731
 # l'ancien parent est donne (RLOC16 d'un enfant ou du routeur) : interroge en premier, arret des qu'on trouve
 clk, otbr, dg, out = scan_diag()
-r = one(dg, out, ext=TARGET, routers=["0xB45C", "0x9c00", "zz", None, 5000000])   # 0x9c00 n'est pas un routeur : ignore
-assert r["rloc16"] == "0xb45c" and r["rloc16_from"] == "meshdiag" and r["parent"] == "0xb400" and r["error"] is None
-assert otbr.calls == [OWN, *TABLES, ["help"], ["meshdiag", "topology"], CT("0xb400"), PING, DIAG], otbr.calls
+r = one(dg, out, ext=TARGET, routers=["0x6C05", "0x9c00", "zz", None, 5000000])   # 0x9c00 n'est pas un routeur : ignore
+assert r["rloc16"] == "0x6c05" and r["rloc16_from"] == "meshdiag" and r["parent"] == "0x6c00" and r["error"] is None
+assert otbr.calls == [OWN, *TABLES, ["help"], ["meshdiag", "topology"], CT("0x6c00"), PING, DIAG], otbr.calls
 assert steps(r) == [("child table", "not_found"), ("neighbor table", "not_found"), ("router table", "not_found"),
-                    ("meshdiag topology", "not_found"), ("meshdiag childtable 0xb400", "found"),
-                    ("old RLOC16 0xb45c", "old_listed")], r["search"]
-assert r["search"][5]["detail"] == "0xb400"       # l'ancien RLOC16 est encore liste sous son routeur
-assert r["search"][3]["rows"] == 4 and r["search"][4]["rows"] == 2 and r["search"][4]["detail"] == "0xb45c"
+                    ("meshdiag topology", "not_found"), ("meshdiag childtable 0x6c00", "found"),
+                    ("old RLOC16 0x6c05", "old_listed")], r["search"]
+assert r["search"][5]["detail"] == "0x6c00"       # l'ancien RLOC16 est encore liste sous son routeur
+assert r["search"][3]["rows"] == 4 and r["search"][4]["rows"] == 2 and r["search"][4]["detail"] == "0x6c05"
 # `alive` : la liste d'un parent ne prouve rien, c'est la reponse du ping ou du diagnostic qui compte
 assert r["alive"] is True and r["ping"]["ok"] and r["ext"] == TARGET
 # sans indice : ordre de la topologie (le border router lui-meme est saute), le dernier routeur n'est pas interroge
 clk, otbr, dg, out = scan_diag()
 r = one(dg, out, ext=TARGET)
-assert otbr.calls[4:9] == [["help"], ["meshdiag", "topology"], CT("0x5800"), CT("0xb400"), PING], otbr.calls
+assert otbr.calls[4:9] == [["help"], ["meshdiag", "topology"], CT("0x5800"), CT("0x6c00"), PING], otbr.calls
 assert not [c for c in otbr.calls if c == CT("0xb800") or c == CT("0x0800")]
 # la node est un routeur : trouvee dans la topologie, pas de childtable ; pas de parent
 clk, otbr, dg, out = scan_diag()
@@ -869,8 +869,8 @@ assert [c for c in otbr.calls if c[:2] == ["meshdiag", "childtable"]] == [] and 
 clk, otbr, dg, out = scan_diag()
 otbr.ping_out, otbr.diag_out = PING_LOST, "Done\r\n"
 r = one(dg, out, ext=TARGET)
-assert r["rloc16"] == "0xb45c" and r["alive"] is False and r["ping"] == {"ok": False, "rtt_ms": None}
-assert r["error"] == "no answer to the network diagnostic" and r["parent"] == "0xb400"
+assert r["rloc16"] == "0x6c05" and r["alive"] is False and r["ping"] == {"ok": False, "rtt_ms": None}
+assert r["error"] == "no answer to the network diagnostic" and r["parent"] == "0x6c00"
 # ping perdu mais diagnostic repondu : vivante ; ping non demande et diagnostic muet : pas vivante
 clk, otbr, dg, out = scan_diag()
 otbr.ping_out = PING_LOST
@@ -886,14 +886,14 @@ r = one(dg, out, ext=TARGET)
 assert r["alive"] is False and "0011223344556677" in r["error"]
 # rloc16 fourni : meme champ `alive`, search vide ; refuse ou introuvable : null
 clk, otbr, dg, out = make_diag()
-r = one(dg, out, rloc16="0xB45C")
+r = one(dg, out, rloc16="0x6C05")
 assert r["alive"] is True and r["search"] == [] and r["parent"] is None
 assert one(dg, out, ext="zz")["alive"] is None and one(dg, out, mleid=ML)["alive"] is None
 # introuvable partout : tous les routeurs interroges ; 5 min entre deux balayages
 clk, otbr, dg, out = scan_diag()
 r = one(dg, out, ext="4444444444444444")
 assert r["error"] == "not found" and r["alive"] is None and r["rloc16_from"] is None and r["rloc16"] is None
-assert [c for c in otbr.calls if c[:2] == ["meshdiag", "childtable"]] == [CT("0x5800"), CT("0xb400"), CT("0xb800")]
+assert [c for c in otbr.calls if c[:2] == ["meshdiag", "childtable"]] == [CT("0x5800"), CT("0x6c00"), CT("0xb800")]
 assert steps(r)[-1] == ("meshdiag childtable 0xb800", "not_found") and otbr.calls.count(["help"]) == 1
 clk.now += 11                                   # seconde demande : la limite de 10 s par node est passee
 n = len(otbr.calls)
@@ -905,11 +905,11 @@ r = one(dg, out, ext="4444444444444444")
 assert ["meshdiag", "topology"] in otbr.calls[n:] and otbr.calls.count(["help"]) == 1      # help retenu
 # dernier balayage relu sans trafic : la node y avait ete trouvee
 clk, otbr, dg, out = scan_diag()
-assert one(dg, out, ext=TARGET)["parent"] == "0xb400"
+assert one(dg, out, ext=TARGET)["parent"] == "0x6c00"
 clk.now += 11
 n = len(otbr.calls)
 r = one(dg, out, ext=TARGET)
-assert r["rloc16_from"] == "meshdiag" and r["parent"] == "0xb400" and r["error"] is None
+assert r["rloc16_from"] == "meshdiag" and r["parent"] == "0x6c00" and r["error"] is None
 assert [c for c in otbr.calls[n:] if c[0] == "meshdiag" or c == ["help"]] == []
 assert steps(r)[-1] == ("meshdiag", "found")
 # meshdiag absent : « not supported » sans erreur, `help` pose une fois par demarrage de l'OTBR
@@ -950,20 +950,20 @@ assert [c for c in otbr.calls if c[:2] == ["meshdiag", "childtable"]] == [CT("0x
 clk, otbr, dg, out = scan_diag()
 otbr.childtables["0x5800"] = "Error 28: ResponseTimeout\r\n"
 r = one(dg, out, ext=TARGET)
-assert r["error"] is None and r["parent"] == "0xb400" and ("meshdiag childtable 0x5800", "error") in steps(r)
+assert r["error"] is None and r["parent"] == "0x6c00" and ("meshdiag childtable 0x5800", "error") in steps(r)
 # budget de 90 s : le balayage s'arrete, la demande finit « not found » (ce n'est pas une erreur de delai)
 clk, otbr, dg, out = scan_diag()
 otbr.scan_takes = 40
 r = one(dg, out, ext="4444444444444444")
 assert r["error"] == "not found" and steps(r)[-1] == ("meshdiag childtable 0xb800", "stopped")
-assert [c for c in otbr.calls if c[:2] == ["meshdiag", "childtable"]] == [CT("0x5800"), CT("0xb400")]
+assert [c for c in otbr.calls if c[:2] == ["meshdiag", "childtable"]] == [CT("0x5800"), CT("0x6c00")]
 assert r["search"][-1]["detail"] == "time budget used"
 # trouve apres 80 s de balayage : le ping et le diagnostic ont leurs 15 s a eux, pas de delai
 clk, otbr, dg, out = scan_diag()
 otbr.scan_takes = 40
 otbr.childtables["0x5800"] = CT_5800
 r = one(dg, out, ext=TARGET)
-assert r["rloc16"] == "0xb45c" and r["error"] is None and r["alive"] is True and clk.now > 10000 + 90
+assert r["rloc16"] == "0x6c05" and r["error"] is None and r["alive"] is True and clk.now > 10000 + 90
 # pas d'ext : pas de meshdiag (rien a chercher) ; ML-EID sans reponse ni ext : introuvable sans `help`
 clk, otbr, dg, out = scan_diag()
 r = one(dg, out, mleid=ML)
@@ -971,33 +971,33 @@ assert r["error"] == "not found" and [c for c in otbr.calls if c[0] == "meshdiag
 
 # ---- routeurs qui ne repondent pas a `meshdiag childtable` : leurs enfants par `meshdiag topology children`
 TIMEOUT = "Error 28: ResponseTimeout\r\n"
-KIDS_OUT = ("id:02 rloc16:0x0800 ext-addr:8aa57d2c603fe16c ver:4 - me - leader\r\n   children:\r\n"
+KIDS_OUT = ("id:02 rloc16:0x0800 ext-addr:6f70819203142536 ver:4 - me - leader\r\n   children:\r\n"
             "       rloc16:0x0803 lq:0, mode:rn\r\n"
             "id:22 rloc16:0x5800 ext-addr:1111111111111111 ver:4\r\n   children:\r\n"
             "       rloc16:0x5801 lq:3, mode:rn\r\n"
-            "id:45 rloc16:0xb400 ext-addr:2222222222222222 ver:4\r\n   children:\r\n"
-            "       rloc16:0xb401 lq:3, mode:rdn\r\n       rloc16:0xb45c lq:2, mode:rn\r\n"
-            "       rloc16:0xb45d lq:1, mode:rn\r\n"
+            "id:45 rloc16:0x6c00 ext-addr:2222222222222222 ver:4\r\n   children:\r\n"
+            "       rloc16:0x6c01 lq:3, mode:rdn\r\n       rloc16:0x6c05 lq:2, mode:rn\r\n"
+            "       rloc16:0x6c06 lq:1, mode:rn\r\n"
             "id:46 rloc16:0xb800 ext-addr:3333333333333333 ver:4\r\n   children:\r\nDone\r\n")
 assert ta.parse_topology_children(KIDS_OUT) == (
-    {0x0800: [0x0803], 0x5800: [0x5801], 0xB400: [0xB401, 0xB45C, 0xB45D], 0xB800: []}, None)
+    {0x0800: [0x0803], 0x5800: [0x5801], 0x6C00: [0x6C01, 0x6C05, 0x6C06], 0xB800: []}, None)
 assert ta.parse_topology_children("Done\r\n") == ({}, None)
 # partiel : ce qui est lu avant une erreur est garde ; sans routeur, les lignes d'enfants ne comptent pas
 part = ta.parse_topology_children(KIDS_OUT.replace("Done\r\n", "Error 28: ResponseTimeout\r\n"))
-assert part[0][0xB400] == [0xB401, 0xB45C, 0xB45D] and part[1] == "Error 28: ResponseTimeout"
+assert part[0][0x6C00] == [0x6C01, 0x6C05, 0x6C06] and part[1] == "Error 28: ResponseTimeout"
 assert ta.parse_topology_children("       rloc16:0x0803 lq:0, mode:rn\r\nDone\r\n") == ({}, None)
 assert ta.parse_topology_children("Error 5: Busy\r\n") == ({}, "Error 5: Busy")
-CHILD_A = "fdde:ad00:beef::ff:fe00:b401"
-CHILD_B = "fdde:ad00:beef::ff:fe00:b45c"      # la node cherchee
-CHILD_C = "fdde:ad00:beef::ff:fe00:b45d"
+CHILD_A = "fdde:ad00:beef::ff:fe00:6c01"
+CHILD_B = "fdde:ad00:beef::ff:fe00:6c05"      # la node cherchee
+CHILD_C = "fdde:ad00:beef::ff:fe00:6c06"
 KID = lambda a, e: f"DIAG_GET.rsp/ans from {a}: 00\r\nExt Address: '{e}'\r\nDone\r\n"  # noqa: E731
 OTHER = "5555555555555555"
 
 
 def kids_diag(**kw):
-    """Le routeur 0xb400 ne repond pas a childtable ; ses enfants repondent (B401 : une autre node)."""
+    """Le routeur 0x6c00 ne repond pas a childtable ; ses enfants repondent (6C01 : une autre node)."""
     clk, otbr, dg, out = scan_diag(**kw)
-    otbr.childtables["0xb400"] = TIMEOUT
+    otbr.childtables["0x6c00"] = TIMEOUT
     otbr.topo_kids_out = KIDS_OUT
     otbr.child_diag = {CHILD_A: KID(CHILD_A, OTHER), CHILD_B: KID(CHILD_B, TARGET)}
     return clk, otbr, dg, out
@@ -1007,64 +1007,64 @@ TKIDS = ["meshdiag", "topology", "children"]
 ND = lambda a: ["networkdiagnostic", "get", a, "0"]  # noqa: E731
 # le routeur de la demande se tait : ses enfants d'abord, l'ancien RLOC16 en premier (une demande par enfant)
 clk, otbr, dg, out = kids_diag()
-r = one(dg, out, ext=TARGET, routers=["0xB45D"])
-assert r["rloc16"] == "0xb45c" and r["rloc16_from"] == "meshdiag" and r["parent"] == "0xb400" and r["error"] is None
-assert otbr.calls == [OWN, *TABLES, ["help"], ["meshdiag", "topology"], CT("0xb400"), TKIDS, ND(CHILD_C), ND(CHILD_A),
+r = one(dg, out, ext=TARGET, routers=["0x6C06"])
+assert r["rloc16"] == "0x6c05" and r["rloc16_from"] == "meshdiag" and r["parent"] == "0x6c00" and r["error"] is None
+assert otbr.calls == [OWN, *TABLES, ["help"], ["meshdiag", "topology"], CT("0x6c00"), TKIDS, ND(CHILD_C), ND(CHILD_A),
                       ND(CHILD_B), PING, DIAG], otbr.calls
 assert steps(r) == [("child table", "not_found"), ("neighbor table", "not_found"), ("router table", "not_found"),
-                    ("meshdiag topology", "not_found"), ("meshdiag childtable 0xb400", "error"),
-                    ("meshdiag topology children", "kids"), ("children of 0xb400", "found"),
-                    ("old RLOC16 0xb45d", "old_listed")], steps(r)
-assert r["search"][5]["rows"] == 4 and r["search"][6]["detail"] == "0xb45c" and r["search"][6]["rows"] == 3
+                    ("meshdiag topology", "not_found"), ("meshdiag childtable 0x6c00", "error"),
+                    ("meshdiag topology children", "kids"), ("children of 0x6c00", "found"),
+                    ("old RLOC16 0x6c06", "old_listed")], steps(r)
+assert r["search"][5]["rows"] == 4 and r["search"][6]["detail"] == "0x6c05" and r["search"][6]["rows"] == 3
 assert r["alive"] is True and r["ext"] == TARGET
 # sans indice : les routeurs qui repondent d'abord, puis les enfants du routeur muet, par RLOC16 croissant
 clk, otbr, dg, out = kids_diag()
 r = one(dg, out, ext=TARGET)
-assert otbr.calls[4:] == [["help"], ["meshdiag", "topology"], CT("0x5800"), CT("0xb400"), CT("0xb800"), TKIDS,
+assert otbr.calls[4:] == [["help"], ["meshdiag", "topology"], CT("0x5800"), CT("0x6c00"), CT("0xb800"), TKIDS,
                           ND(CHILD_A), ND(CHILD_B), PING, DIAG], otbr.calls
-assert r["rloc16"] == "0xb45c" and r["parent"] == "0xb400" and r["alive"] is True
+assert r["rloc16"] == "0x6c05" and r["parent"] == "0x6c00" and r["alive"] is True
 # les enfants qui ont repondu sont retenus 5 minutes : une autre node de la liste est retrouvee sans trafic
 clk.now += 11
 n = len(otbr.calls)
 r = one(dg, out, ext=OTHER, ping=False)
-assert r["rloc16"] == "0xb401" and r["parent"] == "0xb400" and steps(r)[-1] == ("meshdiag", "found")
+assert r["rloc16"] == "0x6c01" and r["parent"] == "0x6c00" and steps(r)[-1] == ("meshdiag", "found")
 assert [c for c in otbr.calls[n:] if c[0] == "meshdiag" or c == ["help"] or c[-1:] == ["0"]] == [], otbr.calls[n:]
 # introuvable : « 3 interroges, 2 ont repondu » ; l'ancien RLOC16 n'est plus liste
 clk, otbr, dg, out = kids_diag()
-r = one(dg, out, ext="4444444444444444", routers=["0xb45e"])
+r = one(dg, out, ext="4444444444444444", routers=["0x6c07"])
 assert r["error"] == "not found" and r["rloc16"] is None and r["alive"] is None
-assert steps(r)[5:7] == [("meshdiag topology children", "kids"), ("children of 0xb400", "asked")], steps(r)
-assert steps(r)[-1] == ("old RLOC16 0xb45e", "old_gone")
-assert r["search"][6]["rows"] == 3 and r["search"][6]["detail"] == 2 and r["search"][-1]["detail"] == "0xb400"
+assert steps(r)[5:7] == [("meshdiag topology children", "kids"), ("children of 0x6c00", "asked")], steps(r)
+assert steps(r)[-1] == ("old RLOC16 0x6c07", "old_gone")
+assert r["search"][6]["rows"] == 3 and r["search"][6]["detail"] == 2 and r["search"][-1]["detail"] == "0x6c00"
 # le routeur de la demande est traite tout de suite, les autres routeurs ensuite (leur childtable repond)
 assert steps(r)[7:9] == [("meshdiag childtable 0x5800", "not_found"), ("meshdiag childtable 0xb800", "not_found")]
-# le muet (B45D) est redemande une fois en fin de balayage, lui seul
+# le muet (6C06) est redemande une fois en fin de balayage, lui seul
 assert [c for c in otbr.calls if c[0] == "networkdiagnostic"] == [ND(CHILD_A), ND(CHILD_B), ND(CHILD_C), ND(CHILD_C)]
-assert ("children of 0xb400 (again)", "asked") in steps(r) and r["silent_children"] == [{"rloc16": "0xb45d", "parent": "0xb400"}]
-assert steps(r)[-2:] == [("children of 0xb400 (again)", "asked"), ("old RLOC16 0xb45e", "old_gone")]
+assert ("children of 0x6c00 (again)", "asked") in steps(r) and r["silent_children"] == [{"rloc16": "0x6c06", "parent": "0x6c00"}]
+assert steps(r)[-2:] == [("children of 0x6c00 (again)", "asked"), ("old RLOC16 0x6c07", "old_gone")]
 # un enfant qui ne repond pas, ou dont la sortie est vide, ne casse rien
 clk, otbr, dg, out = kids_diag()
 otbr.child_diag[CHILD_A] = ""
 r = one(dg, out, ext=TARGET)
-assert r["rloc16"] == "0xb45c" and r["error"] is None
+assert r["rloc16"] == "0x6c05" and r["error"] is None
 # la liste des enfants manque (routeur absent de la sortie, ou commande en erreur) : dit, sans ancien RLOC16
 clk, otbr, dg, out = kids_diag()
-otbr.topo_kids_out = KIDS_OUT.replace("id:45 rloc16:0xb400", "id:99 rloc16:0xd000")
-r = one(dg, out, ext=TARGET, routers=["0xb45c"])
-assert r["error"] == "not found" and steps(r)[5:7] == [("meshdiag topology children", "kids"), ("children of 0xb400", "no_list")]
+otbr.topo_kids_out = KIDS_OUT.replace("id:45 rloc16:0x6c00", "id:99 rloc16:0xd000")
+r = one(dg, out, ext=TARGET, routers=["0x6c05"])
+assert r["error"] == "not found" and steps(r)[5:7] == [("meshdiag topology children", "kids"), ("children of 0x6c00", "no_list")]
 assert not [s for s in steps(r) if s[0].startswith("old")]
 clk, otbr, dg, out = kids_diag()
 otbr.childtables["0x5800"] = TIMEOUT                    # deux routeurs muets : une seule `topology children`
 otbr.topo_kids_out = TIMEOUT
 r = one(dg, out, ext=TARGET)
 assert otbr.calls.count(TKIDS) == 1 and r["error"] == "not found"
-assert ("meshdiag topology children", "error") in steps(r) and ("children of 0xb400", "no_list") in steps(r)
+assert ("meshdiag topology children", "error") in steps(r) and ("children of 0x6c00", "no_list") in steps(r)
 assert ("children of 0x5800", "no_list") in steps(r) and not [s for s in steps(r) if s[0].startswith("old")]
 # `topology children` partiel : ce qui est lu avant l'erreur sert
 clk, otbr, dg, out = kids_diag()
 otbr.topo_kids_out = KIDS_OUT.replace("Done\r\n", "Error 28: ResponseTimeout\r\n")
 r = one(dg, out, ext=TARGET)
-assert r["rloc16"] == "0xb45c"
+assert r["rloc16"] == "0x6c05"
 assert [s["detail"] for s in r["search"] if s["step"] == "meshdiag topology children"] == [" (Error 28: ResponseTimeout)"]
 # routeurs qui repondent tous a childtable : pas de `topology children`
 clk, otbr, dg, out = scan_diag()
@@ -1074,7 +1074,7 @@ assert TKIDS not in otbr.calls
 clk, otbr, dg, out = kids_diag()
 otbr.child_takes = 50
 r = one(dg, out, ext="4444444444444444")
-assert r["error"] == "not found" and steps(r)[-1] == ("children of 0xb400", "stopped")
+assert r["error"] == "not found" and steps(r)[-1] == ("children of 0x6c00", "stopped")
 assert [c for c in otbr.calls if c[0] == "networkdiagnostic"] == [ND(CHILD_A), ND(CHILD_B)]
 # Busy : on n'insiste pas, pas de `topology children`
 clk, otbr, dg, out = kids_diag()
@@ -1087,29 +1087,29 @@ assert not [c for c in otbr.calls if c[0] not in ("ipaddr", "ping", "networkdiag
 # ---- 0.1.6 : les enfants muets sont dits, redemandes une fois, et le balayage est repris la ou il s'est arrete
 # sans balayage de reseau : champ present, vide
 clk, otbr, dg, out = make_diag()
-assert one(dg, out, rloc16="0xB45C")["silent_children"] == []
+assert one(dg, out, rloc16="0x6C05")["silent_children"] == []
 # les muets sont dits (RLOC16 et routeur), sans indice : pas de seconde demande
 clk, otbr, dg, out = kids_diag()
 r = one(dg, out, ext="4444444444444444")
-assert r["silent_children"] == [{"rloc16": "0xb45d", "parent": "0xb400"}] and "(again)" not in " ".join(s["step"] for s in r["search"])
+assert r["silent_children"] == [{"rloc16": "0x6c06", "parent": "0x6c00"}] and "(again)" not in " ".join(s["step"] for s in r["search"])
 assert [c for c in otbr.calls if c[0] == "networkdiagnostic"] == [ND(CHILD_A), ND(CHILD_B), ND(CHILD_C)]
 # routeur nomme : ses muets sont redemandes une fois en fin de balayage (un enfant endormi repond a son reveil)
 clk, otbr, dg, out = kids_diag()
 otbr.child_diag = {CHILD_A: KID(CHILD_A, OTHER)}
 otbr.script["networkdiagnostic get " + CHILD_C + " 0"] = [TIMEOUT, KID(CHILD_C, TARGET)]
-r = one(dg, out, ext=TARGET, routers=["0xb400"])
-assert r["rloc16"] == "0xb45d" and r["parent"] == "0xb400" and r["rloc16_from"] == "meshdiag", r
-assert [s for s in steps(r) if s[0].startswith("children")] == [("children of 0xb400", "asked"), ("children of 0xb400 (again)", "found")]
+r = one(dg, out, ext=TARGET, routers=["0x6c00"])
+assert r["rloc16"] == "0x6c06" and r["parent"] == "0x6c00" and r["rloc16_from"] == "meshdiag", r
+assert [s for s in steps(r) if s[0].startswith("children")] == [("children of 0x6c00", "asked"), ("children of 0x6c00 (again)", "found")]
 assert [c for c in otbr.calls if c[:2] == ["networkdiagnostic", "get"] and c[3:] == ["0"] and len(c) == 4] == \
     [ND(CHILD_A), ND(CHILD_B), ND(CHILD_C), ND(CHILD_B), ND(CHILD_C)]
-assert r["silent_children"] == [{"rloc16": "0xb45c", "parent": "0xb400"}]
+assert r["silent_children"] == [{"rloc16": "0x6c05", "parent": "0x6c00"}]
 # un nommé qui repond a la 2e fois : plus de muets, routeur complet
 clk, otbr, dg, out = kids_diag()
 otbr.child_diag = {CHILD_A: KID(CHILD_A, OTHER), CHILD_B: KID(CHILD_B, "7777777777777777")}
 otbr.script["networkdiagnostic get " + CHILD_C + " 0"] = [TIMEOUT, KID(CHILD_C, "8888888888888888")]
-r = one(dg, out, ext="4444444444444444", routers=["0xb400"])
-assert r["silent_children"] == [] and 0xB400 in dg.done and r["error"] == "not found"
-assert [s for s in steps(r) if s[0].startswith("children")] == [("children of 0xb400", "asked"), ("children of 0xb400 (again)", "asked")]
+r = one(dg, out, ext="4444444444444444", routers=["0x6c00"])
+assert r["silent_children"] == [] and 0x6C00 in dg.done and r["error"] == "not found"
+assert [s for s in steps(r) if s[0].startswith("children")] == [("children of 0x6c00", "asked"), ("children of 0x6c00 (again)", "asked")]
 
 
 # 0.1.7 : la redemande des muets du routeur nomme passe AVANT les enfants des autres routeurs muets,
@@ -1118,40 +1118,40 @@ clk, otbr, dg, out = kids_diag()
 otbr.childtables["0x5800"] = TIMEOUT                    # un autre routeur muet, avec un enfant
 otbr.child_diag = {CHILD_A: KID(CHILD_A, OTHER)}
 otbr.child_takes = 20
-r = one(dg, out, ext="4444444444444444", routers=["0xb400"])
+r = one(dg, out, ext="4444444444444444", routers=["0x6c00"])
 kid_steps = [s for s in steps(r) if s[0].startswith("children")]
-assert kid_steps == [("children of 0xb400", "asked"), ("children of 0xb400 (again)", "asked"),
+assert kid_steps == [("children of 0x6c00", "asked"), ("children of 0x6c00 (again)", "asked"),
                      ("children of 0x5800", "stopped")], kid_steps
 assert [c for c in otbr.calls if c[:2] == ["networkdiagnostic", "get"] and len(c) == 4] == \
     [ND(CHILD_A), ND(CHILD_B), ND(CHILD_C), ND(CHILD_B), ND(CHILD_C)]       # rien n'a ete demande sous 0x5800
-assert r["silent_children"] == [{"rloc16": "0xb45c", "parent": "0xb400"}, {"rloc16": "0xb45d", "parent": "0xb400"}]
+assert r["silent_children"] == [{"rloc16": "0x6c05", "parent": "0x6c00"}, {"rloc16": "0x6c06", "parent": "0x6c00"}]
 
 # 0.1.8 : `meshdiag topology` expire (il interroge tous les routeurs d'un coup) : la recherche continue,
 # routeur par routeur, avec la table des routeurs deja lue et les routeurs de la demande
 RTAB = ("| ID | RLOC16 | Next Hop | Path Cost | LQ In | LQ Out | Age | Extended MAC     | Link |\r\n"
         "+----+--------+----------+-----------+-------+--------+-----+------------------+------+\r\n"
         "| 22 | 0x5800 |       63 |         0 |     0 |      0 |  10 | 1111111111111111 |    1 |\r\n"
-        "| 45 | 0xb400 |       63 |         0 |     0 |      0 |  10 | 2222222222222222 |    1 |\r\n"
+        "| 45 | 0x6c00 |       63 |         0 |     0 |      0 |  10 | 2222222222222222 |    1 |\r\n"
         "| 46 | 0xb800 |       63 |         0 |     0 |      0 |  10 | 3333333333333333 |    1 |\r\nDone\r\n")
 # table des routeurs lue : les routeurs sont pris dedans, childtable un par un, puis les enfants du muet
 clk, otbr, dg, out = kids_diag()
 otbr.topology_out = TIMEOUT
 otbr.tables["router"] = RTAB
 r = one(dg, out, ext=TARGET)
-assert r["rloc16"] == "0xb45c" and r["parent"] == "0xb400" and r["rloc16_from"] == "meshdiag" and r["alive"] is True
+assert r["rloc16"] == "0x6c05" and r["parent"] == "0x6c00" and r["rloc16_from"] == "meshdiag" and r["alive"] is True
 assert steps(r) == [("child table", "not_found"), ("neighbor table", "not_found"), ("router table", "not_found"),
                     ("meshdiag topology", "error"), ("routers from the router table", "fallback"),
-                    ("meshdiag childtable 0x5800", "not_found"), ("meshdiag childtable 0xb400", "error"),
+                    ("meshdiag childtable 0x5800", "not_found"), ("meshdiag childtable 0x6c00", "error"),
                     ("meshdiag childtable 0xb800", "not_found"), ("meshdiag topology children", "kids"),
-                    ("children of 0xb400", "found")], steps(r)
+                    ("children of 0x6c00", "found")], steps(r)
 assert r["search"][4]["rows"] == 3 and r["search"][3]["detail"] == "Error 28: ResponseTimeout"
 # routeurs de la demande seuls (table des routeurs vide) : le routeur nomme est lu tout de suite
 clk, otbr, dg, out = kids_diag()
 otbr.topology_out = TIMEOUT
-r = one(dg, out, ext=TARGET, routers=["0xb45d"])
-assert r["rloc16"] == "0xb45c" and r["parent"] == "0xb400"
+r = one(dg, out, ext=TARGET, routers=["0x6c06"])
+assert r["rloc16"] == "0x6c05" and r["parent"] == "0x6c00"
 assert ("routers from the router table", "fallback") in steps(r) and r["search"][4]["rows"] == 1
-assert [c for c in otbr.calls if c[:2] == ["meshdiag", "childtable"]] == [CT("0xb400")]
+assert [c for c in otbr.calls if c[:2] == ["meshdiag", "childtable"]] == [CT("0x6c00")]
 # ni table des routeurs ni indice : rien a interroger, on le dit sans inventer de routeur
 clk, otbr, dg, out = kids_diag()
 otbr.topology_out = TIMEOUT
@@ -1169,7 +1169,7 @@ assert not [c for c in otbr.calls if c[:2] == ["meshdiag", "childtable"]]
 clk, otbr, dg, out = kids_diag()
 otbr.tables["router"] = RTAB
 r = one(dg, out, ext=TARGET)
-assert ("routers from the router table", "fallback") not in steps(r) and r["rloc16"] == "0xb45c"
+assert ("routers from the router table", "fallback") not in steps(r) and r["rloc16"] == "0x6c05"
 # le budget de 90 s tient aussi dans la reprise
 clk, otbr, dg, out = kids_diag()
 otbr.topology_out, otbr.scan_takes = TIMEOUT, 40
@@ -1179,13 +1179,13 @@ assert r["error"] == "not found" and ("meshdiag childtable 0xb800", "stopped") i
 
 
 def partial_diag():
-    """Premier balayage arrete par le budget de 90 s sous 0xb400 : A et B ont repondu, C n'a pas ete demande."""
+    """Premier balayage arrete par le budget de 90 s sous 0x6c00 : A et B ont repondu, C n'a pas ete demande."""
     clk, otbr, dg, out = kids_diag()
     otbr.child_diag[CHILD_B] = KID(CHILD_B, "7777777777777777")
     otbr.child_diag[CHILD_C] = KID(CHILD_C, "6666666666666666")
     otbr.child_takes = 50
     r = one(dg, out, ext="4444444444444444")
-    assert steps(r)[-1] == ("children of 0xb400", "stopped") and dg.partial and r["silent_children"] == []
+    assert steps(r)[-1] == ("children of 0x6c00", "stopped") and dg.partial and r["silent_children"] == []
     assert dg.done == {0x5800, 0xB800} and dg.silent == {}
     otbr.child_takes = 0
     otbr.calls.clear()
@@ -1196,22 +1196,22 @@ def partial_diag():
 clk, otbr, dg, out = partial_diag()
 clk.now += 301
 r = one(dg, out, ext="6666666666666666")
-assert r["rloc16"] == "0xb45d" and r["parent"] == "0xb400" and ("children of 0xb400", "found") in steps(r)
-assert otbr.calls[:8] == [OWN, *TABLES, ["meshdiag", "topology"], CT("0xb400"), TKIDS, ND(CHILD_C)], otbr.calls
+assert r["rloc16"] == "0x6c06" and r["parent"] == "0x6c00" and ("children of 0x6c00", "found") in steps(r)
+assert otbr.calls[:8] == [OWN, *TABLES, ["meshdiag", "topology"], CT("0x6c00"), TKIDS, ND(CHILD_C)], otbr.calls
 assert CT("0x5800") not in otbr.calls and CT("0xb800") not in otbr.calls and ["help"] not in otbr.calls
 assert ND(CHILD_A) not in otbr.calls and ND(CHILD_B) not in otbr.calls
 # un enfant qui avait repondu a l'ecoute precedente est retrouve sans traffic, meme apres 5 minutes
 clk, otbr, dg, out = partial_diag()
 clk.now += 301
 r = one(dg, out, ext="7777777777777777", ping=False)
-assert r["rloc16"] == "0xb45c" and r["parent"] == "0xb400" and steps(r)[-1] == ("meshdiag", "found"), steps(r)
+assert r["rloc16"] == "0x6c05" and r["parent"] == "0x6c00" and steps(r)[-1] == ("meshdiag", "found"), steps(r)
 assert not [c for c in otbr.calls if c[0] == "meshdiag" and c != ["meshdiag", "topology"]]
 # un routeur nomme est relu meme s'il etait connu ; les autres connus restent sautes
 clk, otbr, dg, out = partial_diag()
 clk.now += 301
 r = one(dg, out, ext="6666666666666666", routers=["0x5800"])
-assert CT("0x5800") in otbr.calls and CT("0xb800") not in otbr.calls and r["rloc16"] == "0xb45d"
-assert otbr.calls.index(CT("0x5800")) < otbr.calls.index(CT("0xb400"))
+assert CT("0x5800") in otbr.calls and CT("0xb800") not in otbr.calls and r["rloc16"] == "0x6c06"
+assert otbr.calls.index(CT("0x5800")) < otbr.calls.index(CT("0x6c00"))
 # la reprise n'est que de 30 minutes : ensuite, tout est redemande
 clk, otbr, dg, out = partial_diag()
 clk.now += 1801
@@ -1226,20 +1226,20 @@ assert ["help"] in otbr.calls and CT("0x5800") in otbr.calls and ND(CHILD_A) in 
 # un balayage qui est alle au bout avec tous les routeurs connus n'est pas repris : le suivant est complet
 clk, otbr, dg, out = scan_diag()
 one(dg, out, ext="4444444444444444")
-assert dg.partial is False and dg.done == {0x5800, 0xB400, 0xB800}
+assert dg.partial is False and dg.done == {0x5800, 0x6C00, 0xB800}
 clk.now += 301
 n = len(otbr.calls)
 one(dg, out, ext="4444444444444444")
-assert [c for c in otbr.calls[n:] if c[:2] == ["meshdiag", "childtable"]] == [CT("0x5800"), CT("0xb400"), CT("0xb800")]
+assert [c for c in otbr.calls[n:] if c[:2] == ["meshdiag", "childtable"]] == [CT("0x5800"), CT("0x6c00"), CT("0xb800")]
 # des muets qui restent : le balayage reste a reprendre, et ne redemande que eux
 clk, otbr, dg, out = kids_diag()
 one(dg, out, ext="4444444444444444")
-assert dg.partial is True and dg.silent == {0xB400: [0xB45D]}
+assert dg.partial is True and dg.silent == {0x6C00: [0x6C06]}
 clk.now += 301
 otbr.calls.clear()
 r = one(dg, out, ext="4444444444444444")
 assert [c for c in otbr.calls if c[:2] == ["networkdiagnostic", "get"] and c[3:] == ["0"] and len(c) == 4] == [ND(CHILD_C)]
-assert CT("0x5800") not in otbr.calls and r["silent_children"] == [{"rloc16": "0xb45d", "parent": "0xb400"}]
+assert CT("0x5800") not in otbr.calls and r["silent_children"] == [{"rloc16": "0x6c06", "parent": "0x6c00"}]
 
 # ---- une sortie vide d'ot-ctl = commande ignoree (une autre est en attente) : redemandee, jamais un echec
 RETRY = ["ping", ADDR, "16", "1"]
@@ -1262,7 +1262,7 @@ otbr.script["networkdiagnostic get " + ADDR + " 0 8"] = ["", "", ""]
 dg.submit(req())
 assert out[0][1]["error"] == "ot-ctl: no answer (another command pending?)" and out[0][1]["ping"]["ok"] is True
 # une table vide a chaque fois : etape en erreur, la recherche continue
-r, calls, _ = ask(lambda o: (o.script.update({"child table": ["", "", ""]}), o.tables.update(router=router_table(("0xb45c", TARGET)))),
+r, calls, _ = ask(lambda o: (o.script.update({"child table": ["", "", ""]}), o.tables.update(router=router_table(("0x6c05", TARGET)))),
                   ext=TARGET)
 assert r["rloc16_from"] == "router table" and r["search"][0]["result"] == "error" and "no answer" in r["search"][0]["detail"]
 # le delai de la demande compte aussi les attentes : 15 s de nouvelles tentatives = delai

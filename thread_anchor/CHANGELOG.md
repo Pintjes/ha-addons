@@ -28,8 +28,8 @@
 
 - The children that stayed silent are named. A child asked for its extended address
   (`networkdiagnostic get`) that did not answer is listed in `silent_children` of the answer
-  (`[{"rloc16": "0xb45d", "parent": "0xb400"}]`; `[]` when none) and in the log line of the
-  step (`children of 0xb400: 3 children asked, 2 answered, ext not among them; silent: 0xb45d`).
+  (`[{"rloc16": "0x6c06", "parent": "0x6c00"}]`; `[]` when none) and in the log line of the
+  step (`children of 0x6c00: 3 children asked, 2 answered, ext not among them; silent: 0x6c06`).
   A node that attached again to its parent under a new RLOC16 and sleeps is typically there.
 - One more try for the silent children of a router named in the request's `routers`: at the end
   of the scan, if there is time left, only those are asked again once (`children of 0x… (again)`):
@@ -69,8 +69,8 @@
   <RLOC address> 0`), one by one, the old RLOC16 of the request first. Same limits (90 s,
   one scan every 5 minutes, `busy`); `search`, `parent` and `alive` as before. The
   routers named in the request are dealt with first.
-- `search` says whether the old RLOC16 given in `routers` (`"0xB45C"`) is still listed
-  under its router (`old RLOC16 0xb45c`: `old_listed` / `old_gone`).
+- `search` says whether the old RLOC16 given in `routers` (`"0x6C05"`) is still listed
+  under its router (`old RLOC16 0x6c05`: `old_listed` / `old_gone`).
 - The role of the border router in the Thread network, shown only: `thread_role`
   (`disabled`, `detached`, `child`, `router`, `leader`) and `thread_routers` (routers
   in its router table) in `thread_anchor/state`, and an entity *Thread role*. Two small
