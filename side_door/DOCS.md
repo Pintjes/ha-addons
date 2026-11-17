@@ -232,6 +232,12 @@ allowed without auth*).
 Everyone who can open the panel then enters the app without a login: only
 use it when that is what you want.
 
+An app opened this way works without an account, and may hide what depends
+on one (in Plex, the menu of the three dots on a poster does not open). To
+get it back, log in to the app once inside Side Door. Since the app has its
+own part of the storage of the browser, a login made in a normal tab is not
+seen here, and this login stays in Side Door.
+
 ## Security
 
 **Only open apps you trust.** An app shown by Side Door runs at the address of
