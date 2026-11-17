@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.7] - 2026-11-17
+
+### Fixed
+
+- The second try for the silent children of the router named in the request (`children of 0x…
+  (again)`, 0.1.6) now comes right after the routers that answer have been read, BEFORE the
+  children of the other routers that did not answer `meshdiag childtable` are read. It came
+  last, so those routers could use up the whole 90 s budget and the second try never happened.
+
 ## [0.1.6] - 2026-11-17
 
 ### Added

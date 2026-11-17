@@ -34,7 +34,7 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
-VERSION = "0.1.6"
+VERSION = "0.1.7"
 LOG = logging.getLogger("thread_anchor")
 STATE_TOPIC = "thread_anchor/state"
 DISCOVERY = "homeassistant"
@@ -1039,19 +1039,21 @@ class Diag:
                 self._step(res, name, "found", f"0x{kids[ext]:04x}", rows=len(kids))
                 return kids[ext], router
             self._step(res, name, "not_found", rows=len(kids))
-        for router in failed:      # the other routers that kept silent
-            hit = self._children(res, deadline, ext, router, hints, mlp)
-            if hit is _STOP:
-                return None
-            if hit:
-                return hit
-        for router in first:       # a child asleep answers once awake: the silent ones, one more try
+        # a child asleep answers once awake: the silent children of the routers named in the request
+        # get one more try, BEFORE the other silent routers are read (those can use up the whole budget)
+        for router in first:
             if self.silent.get(router) and router in others and deadline - self.clock() >= 1:
                 hit = self._children(res, deadline, ext, router, hints, mlp, again=True)
                 if hit is _STOP:
                     return None
                 if hit:
                     return hit
+        for router in failed:      # the other routers that kept silent
+            hit = self._children(res, deadline, ext, router, hints, mlp)
+            if hit is _STOP:
+                return None
+            if hit:
+                return hit
         self.partial = not all(o in self.done for o in others)
         return None
     def _run(self, res, rloc16, ext, ml, ping, hints=(), scan=True):

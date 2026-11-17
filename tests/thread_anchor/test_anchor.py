@@ -1112,6 +1112,21 @@ assert r["silent_children"] == [] and 0xB400 in dg.done and r["error"] == "not f
 assert [s for s in steps(r) if s[0].startswith("children")] == [("children of 0xb400", "asked"), ("children of 0xb400 (again)", "asked")]
 
 
+# 0.1.7 : la redemande des muets du routeur nomme passe AVANT les enfants des autres routeurs muets,
+# meme quand ceux-ci useraient tout le budget (20 s par enfant : 3 + 2 demandes = 100 s, puis plus de temps)
+clk, otbr, dg, out = kids_diag()
+otbr.childtables["0x5800"] = TIMEOUT                    # un autre routeur muet, avec un enfant
+otbr.child_diag = {CHILD_A: KID(CHILD_A, OTHER)}
+otbr.child_takes = 20
+r = one(dg, out, ext="4444444444444444", routers=["0xb400"])
+kid_steps = [s for s in steps(r) if s[0].startswith("children")]
+assert kid_steps == [("children of 0xb400", "asked"), ("children of 0xb400 (again)", "asked"),
+                     ("children of 0x5800", "stopped")], kid_steps
+assert [c for c in otbr.calls if c[:2] == ["networkdiagnostic", "get"] and len(c) == 4] == \
+    [ND(CHILD_A), ND(CHILD_B), ND(CHILD_C), ND(CHILD_B), ND(CHILD_C)]       # rien n'a ete demande sous 0x5800
+assert r["silent_children"] == [{"rloc16": "0xb45c", "parent": "0xb400"}, {"rloc16": "0xb45d", "parent": "0xb400"}]
+
+
 def partial_diag():
     """Premier balayage arrete par le budget de 90 s sous 0xb400 : A et B ont repondu, C n'a pas ete demande."""
     clk, otbr, dg, out = kids_diag()

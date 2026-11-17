@@ -184,8 +184,9 @@ Reads only, but it is radio traffic: a request for every router.
   answered (`children of 0xb400: 12 children asked, 7 answered, ext not among
   them; silent: 0xb403, 0xb40a`). The children that answered are kept with the
   scan, and those that did not are named in `silent_children` of the answer.
-  For a router named in the request, the silent ones are asked once more at the
-  end of the scan, if there is time left (`children of 0xb400 (again)`);
+  For a router named in the request, the silent ones are asked once more, if
+  there is time left, as soon as the routers that answer have been read and
+  before the other silent routers (`children of 0xb400 (again)`);
 - a scan that stopped before its end (the 90 s are used, or a hit) is carried on
   by the next scans for 30 minutes: the routers whose children are all known,
   and the children that answered, are not asked again; the routers not read yet
