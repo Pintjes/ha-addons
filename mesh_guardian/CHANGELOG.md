@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.33.1] - 2026-11-17
+
+### Fixed
+
+- The page did not load ("'list' object has no attribute 'items'", HTTP 503 on the node table): the neighbor hearings of 2.33.0 shared their name with the list of candidate parents of a child, and the node after the first full end device read the wrong one. Test added.
+
 ## [2.33.0] - 2026-11-17
 
 ### Added

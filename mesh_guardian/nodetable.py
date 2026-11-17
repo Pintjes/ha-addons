@@ -555,13 +555,14 @@ class NodeTable:
             leader = self.radio.leader_name   # Home Assistant names loaded: parent history can start
         ref_snap = (self.radio.reference(now, min_age=3600) or {}) if self.radio else {}
         ref, ref_t = ref_snap.get("nodes", {}), ref_snap.get("t")
-        heard = heard_map(thread, self.live, now)
+        # all hearings, once ("heard" below is another, local list: the candidate parents of a child)
+        heard_all = heard_map(thread, self.live, now)
         rows = []
         for nid, v in thread.items():
             a, m = v["attrs"], v["meta"]
             role = a.get("0/53/1")
             rloc = rlocs.get(nid)
-            hb = heard_of(heard, ext_of(a))
+            hb = heard_of(heard_all, ext_of(a))
             if hb and hb.get("rloc16") is not None and (rloc is None or m.get("available") is False):
                 # where a neighbor that answers sees it now (the cached values of an unavailable
                 # node are old): its RLOC16, and a child is not a router

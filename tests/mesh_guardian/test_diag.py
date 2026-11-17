@@ -150,4 +150,23 @@ assert advice_of(dict(base, search={"result": "frozen", "text": "x"})) == \
     advice.t("Network stack stuck: last resort, cut its power for 10s (your call)")
 assert advice_of(dict(base, search={"result": "old_prefix_only", "text": "x"})) == \
     advice.t("Only has the old address prefix: a remedy on the border router is possible")
+# 2.33.0 en production : HTTP 503 « 'list' object has no attribute 'items' » sur /api/table. Le resultat
+# de heard_map() (un dict) portait le nom « heard », reutilise dans la boucle de build() pour la liste
+# des parents candidats d'un enfant : la node suivante appelait heard_of() sur une liste.
+import ast  # noqa: E402
+
+src = open(os.path.join(MG, "nodetable.py"), encoding="utf-8").read()
+build = next(f for c in ast.parse(src).body if isinstance(c, ast.ClassDef) and c.name == "NodeTable"
+             for f in c.body if isinstance(f, ast.FunctionDef) and f.name == "build")
+holder = [n.targets[0].id for n in ast.walk(build) if isinstance(n, ast.Assign) and isinstance(n.value, ast.Call)
+          and getattr(n.value.func, "id", None) == "heard_map"]
+assert len(holder) == 1, holder
+again = [n.lineno for n in ast.walk(build) if isinstance(n, ast.Assign) for tg in n.targets
+         if isinstance(tg, ast.Name) and tg.id == holder[0]]
+assert len(again) == 1, f"{holder[0]} assigned again in build() at lines {again}"
+try:   # et le symptome lui-meme : heard_of() sur la liste locale
+    nodetable.heard_of([(3, -60, "x")], MIELE)
+    raise AssertionError("heard_of on a list should fail")
+except AttributeError as err:
+    assert "items" in str(err)
 print("OK")
