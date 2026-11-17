@@ -125,10 +125,16 @@ assert not link3.check()              # seule la latence change : pas une raison
 assert link3.public()["latency_avg_ms"] == 3.0
 link3.check()
 assert link3.public()["latency_max_ms"] == 30.0 and link3.public()["latency_avg_ms"] == 12.0
+assert link3.public()["latency_p95_ms"] == 30.0   # 3 valeurs : le rang 3 (plus petite valeur couvrant 95 %)
 assert link3.check()                  # serveur muet : changement, latence inconnue et fenetre videe
 st = link3.public()
 assert st["latency_ms"] is None and st["server_ok"] is False
 assert st["latency_avg_ms"] is None and st["latency_max_ms"] is None and st["devices"][0]["latency_ms"] is None
+assert st["latency_p95_ms"] is None
+# percentile au plus proche rang : sur 30 mesures le p95 est la 29e, sur 20 la 19e, sur 1 la seule
+assert ul.percentile([], 95) is None and ul.percentile([7.0], 95) == 7.0
+assert ul.percentile([float(i) for i in range(30, 0, -1)], 95) == 29.0 and ul.percentile([float(i) for i in range(1, 21)], 95) == 19.0
+assert ul.percentile([1.0, 2.0, 3.0, 4.0], 50) == 2.0 and ul.percentile([1.0, 2.0, 3.0, 4.0], 100) == 4.0
 assert link3.latencies == []
 link3.check()
 st = link3.public()
@@ -201,6 +207,8 @@ topics = [tp for tp, _ in disc]
 assert topics == ["homeassistant/binary_sensor/usbip_link/zbt_2/config",
                   "homeassistant/binary_sensor/usbip_link/dongle_d_ana/config",
                   "homeassistant/sensor/usbip_link/latency/config",
+                  "homeassistant/sensor/usbip_link/latency_max/config",
+                  "homeassistant/sensor/usbip_link/latency_p95/config",
                   "homeassistant/binary_sensor/usbip_link/omr_prefix/config"]
 zbt = ul.json.loads(disc[0][1])
 assert zbt["unique_id"] == "usbip_link_zbt_2" and zbt["device_class"] == "connectivity"
@@ -210,7 +218,12 @@ assert "'Dongle dAna'" in ul.json.loads(disc[1][1])["value_template"]
 lat = ul.json.loads(disc[2][1])
 assert lat["unique_id"] == "usbip_link_latency" and lat["unit_of_measurement"] == "ms" and lat["state_class"] == "measurement"
 assert "'unknown'" not in lat["value_template"] and "else 'None'" in lat["value_template"]
-assert disc[3][1] == ""
+for entry, key in ((disc[3], "max"), (disc[4], "p95")):   # pic et percentile 95 : capteurs a historique long
+    sens = ul.json.loads(entry[1])
+    assert sens["unique_id"] == f"usbip_link_latency_{key}" and sens["state_class"] == "measurement"
+    assert sens["unit_of_measurement"] == "ms" and sens["device_class"] == "duration" and sens["entity_category"] == "diagnostic"
+    assert f"value_json.latency_{key}_ms" in sens["value_template"] and "else 'None'" in sens["value_template"]
+assert disc[5][1] == ""
 try:   # le rendu des templates comme HA (Jinja), si jinja2 est la
     import jinja2
 except ImportError:
@@ -224,6 +237,8 @@ if jinja2:
 
     assert render(lat["value_template"], {"latency_avg_ms": None}) == "None"
     assert render(lat["value_template"], {"latency_avg_ms": 0.9}) == "0.9"
+    assert render(ul.json.loads(disc[4][1])["value_template"], {"latency_p95_ms": None}) == "None"
+    assert render(ul.json.loads(disc[3][1])["value_template"], {"latency_max_ms": 2.4}) == "2.4"
     devs = {"devices": [{"name": "ZBT-2", "attached": True}]}
     assert render(zbt["value_template"], devs) == "ON"
     assert render(zbt["value_template"], {"devices": [{"name": "ZBT-2", "attached": False}]}) == "OFF"
@@ -246,7 +261,7 @@ mq = ul.Mqtt.__new__(ul.Mqtt)          # sans broker : le client est simule
 mq.link, mq.client = link5, Client()
 mq.on_connect(mq.client, None, None, 0)   # connexion MQTT avant le premier passage
 assert [tp for tp, _ in mq.client.sent if tp == "usbip_link/state"] == []
-assert ("usbip_link/state/available", "online") in mq.client.sent and len(mq.client.sent) == 4   # online + 3 discovery
+assert ("usbip_link/state/available", "online") in mq.client.sent and len(mq.client.sent) == 6   # online + 5 discovery (appareil, latence, max, p95, ancienne entite OMR)
 mq.publish()
 assert [tp for tp, _ in mq.client.sent if tp == "usbip_link/state"] == []
 link5.check()

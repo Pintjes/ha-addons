@@ -103,7 +103,12 @@ With MQTT:
   port, every check), averaged over the last 5 minutes; the last and the worst values as
   attributes. A slow or irregular link shows there before the radio suffers. Published at
   most every minute; unknown while the server is silent.
+- **sensors** *Link latency max* and *Link latency p95* (diagnostic): the worst value and the
+  95th percentile of the same 5-minute window. The average hides the peaks, and these two are
+  kept in the long-term statistics of Home Assistant (the attribute of the average is not).
+  Note that this is the time to open a TCP connection to the server, not the round trip of the
+  USB data through usbipd.
 
 The state is published on `usbip_link/state` (`latency_ms`, `latency_avg_ms`,
-`latency_max_ms`); **Mesh Guardian** reads it and says in *To do* when the radio of a border
+`latency_max_ms`, `latency_p95_ms`); **Mesh Guardian** reads it and says in *To do* when the radio of a border
 router is cut off, and in its log when it comes back.

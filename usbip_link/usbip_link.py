@@ -39,7 +39,7 @@ import time
 import urllib.request
 from datetime import datetime
 
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 LOG = logging.getLogger("usbip_link")
 STATE_TOPIC = "usbip_link/state"
 DISCOVERY = "homeassistant"
@@ -161,6 +161,15 @@ def resolve(host):
         return {info[4][0] for info in socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)}
     except (OSError, UnicodeError):
         return set()
+
+
+def percentile(values, pct):
+    """Nearest-rank percentile of a list (None when empty): the smallest value that at least pct % of
+    the values do not exceed."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    return ordered[max(0, -(-len(ordered) * pct // 100) - 1)]
 
 
 def run(args, timeout=20):
@@ -306,11 +315,13 @@ class Link:
             st["lost_at"] = self.clock()
 
     def latency(self):
-        """{"latency_ms", "latency_avg_ms", "latency_max_ms"} of the link to the server (None when unknown,
-        the server silent included)."""
+        """{"latency_ms", "latency_avg_ms", "latency_max_ms", "latency_p95_ms"} of the link to the server
+        (None when unknown, the server silent included). Average, worst and 95th percentile are those of the
+        last LATENCY_SAMPLES checks."""
         avg = round(sum(self.latencies) / len(self.latencies), 1) if self.latencies else None
         return {"latency_ms": self.latency_ms, "latency_avg_ms": avg,
-                "latency_max_ms": max(self.latencies) if self.latencies else None}
+                "latency_max_ms": max(self.latencies) if self.latencies else None,
+                "latency_p95_ms": percentile(self.latencies, 95)}
 
     def public(self, latency=True):
         """State published on MQTT (and read by Mesh Guardian)."""
@@ -403,7 +414,7 @@ class Mqtt:
 
 def discovery(devices):
     """[(topic, payload)] of the Home Assistant MQTT discovery: one connectivity entity per device and
-    the Link latency entity; an empty payload removes the OMR prefix entity of 0.2.x."""
+    the Link latency entities (average, max, p95); an empty payload removes the OMR prefix entity of 0.2.x."""
     dev = {"identifiers": ["usbip_link"], "name": "USB/IP Link", "manufacturer": "Pintjes", "sw_version": VERSION}
     out = []
     for d in devices:
@@ -427,6 +438,17 @@ def discovery(devices):
         "json_attributes_template": "{{ {'last_ms': value_json.latency_ms, 'max_ms': value_json.latency_max_ms,"
                                     " 'server': value_json.server} | tojson }}",
         "device": dev})))
+    # worst value and 95th percentile of the same window, as sensors of their own: the average hides
+    # the peaks, and an attribute is not kept in the long-term statistics
+    for key, label, icon in (("max", "Link latency max", "mdi:timer-alert-outline"),
+                             ("p95", "Link latency p95", "mdi:timer-sand")):
+        field = f"latency_{key}_ms"
+        out.append((f"{DISCOVERY}/sensor/usbip_link/latency_{key}/config", json.dumps({
+            "name": label, "unique_id": f"usbip_link_latency_{key}", "icon": icon, "entity_category": "diagnostic",
+            "device_class": "duration", "unit_of_measurement": "ms", "state_class": "measurement",
+            "state_topic": STATE_TOPIC, "availability_topic": STATE_TOPIC + "/available",
+            "value_template": "{{ value_json.%s if value_json.%s is not none else 'None' }}" % (field, field),
+            "device": dev})))
     # the OMR prefix entity of 0.2.x: the prefix moved to Thread Anchor, the entity goes away
     out.append((f"{DISCOVERY}/binary_sensor/usbip_link/omr_prefix/config", ""))
     return out

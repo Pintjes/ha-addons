@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.1] - 2026-11-17
+
+### Added
+
+- *Link latency max* and *Link latency p95* sensors (diagnostic, `state_class: measurement`):
+  the worst value and the 95th percentile (nearest rank) of the last 5 minutes of checks, next
+  to the average. The average hides the peaks and the max was only an attribute, which Home
+  Assistant does not keep in its long-term statistics: these two stay for months.
+  `latency_p95_ms` added to `usbip_link/state` (`latency_max_ms` was already there).
+
 ## [0.4.0] - 2026-11-17
 
 ### Changed
