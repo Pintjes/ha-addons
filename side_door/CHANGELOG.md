@@ -4,6 +4,16 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.4.0] - 2026-11-17
+
+### Fixed
+
+- A rewritten answer was held until its end: a stream of data (live values,
+  a long list sent bit by bit) stayed blocked. It is now relayed line by line,
+  as it comes.
+- An answer the app says is not in UTF-8 (`charset=iso-8859-1`…) is relayed as
+  it is from its first byte.
+
 ## [2.3.0] - 2026-11-17
 
 ### Fixed

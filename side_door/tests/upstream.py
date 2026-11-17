@@ -6,6 +6,7 @@ python side_door/tests/upstream.py   (listens on 127.0.0.1:8000)
 """
 import gzip
 import json
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # Fixed: test_live.py imports this file to compare what it receives
@@ -58,6 +59,29 @@ class App(BaseHTTPRequestHandler):
             # Its own address, plain and with the slashes escaped as JSON allows
             body = '{"u": "' + OWN + 'a", "v": "' + OWN.replace("/", "\\/") + 'b"}'
             self.answer(200, body.encode(), [("Content-Type", "application/graphql-response+json")])
+        elif path == "/stream":
+            # A stream of data: a first line, then the next one 3 s later
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Transfer-Encoding", "chunked")
+            self.end_headers()
+            for line, pause in ((f'{{"link": "{OWN}a"}}\n', 3), (f'{{"link": "{OWN}b"}}\n', 0)):
+                data = line.encode()
+                self.wfile.write(f"{len(data):x}\r\n".encode() + data + b"\r\n")
+                self.wfile.flush()
+                time.sleep(pause)
+            self.wfile.write(b"0\r\n\r\n")
+        elif path == "/pieces":
+            # A page in two pieces, the second one holding another "<head>"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Transfer-Encoding", "chunked")
+            self.end_headers()
+            for piece in (b'<html><head></head><body>\n', b"<script>var s = '<head>';</script></body></html>\n"):
+                self.wfile.write(f"{len(piece):x}\r\n".encode() + piece + b"\r\n")
+                self.wfile.flush()
+                time.sleep(0.3)
+            self.wfile.write(b"0\r\n\r\n")
         elif path == "/bin":
             self.answer(200, b'\x00\xff href="/x" \xe9', [("Content-Type", "application/octet-stream")])
         elif path == "/echo":

@@ -5,9 +5,11 @@ Needs the add-on running on port 8792 with tests/options_live.json, and
 upstream.py on port 8000 (see the "Live test" step of .github/workflows/ci.yml).
 """
 import gzip
+import http.client
 import importlib.util
 import json
 import pathlib
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -93,6 +95,23 @@ class Live(unittest.TestCase):
 
     def test_binary_answer_is_left_alone(self):
         self.assertEqual(get("/app/one/bin")[2], b'\x00\xff href="/x" \xe9')
+
+    def test_stream_reaches_the_browser_as_it_comes(self):
+        connection = http.client.HTTPConnection("127.0.0.1", 8792, timeout=10)
+        connection.request("GET", "/app/one/stream", headers=FROM_HA)
+        answer = connection.getresponse()
+        started = time.monotonic()
+        first = answer.readline()
+        self.assertLess(time.monotonic() - started, 2, "the first line waited for the end of the stream")
+        self.assertIn(f"{PUBLIC}{APP}a".encode(), first)
+        self.assertIn(f"{PUBLIC}{APP}b".encode(), answer.read())
+        connection.close()
+
+    def test_script_is_injected_once_in_a_page_in_pieces(self):
+        status, _, body = get("/app/one/pieces")
+        self.assertEqual(status, 200)
+        self.assertEqual(body.count(b"side_door_shim.js"), 1)
+        self.assertIn(b"var s = '<head>';", body)
 
     def test_redirection_stays_in_the_panel(self):
         status, headers, _ = get("/app/one/redirect")

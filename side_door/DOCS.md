@@ -174,6 +174,10 @@ Behind the ingress, the app is not at `/` but under a path such as
 
 The original `X-Ingress-Path` header is passed on to the app.
 
+A rewritten answer is relayed line by line, as it comes: a stream of data
+reaches the browser without waiting for its end. An answer the app says is in
+another encoding than UTF-8 is relayed as it is.
+
 Limits of the rewriting:
 
 - a path built in JavaScript at run time is not seen. If it always follows the

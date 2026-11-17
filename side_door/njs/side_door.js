@@ -34,6 +34,7 @@ var nonce = '';
 var kind = null;
 var chunks = [];
 var size = 0;
+var injected = false;
 
 function app(r) {
     return APPS[r.variables.sd_app];
@@ -53,6 +54,12 @@ function rewritable(r, a) {
     }
     var encoding = String(r.headersOut['Content-Encoding'] || '').trim().toLowerCase();
     if (encoding && encoding !== 'identity') {
+        return null;
+    }
+    // A text the app says is not in UTF-8 (ISO-8859-1, Windows-1252...) would
+    // lose its accented letters: relayed as it is
+    var charset = /;\s*charset=["']?([^"';\s]+)/i.exec(String(r.headersOut['Content-Type'] || ''));
+    if (charset && !/^(utf-?8|us-ascii)$/i.test(charset[1])) {
         return null;
     }
     return textKind(r);
@@ -107,7 +114,10 @@ function rewrite(r, a, type, text) {
             var tag = '<script src="' + (r.variables.http_x_ingress_path || '') + '/side_door_shim.js" data-base="'
                 + ingress + '" data-own="' + a.own.replace(/["<>&]/g, '') + '"'
                 + (nonce ? ' nonce="' + nonce + '"' : '') + '></script>';
-            text = text.replace(/<head(\s[^>]*)?>/i, function (head) { return head + tag; });
+            // Once per page: the page may come in several pieces
+            if (!injected) {
+                text = text.replace(/<head(\s[^>]*)?>/i, function (head) { injected = true; return head + tag; });
+            }
         }
     }
     return text;
@@ -211,32 +221,45 @@ function body(r, data, flags) {
     }
     chunks.push(data);
     size += data.length;
+    var whole = Buffer.concat(chunks);
     if (size > LARGEST) {
-        // Too big to be a page or a script: relayed as it is from here on
-        r.sendBuffer(Buffer.concat(chunks), flags);
+        // A line too long to be text: relayed as it is from here on
+        r.sendBuffer(whole, flags);
         chunks = [];
         kind = 'as it is';
         return;
     }
-    if (!flags.last) {
+    // Sent as it comes, up to the last complete line: an answer that keeps
+    // coming (a stream of data) reaches the browser without waiting for its
+    // end. What the add-on changes never spans two lines, and a line break
+    // never falls inside a UTF-8 character.
+    var cut = flags.last ? whole.length : whole.lastIndexOf(10) + 1;
+    if (cut === 0) {
+        chunks = [whole];
         return;
     }
-    var whole = Buffer.concat(chunks);
-    chunks = [];
+    var ready = whole.slice(0, cut);
+    var rest = whole.slice(cut);
+    chunks = rest.length ? [rest] : [];
+    size = rest.length;
     try {
-        // Only a text in UTF-8 is rewritten. A page in another encoding
-        // (ISO-8859-1, Windows-1252...) read as UTF-8 would lose its accented
-        // letters: it is relayed as it is. Read then written back, a UTF-8
-        // text gives the same bytes; any other does not.
-        var text = whole.toString('utf8');
-        if (Buffer.compare(Buffer.from(text, 'utf8'), whole) !== 0) {
-            r.sendBuffer(whole, flags);
+        // Only a text in UTF-8 is rewritten. A text in another encoding read
+        // as UTF-8 would lose its accented letters: from there on it is
+        // relayed as it is. Read then written back, a UTF-8 text gives the
+        // same bytes; any other does not.
+        var text = ready.toString('utf8');
+        if (Buffer.compare(Buffer.from(text, 'utf8'), ready) !== 0) {
+            kind = 'as it is';
+            r.sendBuffer(Buffer.concat([ready, rest]), flags);
+            chunks = [];
             return;
         }
         r.sendBuffer(rewrite(r, a, kind, text), flags);
     } catch (error) {
         r.error('side_door body: ' + error);
-        r.sendBuffer(whole, flags);
+        kind = 'as it is';
+        r.sendBuffer(Buffer.concat([ready, rest]), flags);
+        chunks = [];
     }
 }
 
