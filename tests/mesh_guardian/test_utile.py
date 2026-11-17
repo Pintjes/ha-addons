@@ -49,10 +49,10 @@ h.enabled = True
 old = time.time() - 3600
 h.fetch_ha_nodes = lambda: [{"node": f"{i:016X}", "name": f"N{i}", "state": "unavailable", "since": old} for i in range(1, 6)]
 pinged = []
-h.ping = lambda node: (pinged.append(node), time.sleep(0.03))
-healer.PING_BUDGET_S = 0.05
+h.ping = lambda node: (pinged.append(node), time.sleep(0.1))
+healer.PING_BUDGET_S = 0.15   # marges larges : l'horloge de Windows avance par pas de 15 ms
 h.cycle()
-assert len(pinged) == 2, pinged   # 0 s, 0,03 s ; le troisieme commencerait apres 0,05 s
+assert len(pinged) == 2, pinged   # 0 s, 0,1 s ; le troisieme commencerait apres 0,15 s
 healer.PING_BUDGET_S = 100
 pinged.clear()
 h.cycle()

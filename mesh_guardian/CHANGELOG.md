@@ -4,11 +4,22 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## Highlights of 2.9 to 2.28 (16 November 2026)
+## Highlights of 2.9 to 2.29 (16 November 2026)
 
 - **Act on a node from its panel**: recovery attempt on an unavailable node, reset from a distance, pairing codes kept by the add-on (photo or scan of the label), pairing and naming a new device without leaving the page.
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
+
+## [2.29.0] - 2026-11-17
+
+### Added
+
+- **Recovery attempt: alive test first, every time.** Before any command, the add-on checks whether the node is alive in two ways that do not need it to answer Matter: on the radio (the neighbor tables of the routers that know it are read now: "heard on the radio by <router> (-69 dBm) 42 s ago") and on the network (the ping of the Matter Server on its known addresses). The result is written in the log (`recover_alive` event) and given with the result of the attempt: alive on the radio but out of reach on the network, or not heard at all (no power, or frozen), are two different cases.
+- **Trial: announced in its place.** When the node answers the ping on an address but no longer announces itself (mDNS), the add-on announces it in its place for the time of the attempt (`_matter._tcp`, short TTL, host `mg-proxy-…`), so that the Matter Server finds its address again and the command can leave; the announcement is withdrawn as soon as the commands are sent (`recover_proxy` event). Not done when the node still announces itself.
+
+### Changed
+
+- A node still on an old OMR prefix gets the alive test too: the result of the attempt gives the cause and the alive test, instead of an answer without a test.
 
 ## [2.28.1] - 2026-11-17
 

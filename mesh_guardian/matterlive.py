@@ -352,6 +352,50 @@ class MatterLive:
                 break
         return best
 
+    def heard_by(self, ext, max_nodes=3):
+        """Who hears the device with this extended address on the radio: the neighbor tables
+        of up to max_nodes routers that list it are read now (the others as last received).
+        Returns [(node hex, seconds since heard, rssi)], the most recent first. A device heard
+        a few seconds ago is alive on the radio, whatever its IP address does."""
+        def entry(table):
+            for nb in table or []:
+                if isinstance(nb, dict) and nb.get("0") is not None and abs(nb["0"] - ext) <= 4096:
+                    return nb
+            return None
+        with self.lock:
+            cands = []
+            for k, n in self.nodes.items():
+                a = n["attributes"]
+                if n.get("available") is False or a.get("0/53/1") not in (5, 6):
+                    continue
+                nb = entry(a.get("0/53/7"))
+                if nb is not None:
+                    cands.append((nb.get("6") if nb.get("6") is not None else -127, k))
+        out = {}
+        for _, k in sorted(cands, reverse=True):
+            fresh = len(out) < max_nodes
+            if fresh:
+                try:
+                    res = self.h.matter_command("read_attribute", {"node_id": int(k, 16), "attribute_path": "0/53/7"},
+                                                timeout=30)
+                    table = res.get("0/53/7") if isinstance(res, dict) else res
+                    if isinstance(table, list):
+                        with self.lock:
+                            if k in self.nodes:
+                                self.nodes[k]["attributes"]["0/53/7"] = table
+                                self.nodes[k]["radio"] = time.time()
+                except Exception as err:  # noqa: BLE001
+                    LOG.debug("read neighbor table of %s: %s", k, err)
+            with self.lock:
+                n = self.nodes.get(k) or {}
+                nb = entry(n.get("attributes", {}).get("0/53/7"))
+                at = n.get("radio")
+            if nb is None or not at:
+                continue
+            rssi = nb.get("6") if nb.get("6") is not None else nb.get("7")
+            out[k] = (k, max(0, time.time() - (at - (nb.get("1") or 0))), rssi)
+        return sorted(out.values(), key=lambda x: x[1])
+
     def _read(self, nid_hex, path):
         res = self.h.matter_command("read_attribute", {"node_id": int(nid_hex, 16), "attribute_path": path}, timeout=30)
         return res.get(path) if isinstance(res, dict) else res

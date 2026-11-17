@@ -129,11 +129,61 @@ class H:
     nodes = {"000000000000005A": {"name": "Prise Lave-linge Miele", "area": "Buanderie"}}
 
 
-r.h, r.w, r.live = H(), w, None
+r.h, r.w, r.live, r.table = H(), w, None, None
 r._cached = lambda nid: {"0/49/1": [{"networkID": "AAA=", "connected": True}], "0/49/65529": [reattach.CONNECT_NETWORK]}
+r.h.matter_command = lambda cmd, args, timeout=0: {"fdc0:6359:d5be:1:e83c:35e9:edb8:ab71": False}
+
+
+class Live:
+    def heard_by(self, ext):
+        assert ext == 0xCA7A34808B66E461
+        return [("0000000000000031", 42.0, -69)]
+
+
+H.nodes["0000000000000031"] = {"name": "Spot Hall d'entrée 6"}
+r.live = Live()
+import base64  # noqa: E402
+
+r._cached = lambda nid: {"0/49/1": [{"networkID": "AAA=", "connected": True}], "0/49/65529": [reattach.CONNECT_NETWORK],
+                         "0/51/0": [{"7": 4, "4": base64.b64encode(bytes.fromhex("ca7a34808b66e461")).decode()}]}
+w.events.clear()
 res = r.recover_node("000000000000005A")
-assert res == {"result": "stale", "prefix": OLD, "br": "Google TV Salon", "at": "06:17"}, res
+assert res == {"result": "pending"}, res
+deadline = time.time() + 5
+while r.recovering and time.time() < deadline:
+    time.sleep(0.05)
 assert not r.busy.locked() and not r.recovering
+assert [k for k, _ in w.events] == ["recover_node", "recover_alive", "recover_result"], w.events
+alive_txt = w.events[1][1]
+assert "Spot Hall d'entrée 6 (-69 dBm)" in alive_txt and "42 s" in alive_txt and "fdc0:" in alive_txt, alive_txt
+assert r.results["000000000000005A"]["result"] == "stale" and OLD in r.results["000000000000005A"]["text"]
+
+# il repond au ping mais ne s'annonce plus : annoncee a sa place (essai), puis retiree
+w.br["salon"]["omr"], w.br["cuisine"]["omr"] = OLD, OLD   # plus d'ancien prefixe : pas « stale »
+w.matter["000000000000005A"]["online"] = False
+calls = []
+w.proxy_announce = lambda nid, ips: calls.append(("announce", nid, ips)) or True
+w.proxy_withdraw = lambda nid: calls.append(("withdraw", nid))
+w.stop = threading.Event()
+reattach.PROXY_SETTLE_S = 0
+r.h.matter_command = lambda cmd, args, timeout=0: {"fdc0::1": True}
+sent = []
+
+
+def command(node_id, cluster, name, payload, timeout=90):
+    sent.append(name)
+    raise RuntimeError("Operation aborted")
+
+
+r._command = command
+w.events.clear()
+assert r.recover_node("000000000000005A") == {"result": "pending"}
+deadline = time.time() + 5
+while r.recovering and time.time() < deadline:
+    time.sleep(0.05)
+assert calls == [("announce", "000000000000005A", ["fdc0::1"]), ("withdraw", "000000000000005A")], calls
+assert sent == ["ArmFailSafe"] and "recover_proxy" in [k for k, _ in w.events]
+assert r.results["000000000000005A"]["result"] == "unreachable"
 
 # ecritures simultanees du meme fichier (2.28.0 : « No such file » au demarrage) : aucune ne perd
 import store  # noqa: E402

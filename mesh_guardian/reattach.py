@@ -27,6 +27,7 @@ Recovery attempt (recover_node): the same connect command, sent to a Thread node
 that is unavailable, router or end device. Its last known network id is used
 (it cannot be read). Nothing to lose: the node is already out.
 """
+import base64
 import logging
 import threading
 import time
@@ -67,6 +68,27 @@ ROUTER_ROLES = (5, 6)  # Thread routing roles "router" and "leader" (the leader 
 ROUTER_SETTLE_S = 180  # s: a router attaches as a child first and becomes a router again within 2 minutes
 ROUTER_POLL_S = 20     # s: its role is read this often meanwhile, the result is given as soon as it is a router again
 PATHS = ["0/53/1", "0/53/7", "0/51/0", "0/49/1", "0/49/65529"]   # table and addresses read together: same moment
+
+
+PROXY_SETTLE_S = 5    # s: time left to the Matter Server to hear the announcement made in a node's place
+
+
+def _ago(s):
+    s = max(0, int(s))
+    return f"{s} s" if s < 90 else f"{round(s / 60)} min"
+
+
+def ext_of(attrs):
+    """Extended address (radio address) of a Thread node from its network interfaces (0/51/0)."""
+    for itf in attrs.get("0/51/0") or []:
+        if isinstance(itf, dict) and itf.get("7") == 4 and itf.get("4"):
+            try:
+                raw = base64.b64decode(itf["4"])
+            except Exception:  # noqa: BLE001
+                continue
+            if len(raw) == 8:
+                return int.from_bytes(raw, "big")
+    return None
 
 
 def _field(res, name, key):
@@ -530,16 +552,10 @@ class Reattach:
             network = connected_network(attrs.get("0/49/1"))
             if network is None or CONNECT_NETWORK not in (attrs.get("0/49/65529") or []):
                 return {"result": "unsupported"}
-            st = self.w.stale_prefix(nid) if hasattr(self.w, "stale_prefix") else None
-            if st:
-                # still on a prefix the border routers left: its address is not known, the command
-                # cannot leave (the Matter Server gives up at once); say why instead of trying
-                LOG.info("recovery of %s not tried: still on the old prefix %s (left by %s at %s)",
-                         name, st["prefix"], st["br"], st["at"])
-                return {"result": "stale", "prefix": st["prefix"], "br": st["br"], "at": st["at"]}
             # the thread is created first: when it cannot start (no thread left), the node is not
             # left marked "recovering" for good, with a result "pending" that never ends
-            th = threading.Thread(target=self._recover, args=(nid, name, area, network), daemon=True, name="recover")
+            th = threading.Thread(target=self._recover, args=(nid, name, area, network, ext_of(attrs)),
+                                  daemon=True, name="recover")
             self.recovering.add(nid)
             self.results[nid] = {"state": "pending", "text": t("{node}: recovery attempt", node=name, area=area),
                                  "at": time.time()}
@@ -556,12 +572,82 @@ class Reattach:
             if not started:
                 self.busy.release()
 
-    def _recover(self, nid, name, area, network):
+    def _alive(self, nid, node_id, ext):
+        """Is the node alive? Two tests that do not need it to answer Matter:
+        - radio: the neighbor tables of the routers that know it, read now (it can be alive on
+          the radio with an address nobody can reach);
+        - network: the ping of the Matter Server on its known addresses ({ip: answered}).
+        Returns {"ok": [ip], "ko": [ip], "heard": [(name, seconds, rssi)], "radio_known": bool}."""
+        try:
+            res = self.h.matter_command("ping_node", {"node_id": node_id}, timeout=60)
+        except Exception as err:  # noqa: BLE001
+            LOG.debug("ping of %s before recovery: %s", nid, err)
+            res = None
+        res = res if isinstance(res, dict) else {}
+        heard = []
+        if ext is not None and self.live and hasattr(self.live, "heard_by"):
+            try:
+                with self.h.lock:
+                    names = {k: v.get("name") or k for k, v in self.h.nodes.items()}
+                heard = [(names.get(k, f"0x{k.lstrip('0')}"), s, r) for k, s, r in self.live.heard_by(ext)]
+            except Exception as err:  # noqa: BLE001
+                LOG.debug("radio test of %s: %s", nid, err)
+        return {"ok": sorted(ip for ip, v in res.items() if v), "ko": sorted(ip for ip, v in res.items() if not v),
+                "heard": heard, "radio_known": ext is not None}
+
+    @staticmethod
+    def _alive_text(name, a):
+        if a["heard"]:
+            who, s, rssi = a["heard"][0]
+            radio = t("heard on the radio by {who} {ago} ago", who=f"{who} ({rssi} dBm)" if rssi is not None else who,
+                      ago=_ago(s))
+        elif a["radio_known"]:
+            radio = t("not heard on the radio by its neighbors")
+        else:
+            radio = t("radio not checked (address of its radio not known)")
+        if a["ok"]:
+            net = t("answers the network ping on {ip}", ip=", ".join(a["ok"]))
+        elif a["ko"]:
+            net = t("no answer to the network ping ({ips})", ips=", ".join(a["ko"]))
+        else:
+            net = t("no address to ping")
+        return t("{node}: alive test: {radio}; {ping}", node=name, radio=radio, ping=net)
+
+    def _recover(self, nid, name, area, network, ext=None):
         node_id = int(nid, 16)
+        proxied = False
         try:
             try:
-                sent = self._recover_send(node_id, name, area, network)
+                self.w.emit("recover_node", t("{node}: recovery attempt", node=name, area=area), node=name)
+                alive = self._alive(nid, node_id, ext)
+                alive_txt = self._alive_text(name, alive)
+                self.w.emit("recover_alive", alive_txt, node=name, ping_ok=alive["ok"], ping_ko=alive["ko"],
+                            heard=[[w, round(s), r] for w, s, r in alive["heard"]])
+                st = self.w.stale_prefix(nid) if hasattr(self.w, "stale_prefix") else None
+                if st:
+                    # still on a prefix the border routers left: its address is not known, the
+                    # command cannot leave (the Matter Server gives up at once)
+                    self._recover_result(nid, name, "stale", t(
+                        "{node}: recovery attempt not sent: stayed on the old prefix {prefix} after {br} changed it at {at}, "
+                        "its new address is not known", node=name, prefix=st["prefix"], br=st["br"], at=st["at"])
+                        + " · " + alive_txt)
+                    return
+                announced = (self.w.matter.get(nid) or {}).get("online") if hasattr(self.w, "matter") else None
+                if alive["ok"] and announced is False and hasattr(self.w, "proxy_announce"):
+                    # TRIAL: it answers on an address but no longer announces itself: announced in
+                    # its place, the Matter Server can find it again and the command can leave
+                    proxied = self.w.proxy_announce(nid, alive["ok"])
+                    if proxied:
+                        self.w.emit("recover_proxy", t("{node}: announced in its place on {ip} (trial), for the recovery attempt",
+                                                       node=name, ip=", ".join(alive["ok"])), node=name, ip=alive["ok"])
+                        self.w.stop.wait(PROXY_SETTLE_S)
+                sent = self._recover_send(node_id, name, area, network, alive_txt)
             finally:
+                if proxied:
+                    # withdrawn as soon as the commands are sent: the node announces itself again
+                    # when it attaches, and two announcements of one name would conflict
+                    self.w.proxy_withdraw(nid)
+                    proxied = False
                 self.busy.release()
             if not sent:
                 return
@@ -601,16 +687,14 @@ class Reattach:
             self._recover_result(nid, name, "noanswer", t("{node}: still unavailable after the recovery attempt", node=name))
         finally:
             self.recovering.discard(nid)
+            if proxied:
+                self.w.proxy_withdraw(nid)
 
-    def _recover_send(self, node_id, name, area, network):
-        """Ping, then ArmFailSafe and ConnectNetwork. True when the connect command left under
-        an armed fail-safe (answered or not: a node that attaches again may not answer)."""
+    def _recover_send(self, node_id, name, area, network, alive_txt=""):
+        """ArmFailSafe and ConnectNetwork (the ping of the alive test, just before, made the
+        Matter Server look for the address of the node again). True when the connect command
+        left under an armed fail-safe (answered or not: a node that attaches again may not answer)."""
         nid = f"{node_id:016X}"
-        self.w.emit("recover_node", t("{node}: recovery attempt", node=name, area=area), node=name)
-        try:   # makes the Matter Server look for the address of the node again
-            self.h.matter_command("ping_node", {"node_id": node_id}, timeout=60)
-        except Exception as err:  # noqa: BLE001
-            LOG.debug("ping of %s before recovery: %s", name, err)
         try:
             res = self._command(node_id, 48, "ArmFailSafe", {"expiryLengthSeconds": FAILSAFE_S, "breadcrumb": 1},
                                 timeout=RECOVER_WAIT_S)
@@ -618,9 +702,10 @@ class Reattach:
             LOG.info("recovery of %s, no answer to ArmFailSafe: %s", name, err)
             announced = (self.w.matter.get(nid) or {}).get("online") if hasattr(self.w, "matter") else None
             self._recover_result(nid, name, "unreachable",
-                                 t("{node}: no longer announced on the network, its address is not known: "
-                                   "the recovery attempt could not be sent", node=name) if announced is False
-                                 else t("{node}: out of reach, the recovery attempt could not be sent", node=name))
+                                 (t("{node}: no longer announced on the network, its address is not known: "
+                                    "the recovery attempt could not be sent", node=name) if announced is False
+                                  else t("{node}: out of reach, the recovery attempt could not be sent", node=name))
+                                 + (" · " + alive_txt if alive_txt else ""))
             return False
         if _field(res, "errorCode", "0") != 0:
             LOG.info("recovery of %s, ArmFailSafe refused: %s", name, res)

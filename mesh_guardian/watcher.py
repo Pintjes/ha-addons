@@ -21,6 +21,7 @@ import logging
 import os
 import queue
 import signal
+import socket
 import threading
 import time
 import urllib.request
@@ -77,7 +78,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.28.1"
+VERSION = "2.29.0"
 OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
 OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
@@ -100,6 +101,7 @@ EVENT_FILE_MAX = 5 * 1024 * 1024
 KNOWN_FILE = "/data/known_nodes.json"
 BR_NAMES_FILE = "/data/br_names.json"
 PREFIXES_FILE = "/data/prefixes.json"
+PROXY_HOST = "mg-proxy-"   # host name of the announcements made in a node's place
 RENAME_CONFIRM = 5   # announcements in a row giving the same new name before a border router is renamed
 MESHCOP_REBROWSE = 5 * 60
 BR_FIELDS = ("instance", "network", "ext_pan", "vendor", "model", "role", "interface", "bbr_primary",
@@ -262,6 +264,7 @@ class Watch:
         self.omr_left = {}      # OMR prefix a border router stopped publishing -> (time, border router)
         self.omr_changes = []   # times of the OMR prefix changes (24h)
         self._prefixes_dirty = False   # a node prefix changed: prefixes.json to write again
+        self.proxies = {}              # node hex -> ServiceInfo announced in its place (proxy_announce)
         self.dirty = True
         self.discovered_br = set()
         self.mqtt = None
@@ -964,6 +967,8 @@ class Watch:
         if FABRIC and fabric.upper() != FABRIC:
             return
         node = node.upper()
+        if info is not None and str(getattr(info, "server", "") or "").startswith(PROXY_HOST):
+            return   # our own announcement made in the node's place (proxy_announce): not the node
         addrs = sorted(info.parsed_addresses(IPVersion.All)) if info else []
         prefixes = sorted({p for p in (prefix64(a) for a in addrs) if p})
         with self.lock:
@@ -995,6 +1000,49 @@ class Watch:
                 # saved by check_node_prefixes: one write for a whole renumbering, not one per node
                 self._prefixes_dirty = True
             self.dirty = True
+
+    def proxy_announce(self, node, ips):
+        """TRIAL (2.29.0): announce a node in its place (_matter._tcp, its operational name, port
+        5540) on addresses where it answers the ping, when it no longer announces itself: the
+        Matter Server can then find its address again. Short TTL, withdrawn by proxy_withdraw.
+        False when it cannot be done (fabric not known, name already announced by the node)."""
+        from zeroconf import NonUniqueNameException, ServiceInfo   # noqa: PLC0415
+        node = str(node).upper().zfill(16)
+        raw = []
+        for ip in ips:
+            try:
+                raw.append(socket.inet_pton(socket.AF_INET6, ip.split("%")[0]))
+            except (OSError, ValueError):
+                continue
+        if not FABRIC or not self.zc or not raw:
+            return False
+        info = ServiceInfo(T_MATTER, f"{FABRIC}-{node}.{T_MATTER}", port=5540, addresses=raw,
+                           server=f"{PROXY_HOST}{node.lower()}.local.", properties={"SII": "5000", "SAI": "300"},
+                           host_ttl=120, other_ttl=120)
+        with self.lock:
+            self.proxies[node] = info
+        try:
+            self.zc.register_service(info, allow_name_change=False)
+            LOG.info("announced in the place of %s on %s", self.node_disp(node), ", ".join(ips))
+            return True
+        except NonUniqueNameException:
+            LOG.info("not announced in the place of %s: the name is announced already", self.node_disp(node))
+        except Exception as err:  # noqa: BLE001
+            LOG.warning("announcement in the place of %s: %s", self.node_disp(node), err)
+        with self.lock:
+            self.proxies.pop(node, None)
+        return False
+
+    def proxy_withdraw(self, node):
+        node = str(node).upper().zfill(16)
+        with self.lock:
+            info = self.proxies.pop(node, None)
+        if info is None:
+            return
+        try:
+            self.zc.unregister_service(info)
+        except Exception as err:  # noqa: BLE001
+            LOG.debug("withdraw announcement of %s: %s", node, err)
 
     def node_name(self, node):
         """"Name (area)" of the node according to Home Assistant, or None."""

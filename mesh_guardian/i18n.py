@@ -315,6 +315,18 @@ FR = {
     "{node}: recovery attempt refused": "{node} : tentative de récupération refusée",
     "{node}: no longer announced on the network, its address is not known: the recovery attempt could not be sent":
         "{node} : ne s'annonce plus sur le réseau, son adresse n'est pas connue : la tentative de récupération n'a pas pu être envoyée",
+    # alive test of the recovery attempt, announcement in a node's place (trial)
+    "{node}: alive test: {radio}; {ping}": "{node} : test de vie : {radio} ; {ping}",
+    "heard on the radio by {who} {ago} ago": "entendue à la radio par {who} il y a {ago}",
+    "not heard on the radio by its neighbors": "pas entendue à la radio par ses voisins",
+    "radio not checked (address of its radio not known)": "radio non vérifiée (adresse radio inconnue)",
+    "answers the network ping on {ip}": "répond au ping réseau sur {ip}",
+    "no answer to the network ping ({ips})": "pas de réponse au ping réseau ({ips})",
+    "no address to ping": "aucune adresse à pinguer",
+    "{node}: announced in its place on {ip} (trial), for the recovery attempt":
+        "{node} : annoncée à sa place sur {ip} (essai), pour la tentative de récupération",
+    "{node}: recovery attempt not sent: stayed on the old prefix {prefix} after {br} changed it at {at}, its new address is not known":
+        "{node} : tentative de récupération non envoyée : restée sur l'ancien préfixe {prefix} après le changement fait par {br} à {at}, sa nouvelle adresse n'est pas connue",
     # node left on an OMR prefix the border routers no longer publish
     "{node}: stayed on the old prefix {prefix} after {br} changed it at {at}: its new address is not known":
         "{node} : restée sur l'ancien préfixe {prefix} après le changement fait par {br} à {at} : sa nouvelle adresse n'est pas connue",
