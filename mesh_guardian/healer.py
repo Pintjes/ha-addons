@@ -393,6 +393,10 @@ class Healer:
             skipped, targets = len(targets) - len(quiet), quiet
         if not targets:
             self.sweep = {"date": hhmm(time.time()), "ok": 0, "total": 0, "unreachable": [], "skipped": skipped}
+            if skipped:   # said in the log too: the sweep ran, every node was heard (no ping, no radio traffic)
+                self.last_result = t("{time} sweep: nothing to ping", time=hhmm(time.time()))
+                self.w.emit("sweep", t("Sweep: nothing to ping ({n} heard within the hour)", n=skipped),
+                            ok=0, total=0, bad=[], skipped=skipped)
             return
         ok, bad = 0, []
         for node in targets:

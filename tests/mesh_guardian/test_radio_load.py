@@ -85,9 +85,11 @@ H.time.sleep = lambda s: None
 h._sweep_mains()
 assert sorted(pinged) == [int(B, 16), int(C, 16)], pinged
 assert h.sweep["skipped"] == 1 and h.sweep["total"] == 2 and events[-1][2]["skipped"] == 1, (h.sweep, events)
-# toutes entendues : aucun ping, rien d'emis
+# toutes entendues : aucun ping, mais une ligne dans le journal (2.37.1)
 pinged.clear()
 live.contacts.update({B: now, C: now})
 h._sweep_mains()
 assert not pinged and h.sweep["total"] == 0 and h.sweep["skipped"] == 3
+assert events[-1][0] == "sweep" and events[-1][2]["skipped"] == 3 and events[-1][2]["total"] == 0, events[-1]
+assert "3" in events[-1][1], events[-1][1]
 print("OK")

@@ -151,6 +151,8 @@ FR = {
     'Ping {i}/{max} {name}: {result}': 'Ping {i}/{max} {name} : {result}',
     'Sweep: {ok}/{total} answer': 'Balayage : {ok}/{total} répondent',
     ' ({n} heard within the hour, not pinged)': ' ({n} entendues dans l\'heure, pas pingées)',
+    'Sweep: nothing to ping ({n} heard within the hour)': 'Balayage : rien à pinguer ({n} entendues dans l\'heure)',
+    '{time} sweep: nothing to ping': '{time} balayage : rien à pinguer',
     'Automatic recovery on': 'Récupération automatique activée',
     'Automatic recovery off': 'Récupération automatique désactivée',
     '{n} nodes unavailable together: pings paused 5min': "{n} nodes indisponibles ensemble : pings suspendus 5 min",

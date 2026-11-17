@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.37.1] - 2026-11-17
+
+### Fixed
+
+- **The sweep says it ran when there was nothing to ping**: every node heard within the hour, no ping is sent (2.37.0) and the log now says "Sweep: nothing to ping (n heard within the hour)" instead of nothing. No change to the radio traffic.
+
 ## [2.37.0] - 2026-11-17
 
 ### Changed
