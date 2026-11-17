@@ -1,0 +1,33 @@
+name: Thread Anchor
+version: "0.1.0"
+slug: thread_anchor
+url: https://github.com/Pintjes/ha-addons
+description: >-
+  Keeps your Thread network on one OMR prefix: the OpenThread border router of Home Assistant
+  anchors it, so Google, Apple or Amazon border routers stop moving it and Matter devices stop
+  dropping out. Beta.
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: application
+boot: auto
+# `ot-ctl br omrconfig` / `br omrprefix` in the OpenThread border router container: Protection mode off
+docker_api: true
+hassio_api: true
+services:
+  - mqtt:want
+options:
+  language: en
+  omr_prefix: ""
+  omr_preference: high
+  otbr_addon: core_openthread_border_router
+  check_interval: 30
+  debug: false
+schema:
+  language: list(en|fr)
+  omr_prefix: str?
+  omr_preference: list(high|med|low)
+  otbr_addon: str
+  check_interval: int(10,3600)
+  debug: bool

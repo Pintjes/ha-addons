@@ -1,0 +1,20 @@
+---
+configuration:
+  language:
+    name: "Langue"
+    description: "Langue du journal."
+  omr_prefix:
+    name: "Préfixe OMR à ancrer"
+    description: "Préfixe /64 imposé au border router. Prendre celui que le réseau utilise maintenant (Mesh Guardian l'affiche, ou l'entité Favored OMR prefix) : les appareils gardent leurs adresses. Vide : le border router est seulement observé."
+  omr_preference:
+    name: "Préférence"
+    description: "high (par défaut) ou med : au-dessus des préfixes que les border routers génèrent eux-mêmes (low)."
+  otbr_addon:
+    name: "Add-on border router"
+    description: "Slug de l'add-on OpenThread Border Router."
+  check_interval:
+    name: "Vérifier toutes les (s)"
+    description: "Secondes entre deux lectures du border router. Un redémarrage du border router est vu tout de suite de toute façon."
+  debug:
+    name: "Débogage"
+    description: "Plus de détails dans le journal."
