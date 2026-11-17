@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.9] - 2026-11-17
+
+### Added
+
+- The link of the border router with its parent and its neighbors, in the state (`thread_link` in
+  `thread_anchor/state`): its RLOC16; for a child, its parent (RLOC16, extended address, link
+  quality in / out, average and last RSSI, age); the 3 routers heard with the best average RSSI
+  (with the link quality and path cost of the router table, `is_parent`); the number of routers
+  heard; and the counters of the MLE layer (detachments, attach attempts, parent changes…) and of
+  the MAC layer (retries, CCA and FCS errors…). It answers the question « how good is the link of
+  the border router with its parent? ». Local reads of the border router (`rloc16`, `parent`,
+  `neighbor table`, `router table`, `counters mle`, `counters mac`): no radio traffic, nothing
+  written, one reading a minute at most, through the same single `ot-ctl` entry point as the rest.
+  A part that cannot be read is left out, the others are kept.
+- A change of parent of the border router is said in the log.
+- No new Home Assistant entity: the values are in the state JSON only. Ages, RSSI and counters move
+  at every reading and do not make the state "change" by themselves: they go out with the next
+  change or the 5-minute heartbeat.
+
 ## [0.1.8] - 2026-11-17
 
 ### Fixed

@@ -32,6 +32,31 @@ assert ta.demux(frame(1, b"auto\r\n") + frame(1, b"Done\r\n")) == "auto\r\nDone\
 assert ta.demux(b"auto\nDone\n") == "auto\nDone\n"
 
 
+LINK_OUT = {      # sorties d'ot-ctl pour le lien du border router (enfant) avec son parent
+    "rloc16": "6c05\r\nDone\r\n",
+    "parent": ("Ext Addr: 5a6b7c8d9e0f1a2b\r\nRloc: 3400\r\nLink Quality In: 3\r\nLink Quality Out: 2\r\n"
+               "Age: 17\r\nVersion: 5\r\nDone\r\n"),
+    "neighbor table": (
+        "| Role | RLOC16 | Age | Avg RSSI | Last RSSI |R|D|N| Extended MAC     |\r\n"
+        "+------+--------+-----+----------+-----------+-+-+-+------------------+\r\n"
+        "|   R  | 0x3400 |  17 |      -62 |       -64 |1|1|1| 5a6b7c8d9e0f1a2b |\r\n"
+        "|   R  | 0x5800 |   3 |      -48 |       -47 |1|1|1| 1111111111111111 |\r\n"
+        "|   R  | 0x9c00 |   9 |      -71 |       -70 |1|1|1| 2222222222222222 |\r\n"
+        "|   R  | 0xb800 |  20 |      -55 |       -58 |1|1|1| 3333333333333333 |\r\n"
+        "|   C  | 0x6c0a |  30 |      -40 |       -41 |0|0|0| 4444444444444444 |\r\nDone\r\n"),
+    "router table": (
+        "| ID | RLOC16 | Next Hop | Path Cost | LQ In | LQ Out | Age | Extended MAC     | Link |\r\n"
+        "+----+--------+----------+-----------+-------+--------+-----+------------------+------+\r\n"
+        "|  7 | 0x3400 |       63 |         0 |     3 |      2 |  17 | 5a6b7c8d9e0f1a2b |    1 |\r\n"
+        "| 22 | 0x5800 |       63 |         0 |     3 |      3 |   3 | 1111111111111111 |    1 |\r\nDone\r\n"),
+    "counters mle": ("Role Disabled: 0\r\nRole Detached: 4\r\nRole Child: 5\r\nRole Router: 0\r\nRole Leader: 0\r\n"
+                     "Attach Attempts: 6\r\nPartition Id Changes: 1\r\nBetter Partition Attach Attempts: 0\r\n"
+                     "Parent Changes: 3\r\nDone\r\n"),
+    "counters mac": ("TxTotal: 1034\r\n    TxUnicast: 1000\r\nTxRetry: 21\r\nTxErrCca: 4\r\nRxTotal: 2210\r\n"
+                     "    RxUnicast: 2000\r\nRxErrFcs: 7\r\nDone\r\n"),
+}
+
+
 class FakeDocker:
     """Le conteneur du border router : omrconfig vit en memoire et se perd au redemarrage ; le reseau
     retient le prefixe de plus haute preference (le notre une fois impose, sinon celui d'une Google TV)."""
@@ -46,6 +71,8 @@ class FakeDocker:
         self.reads = []        # ces lectures ; `calls` ne note que les `br ...`
         self.script = {}       # commande -> sorties a rendre d'abord (ex. "" : commande ignoree)
         self.attempts = []     # commandes servies par `script`
+        self.link_reads = []   # lectures du lien avec le parent (locales, sans trafic radio)
+        self.link_out = dict(LINK_OUT)
 
     def _check(self, container):
         if container != self.name:
@@ -69,6 +96,9 @@ class FakeDocker:
         if cmd[1:] == ["router", "list"]:
             self.reads.append("router list")
             return 0, f"{self.router_ids}\r\nDone\r\n"
+        if " ".join(cmd[1:]) in LINK_OUT:       # seules lectures locales permises en plus des `br ...`
+            self.link_reads.append(" ".join(cmd[1:]))
+            return 0, self.link_out[" ".join(cmd[1:])]
         assert cmd[:2] == ["ot-ctl", "br"], cmd
         self.calls.append(" ".join(cmd[1:]))
         if self.old:
@@ -392,6 +422,7 @@ role_cfg = [json.loads(pl) for tp, pl, _ in c.sent if tp == "homeassistant/senso
 assert len(role_cfg) == 1 and role_cfg[0]["name"] == "Thread role" and "thread_role" in role_cfg[0]["value_template"]
 assert role_cfg[0]["json_attributes_topic"] == "thread_anchor/state" and "command_topic" not in role_cfg[0]
 assert state["thread_role"] == "child" and state["thread_routers"] == 3
+assert state["thread_link"]["parent"]["rloc16"] == "0x3400"        # 0.1.9 : le lien est dans l'etat
 # les champs lus par Mesh Guardian sont toujours la
 for key in ("wanted", "preference", "mode", "current", "current_preference", "enforced", "favored",
             "favored_preference", "local", "applied", "applied_at", "otbr_started_at", "error", "version", "updated"):
@@ -1461,6 +1492,104 @@ d0b = FakeDocker()
 a0b = ta.Anchor({}, docker=d0b, clock=d0b.clock)
 a0b.check()
 assert a0b.public()["thread_role"] == "child" and d0b.calls == ["br omrconfig", "br omrprefix"]
+
+# ---- 0.1.9 : lien du border router avec son parent (lectures locales, rien d'ecrit, pas de trafic radio)
+assert ta.parse_parent("Done\r\n") is None
+for fn in (ta.parse_parent, ta.parse_neighbors, ta.parse_router_rows):
+    try:
+        fn("Error 13: InvalidState\r\n")          # une erreur d'ot-ctl se leve, la lecture laisse cette partie de cote
+        raise AssertionError(fn)
+    except RuntimeError:
+        pass
+assert ta.parse_parent(LINK_OUT["parent"]) == {"rloc16": 0x3400, "ext": "5a6b7c8d9e0f1a2b", "lq_in": 3, "lq_out": 2, "age": 17}
+assert ta.parse_parent("Ext Address: 0x5A6B7C8D9E0F1A2B\r\nRloc: 0x3400\r\nDone\r\n")["ext"] == "5a6b7c8d9e0f1a2b"
+nb = ta.parse_neighbors(LINK_OUT["neighbor table"])
+assert [(n["rloc16"], n["role"], n["rssi_avg"], n["rssi_last"], n["age"]) for n in nb] == [
+    (0x3400, "R", -62, -64, 17), (0x5800, "R", -48, -47, 3), (0x9C00, "R", -71, -70, 9),
+    (0xB800, "R", -55, -58, 20), (0x6C0A, "C", -40, -41, 30)]
+assert ta.parse_neighbors("Done\r\n") == [] and ta.parse_neighbors("| a | b |\r\n| x | y |\r\n") == []
+assert ta.parse_router_rows(LINK_OUT["router table"]) == {0x3400: {"lq_in": 3, "lq_out": 2, "path_cost": 0},
+                                                          0x5800: {"lq_in": 3, "lq_out": 3, "path_cost": 0}}
+assert ta.parse_counters(LINK_OUT["counters mle"], ta.MLE_KEYS) == {
+    "role_detached": 4, "role_child": 5, "role_router": 0, "role_leader": 0, "attach_attempts": 6,
+    "partition_id_changes": 1, "better_partition_attach_attempts": 0, "parent_changes": 3}
+assert ta.parse_counters(LINK_OUT["counters mac"], ta.MAC_KEYS) == {     # les lignes en retrait (TxUnicast…) ne comptent pas
+    "tx_total": 1034, "tx_retry": 21, "tx_err_cca": 4, "rx_total": 2210, "rx_err_fcs": 7}
+assert ta.parse_counters("Done\r\n", ta.MAC_KEYS) == {}
+LINK_CMDS = ["rloc16", "parent", "neighbor table", "router table", "counters mle", "counters mac"]
+dd = FakeDocker()
+aa = ta.Anchor({"omr_prefix": P}, docker=dd, clock=dd.clock)
+aa.check()
+lk = aa.public()["thread_link"]
+assert dd.link_reads == LINK_CMDS, dd.link_reads
+assert not [c for c in dd.calls if c.split()[0] != "br"]                      # aucune ecriture, que des `br ...`
+assert lk["rloc16"] == "0x6c05" and lk["routers_heard"] == 4 and datetime.fromisoformat(lk["read_at"]).tzinfo
+assert lk["parent"] == {"rloc16": "0x3400", "ext": "5a6b7c8d9e0f1a2b", "lq_in": 3, "lq_out": 2, "quality": "medium",
+                        "age": 17, "rssi_avg": -62, "rssi_last": -64}
+# les 3 meilleurs routeurs entendus, par RSSI moyen ; l'enfant (0x6c0a) n'en est pas un
+assert [(b["rloc16"], b["rssi_avg"], b["is_parent"]) for b in lk["best"]] == [
+    ("0x5800", -48, False), ("0xb800", -55, False), ("0x3400", -62, True)]
+assert lk["best"][0]["lq_in"] == 3 and lk["best"][0]["lq_out"] == 3 and lk["best"][1]["lq_in"] is None
+assert lk["counters"]["mle"]["parent_changes"] == 3 and lk["counters"]["mac"]["tx_retry"] == 21
+assert json.dumps(aa.public())            # publiable en JSON
+# au plus une lecture par minute
+dd.now += 30
+aa.check()
+assert dd.link_reads == LINK_CMDS
+dd.now += 31
+aa.check()
+assert dd.link_reads == LINK_CMDS * 2
+# les valeurs qui bougent a chaque lecture (age, compteurs) ne font pas « changer » l'etat ; le parent, si
+dd.link_out["counters mac"] = dd.link_out["counters mac"].replace("TxRetry: 21", "TxRetry: 40")
+dd.link_out["parent"] = dd.link_out["parent"].replace("Age: 17", "Age: 40")
+dd.now += 61
+assert not aa.check() and aa.public()["thread_link"]["counters"]["mac"]["tx_retry"] == 40
+dd.link_out["parent"] = dd.link_out["parent"].replace("Rloc: 3400", "Rloc: 5800")
+dd.now += 61
+assert aa.check() and aa.public()["thread_link"]["parent"]["rloc16"] == "0x5800"
+assert ("parent_changed", "Parent of the border router changed: 0x3400 -> 0x5800") in aa.events
+# lien faible : la qualite se lit sur le plus mauvais des deux sens
+dd.link_out["parent"] = dd.link_out["parent"].replace("Link Quality Out: 2", "Link Quality Out: 1")
+dd.now += 61
+aa.check()
+assert aa.public()["thread_link"]["parent"]["quality"] == "weak"
+# une partie illisible est laissee de cote, les autres sont lues
+dd.link_out["parent"] = "Error 13: InvalidState\r\n"
+dd.link_out["counters mle"] = "Error 35: InvalidCommand\r\n"
+dd.now += 61
+aa.check()
+lk = aa.public()["thread_link"]
+assert lk["parent"] is None and lk["counters"] == {"mac": lk["counters"]["mac"]} and len(lk["best"]) == 3
+# commande ignoree (sorties vides) : la derniere lecture reste, pas d'erreur
+aa.sleep = lambda s: None
+dd.script["counters mle"] = ["", "", ""]
+dd.now += 61
+aa.check()
+assert aa.public()["thread_link"] == lk and aa.public()["error"] is None
+# routeur : pas de `parent` (il n'en a pas) ; sans reseau (detached) : lu aussi ; desactive : rien
+dd = FakeDocker()
+aa = ta.Anchor({"omr_prefix": P}, docker=dd, clock=dd.clock)
+dd.role = "router"
+aa.check()
+assert "parent" not in dd.link_reads and aa.public()["thread_link"]["parent"] is None and aa.public()["thread_link"]["best"]
+dd.role = "disabled"
+dd.link_reads.clear()
+dd.now += 61
+aa.check()
+assert aa.public()["thread_link"] is None and dd.link_reads == []
+# le role a change : lecture tout de suite, sans attendre la minute
+dd.role = "child"
+dd.now += 1
+aa.check()
+assert dd.link_reads == LINK_CMDS and aa.public()["thread_link"]["parent"]["rloc16"] == "0x3400"
+# border router arrete : plus de lien
+dd.running = False
+dd.now += 61
+aa.check()
+assert aa.public()["thread_link"] is None and aa.public()["error"]
+# anciens champs toujours la
+for key in ("thread_role", "thread_routers", "followed", "anchored_since"):
+    assert key in aa.public(), key
 
 # par MQTT : demande sur thread_anchor/diag/request, reponse non retenue
 b2 = Broker()

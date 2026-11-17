@@ -34,7 +34,7 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
-VERSION = "0.1.8"
+VERSION = "0.1.9"
 LOG = logging.getLogger("thread_anchor")
 STATE_TOPIC = "thread_anchor/state"
 DISCOVERY = "homeassistant"
@@ -53,7 +53,8 @@ DIAG_GAP_S = 10          # at most one diagnostic of the same node this often
 DIAG_SCAN_TIMEOUT_S = 90   # budget of the meshdiag step (routers asked one by one)
 DIAG_SCAN_GAP_S = 300      # at most one meshdiag scan of the network this often
 DIAG_RESUME_S = 1800       # a scan that stopped before the end is carried on by the next ones for this long
-OTCTL_TRIES = 3            # an empty answer of ot-ctl is a command ignored (another one is pending): asked again
+LINK_S = 60                # the link of the border router with its parent is read at most this often
+OTCTL_TRIES = 3           # an empty answer of ot-ctl is a command ignored (another one is pending): asked again
 OTCTL_RETRY_S = 3          # s between two tries
 OTCTL_LOCK_S = 60          # s a command waits for the one in progress
 ROLES = ("disabled", "detached", "child", "router", "leader")
@@ -95,6 +96,7 @@ TEXTS = {
             "Préfixe OMR {p} (préférence {prf}) en place sur le border router",
         "The network favors {p} ({prf})": "Le réseau retient {p} ({prf})",
         "Border router restarted: OMR prefix checked again": "Border router redémarré : préfixe OMR revérifié",
+        "Parent of the border router changed: {a} -> {b}": "Parent du border router changé : {a} -> {b}",
         "Border router unreachable: {err}": "Border router injoignable : {err}",
         "This border router does not know `br omrconfig` (OpenThread too old): {err}":
             "Ce border router ne connaît pas `br omrconfig` (OpenThread trop ancien) : {err}",
@@ -290,6 +292,99 @@ def parse_router_list(text):
     return ids
 
 
+LQ_WORDS = {0: "unknown", 1: "weak", 2: "medium", 3: "good"}     # Thread link quality, 0 to 3
+MLE_KEYS = ("role_detached", "role_child", "role_router", "role_leader", "attach_attempts",
+            "partition_id_changes", "better_partition_attach_attempts", "parent_changes")
+MAC_KEYS = ("tx_total", "tx_retry", "tx_err_cca", "tx_err_abort", "tx_err_busy_channel", "rx_total",
+            "rx_err_no_frame", "rx_err_unknown_neighbor", "rx_err_sec", "rx_err_fcs")
+
+
+def _int(value):
+    try:
+        return int(str(value).strip())
+    except ValueError:
+        return None
+
+
+def parse_parent(text):
+    """`parent` -> {"rloc16", "ext", "lq_in", "lq_out", "age"} of the parent of a child, or None when
+    it lists none. Lines look like `Ext Addr: 5a6b7c8d9e0f1a2b`, `Rloc: 3400`, `Link Quality In: 3`."""
+    out = {}
+    for ln in _lines(text):
+        key, _, val = ln.partition(":")
+        key, val = re.sub(r"[^a-z]", "", key.lower()), val.strip()
+        try:
+            if key in ("extaddr", "extaddress"):
+                out["ext"] = parse_ext(val)
+            elif key == "rloc":
+                out["rloc16"] = parse_rloc16(val)
+            elif key == "linkqualityin":
+                out["lq_in"] = _int(val)
+            elif key == "linkqualityout":
+                out["lq_out"] = _int(val)
+            elif key == "age":
+                out["age"] = _int(val)
+        except ValueError:
+            continue
+    return {"rloc16": out.get("rloc16"), "ext": out.get("ext"), "lq_in": out.get("lq_in"),
+            "lq_out": out.get("lq_out"), "age": out.get("age")} if out.get("rloc16") is not None else None
+
+
+def parse_rows(text):
+    """A table drawn with `|` columns (`neighbor table`, `router table`) -> a dict per row, by column name."""
+    rows, cols = [], None
+    for ln in _lines(text):
+        if not ln.startswith("|"):
+            continue
+        cells = [c.strip() for c in ln.strip("|").split("|")]
+        if "RLOC16" in cells:
+            cols = cells
+        elif cols is not None and len(cells) == len(cols):
+            rows.append(dict(zip(cols, cells)))
+    return rows
+
+
+def parse_neighbors(text):
+    """`neighbor table` -> [{"rloc16", "ext", "role" (R router, C child), "age", "rssi_avg", "rssi_last"}].
+    Read from the border router: no radio traffic."""
+    out = []
+    for row in parse_rows(text):
+        try:
+            out.append({"rloc16": parse_rloc16(row["RLOC16"]), "ext": parse_ext(row["Extended MAC"]),
+                        "role": row.get("Role", "").strip().upper()[:1] or None, "age": _int(row.get("Age")),
+                        "rssi_avg": _int(row.get("Avg RSSI")), "rssi_last": _int(row.get("Last RSSI"))})
+        except (KeyError, ValueError):
+            continue
+    return out
+
+
+def parse_router_rows(text):
+    """`router table` -> {router rloc16: {"lq_in", "lq_out", "path_cost"}}."""
+    out = {}
+    for row in parse_rows(text):
+        try:
+            out[parse_rloc16(row["RLOC16"])] = {"lq_in": _int(row.get("LQ In")), "lq_out": _int(row.get("LQ Out")),
+                                                "path_cost": _int(row.get("Path Cost"))}
+        except (KeyError, ValueError):
+            continue
+    return out
+
+
+def parse_counters(text, keys):
+    """`counters mle` or `counters mac` -> {snake_case name: int} of the top-level lines (`TxTotal: 12`,
+    `Parent Changes: 3`) named in `keys`; the lines under a section (indented) are left out."""
+    out = {}
+    for raw in (text or "").splitlines():
+        if not raw.strip() or raw[:1] in " \t":
+            continue
+        key, _, val = raw.partition(":")
+        key = re.sub(r"[\s_]+", "_", re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", key.strip())).lower()
+        n = _int(val)
+        if key in keys and n is not None:
+            out[key] = n
+    return out
+
+
 def parse_omrprefix(text):
     """`br omrprefix` -> {"local": prefix|None, "favored": prefix|None, "favored_preference": prf|None}."""
     out = {"local": None, "favored": None, "favored_preference": None}
@@ -339,6 +434,7 @@ class Anchor:
         self.docker, self.clock = docker or Docker(), clock
         self.gate, self.sleep = Gate(), time.sleep   # every ot-ctl of the add-on goes through `otctl`
         self.role = self.routers = None              # Thread role of the border router, routers it sees
+        self.link, self.link_at, self.link_role = None, 0.0, None   # its link with the parent and neighbors
         self.mode = self.current = self.current_prf = self.error = self.applied_at = None
         self.favored = self.favored_prf = self.local = None
         self.started_at = None
@@ -463,7 +559,7 @@ class Anchor:
 
     def check(self, reason=None):
         """One reading (and the custom prefix set again when needed); True when the state changed."""
-        before = json.dumps(self.public(), sort_keys=True)
+        before = self._signature()
         self.last_check = self.clock()
         was_ok, was_favored = self.enforced(), (self.favored, self.favored_prf)
         if reason == "restart":
@@ -497,6 +593,7 @@ class Anchor:
                 LOG.debug("omrprefix: %s", err)
                 self.favored = self.favored_prf = self.local = None
             self._read_role()
+            self._read_link()
             if self.favored and (self.favored, self.favored_prf) != was_favored:
                 self.emit("favored", t("The network favors {p} ({prf})", p=self.favored, prf=self.favored_prf or "?"))
             if self.followed():
@@ -524,7 +621,18 @@ class Anchor:
                 self._fail(t("This border router does not know `br omrconfig` (OpenThread too old): {err}", err=err))
             else:
                 self._fail(t("Border router unreachable: {err}", err=err))
-        return json.dumps(self.public(), sort_keys=True) != before
+        return self._signature() != before
+
+    def _signature(self):
+        """What counts as a change of the state: all of it, except the values of the link that move at
+        every reading (ages, RSSI, counters), which go out with the next change or the heartbeat."""
+        pub = self.public()
+        link = pub.pop("thread_link")
+        if link:
+            parent = link.get("parent") or {}
+            pub["link"] = [link.get("rloc16"), parent.get("rloc16"), parent.get("ext"), parent.get("quality"),
+                           [b["rloc16"] for b in link.get("best", [])]]
+        return json.dumps(pub, sort_keys=True)
 
     def _read_role(self):
         """Thread role of the border router and number of routers it sees: two reads, no radio
@@ -540,11 +648,70 @@ class Anchor:
             LOG.debug("role: %s", err)
             self.role = self.routers = None
 
+    def _read_link(self):
+        """The link of the border router with its parent and its neighbors, read from the border router
+        itself (`rloc16`, `parent`, `neighbor table`, `router table`, `counters mle`, `counters mac`):
+        local reads, no radio traffic, nothing written. At most one reading every LINK_S. Each part that
+        cannot be read is left out (None); a command nobody answered keeps what was read before."""
+        now = self.clock()
+        if self.role in (None, "disabled"):
+            self.link = None
+            return
+        if self.link is not None and self.link_role == self.role and now - self.link_at < LINK_S:
+            return
+        link = {"rloc16": None, "parent": None, "routers_heard": None, "best": [], "counters": {}}
+
+        def read(cmd, parser, *extra):
+            try:
+                return parser(self.otctl(*cmd), *extra)
+            except OtctlNoAnswer:
+                raise
+            except Exception as err:  # noqa: BLE001 - this part is left out, the others are still read
+                LOG.debug("link %s: %s", " ".join(cmd), err)
+                return None
+
+        try:
+            own = read(("rloc16",), lambda text: parse_rloc16(_lines(text)[0]))
+            link["rloc16"] = f"0x{own:04x}" if own is not None else None
+            parent = read(("parent",), parse_parent) if self.role == "child" else None
+            neighbors = read(("neighbor", "table"), parse_neighbors)
+            routers = read(("router", "table"), parse_router_rows)
+            mle = read(("counters", "mle"), parse_counters, MLE_KEYS)
+            mac = read(("counters", "mac"), parse_counters, MAC_KEYS)
+        except OtctlNoAnswer:
+            LOG.debug("link: no answer, the last reading is kept")
+            return
+        by_rloc = {n["rloc16"]: n for n in neighbors or []}
+        if parent:
+            seen = by_rloc.get(parent["rloc16"], {})
+            lq = [q for q in (parent["lq_in"], parent["lq_out"]) if q is not None]
+            link["parent"] = {"rloc16": f"0x{parent['rloc16']:04x}", "ext": parent["ext"],
+                              "lq_in": parent["lq_in"], "lq_out": parent["lq_out"],
+                              "quality": LQ_WORDS.get(min(lq)) if lq else None, "age": parent["age"],
+                              "rssi_avg": seen.get("rssi_avg"), "rssi_last": seen.get("rssi_last")}
+        if neighbors is not None:
+            heard = [n for n in neighbors if n["role"] == "R"]
+            link["routers_heard"] = len(heard)
+            heard.sort(key=lambda n: (n["rssi_avg"] is None, -(n["rssi_avg"] or 0), n["rloc16"]))
+            for n in heard[:3]:
+                row = (routers or {}).get(n["rloc16"], {})
+                link["best"].append({"rloc16": f"0x{n['rloc16']:04x}", "ext": n["ext"], "rssi_avg": n["rssi_avg"],
+                                     "rssi_last": n["rssi_last"], "age": n["age"], "lq_in": row.get("lq_in"),
+                                     "lq_out": row.get("lq_out"), "path_cost": row.get("path_cost"),
+                                     "is_parent": bool(parent) and n["rloc16"] == parent["rloc16"]})
+        link["counters"] = {k: v for k, v in (("mle", mle), ("mac", mac)) if v}
+        link["read_at"] = self._now_iso()
+        before = ((self.link or {}).get("parent") or {}).get("rloc16")
+        after = (link["parent"] or {}).get("rloc16")
+        if before and after and before != after:
+            self.emit("parent_changed", t("Parent of the border router changed: {a} -> {b}", a=before, b=after))
+        self.link, self.link_at, self.link_role = link, now, self.role
+
     def _fail(self, txt, keep=False):
         if not keep:
             self.mode = self.current = self.current_prf = None
             self.favored = self.favored_prf = self.local = None
-            self.role = self.routers = None
+            self.role = self.routers = self.link = None
         if txt != self.error:
             self.emit("error", txt, logging.WARNING)
         self.error = txt
@@ -555,7 +722,7 @@ class Anchor:
                 "favored": self.favored, "favored_preference": self.favored_prf, "local": self.local,
                 "applied": self.applied, "applied_at": self.applied_at, "otbr_started_at": self.started_at,
                 "error": self.error, "anchored_since": self.anchored_since, "followed": self.followed(),
-                "thread_role": self.role, "thread_routers": self.routers}
+                "thread_role": self.role, "thread_routers": self.routers, "thread_link": self.link}
 
 
 # ---------------------------------------------------------------- diagnostic of one node (read only)
