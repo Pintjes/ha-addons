@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.38.0] - 2026-11-17
+
+### Added
+
+- **What a node unknown to the Matter Server says about itself**: for a node announced on the fabric but unknown to the Matter Server (removed without a factory reset?), its announcement is kept and shown under the note of the page, and given by `/api/table` (`unknown_nodes`): node id, instance name, host name (often the extended address of a Thread device), IPv6 addresses, port, TXT, first and last seen since the start of the add-on. Read from the mDNS listening only: no radio traffic.
+
 ## [2.37.1] - 2026-11-17
 
 ### Fixed

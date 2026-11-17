@@ -79,7 +79,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.37.1"
+VERSION = "2.38.0"
 OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
 OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
@@ -234,6 +234,33 @@ def _int16(text):
         return int(text, 16)
     except ValueError:
         return None
+
+
+def txt_of(props):
+    """TXT record of an announcement (zeroconf: bytes -> bytes or None) as plain text, short values only."""
+    out = {}
+    for k, v in (props or {}).items():
+        try:
+            key = k.decode() if isinstance(k, bytes) else str(k)
+            val = v.decode() if isinstance(v, bytes) else ("" if v is None else str(v))
+        except UnicodeDecodeError:
+            continue
+        if key and len(val) <= 64:
+            out[key] = val
+    return out
+
+
+def unknown_records(matter, ghosts):
+    """The nodes announced on the fabric but unknown to the Matter Server, with what their
+    announcement says: node id, instance, host name, addresses, port, TXT, first and last seen
+    (since the start of the add-on). Read from the mDNS listening only: no radio traffic."""
+    out = []
+    for k in ghosts:
+        n = matter.get(k) or {}
+        out.append({"id": "0x" + (k.lstrip("0") or "0"), "node": k, "instance": f"{FABRIC}-{k}" if FABRIC else None,
+                    "host": n.get("host"), "addresses": list(n.get("addrs") or []), "port": n.get("port"),
+                    "txt": dict(n.get("txt") or {}), "first": n.get("first"), "last": n.get("last")})
+    return out
 
 
 def fmt_duration(seconds):
@@ -1079,6 +1106,14 @@ class Watch:
             n["seen"] = True
             n["fails"] = 0
             n["addrs"] = addrs
+            # what the announcement says, kept to identify a node unknown to the Matter Server
+            # (host name: often the extended address of a Thread device), first and last seen since start
+            if info is not None:
+                n["host"] = str(getattr(info, "server", "") or "").rstrip(".") or None
+                n["port"] = getattr(info, "port", None)
+                n["txt"] = txt_of(getattr(info, "properties", None))
+            n.setdefault("first", now)
+            n["last"] = now
             before = n.get("prefix")
             n["prefix"] = prefixes[0] if prefixes else before
             if n["prefix"] != before:
@@ -1128,6 +1163,11 @@ class Watch:
             self.zc.unregister_service(info)
         except Exception as err:  # noqa: BLE001
             LOG.debug("withdraw announcement of %s: %s", node, err)
+
+    def unknown_nodes(self):
+        """Nodes announced on the fabric but unknown to the Matter Server, with their announcement."""
+        with self.lock:
+            return unknown_records(self.matter, list(getattr(self, "ghosts", []) or []))
 
     def node_name(self, node):
         """"Name (area)" of the node according to Home Assistant, or None."""

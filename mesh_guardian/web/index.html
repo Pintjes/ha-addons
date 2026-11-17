@@ -350,6 +350,7 @@ const T = {
     anc_short_ok:"OMR forced: On", anc_short_out:"OMR forced: Off", anc_short_prop:"OMR prefix: one to fix is proposed",
     quality:"Network quality · last {n} min", q_lab:["poor", "to watch", "good", "excellent"], q_24h:"24h: {v} %", part_tip:"Now {v} % · 24h {v24} % · weight {n} %", q_scale:"≥ 95 excellent · 90–95 good · 80–90 to watch",
     q_capped:"capped: partitioned network", q_wait:"The score starts after a few minutes.", q_parts:{availability:"Availability", radio:"Radio", outages:"Outages", backbone:"Backbone", partition:"Partition"}, weight:"Weight {n} %",
+    unk_host:"host {h}", unk_port:"port {p}", unk_addr:"addresses {a}", unk_seen:"seen from {f} to {l}",
     todo:"Good to know ({n})", new:"new", todo_none:"Nothing to report", w_down:"Unavailable", w_warn:"Action advised", w_info:"Good to know", seen:"Seen", seen_tip:"Hide this note (it comes back if it changes)", w_net:"Network",
     
     storm:"Thread storm: pings spaced out, sweep paused.",
@@ -448,6 +449,7 @@ const T = {
     anc_short_ok:"OMR forcé : On", anc_short_out:"OMR forcé : Off", anc_short_prop:"Préfixe OMR : un préfixe à imposer est proposé",
     quality:"Qualité du réseau · dernières {n} min", q_lab:["mauvais", "à surveiller", "bon", "excellent"], q_24h:"24 h : {v} %", part_tip:"Actuel {v} % · 24 h {v24} % · poids {n} %", q_scale:"≥ 95 excellent · 90–95 bon · 80–90 à surveiller",
     q_capped:"plafonnée : réseau partitionné", q_wait:"La note démarre après quelques minutes.", q_parts:{availability:"Disponibilité", radio:"Radio", outages:"Coupures", backbone:"Ossature", partition:"Partition"}, weight:"Poids {n} %",
+    unk_host:"hôte {h}", unk_port:"port {p}", unk_addr:"adresses {a}", unk_seen:"vue du {f} au {l}",
     todo:"À savoir ({n})", new:"nouveau", todo_none:"Rien à signaler", w_down:"Indisponible", w_warn:"Action conseillée", w_info:"À savoir", seen:"Vu", seen_tip:"Masquer cette note (elle revient si elle change)", w_net:"Réseau",
     
     storm:"Tempête Thread : pings espacés, balayage suspendu.",
@@ -771,6 +773,19 @@ document.addEventListener("click", async e => {
   load(true);
 }, true);
 
+// a node announced on the fabric but unknown to the Matter Server: what its announcement says, under
+// the note that names it (host name: often the extended address of a Thread device; read from the
+// mDNS listening, no radio traffic)
+function unknownInfo(txt) {
+  const u = (D.unknown_nodes || []).filter(x => txt.includes(x.id));
+  if (!u.length) return "";
+  const when = s => s ? new Date(s * 1000).toLocaleString(LANG, {dateStyle: "short", timeStyle: "short"}) : "—";
+  return u.map(x => `<small class="mut" style="display:block">${esc([x.id,
+    x.host ? F("unk_host", {h: x.host}) : null, x.port ? F("unk_port", {p: x.port}) : null,
+    (x.addresses || []).length ? F("unk_addr", {a: x.addresses.join(", ")}) : null,
+    Object.keys(x.txt || {}).length ? "TXT " + Object.entries(x.txt).map(([k, v]) => `${k}=${v}`).join(" ") : null,
+    F("unk_seen", {f: when(x.first), l: when(x.last)})].filter(Boolean).join(" · "))}</small>`).join("");
+}
 // same advice for several nodes (e.g. "add a router near Outdoor"): one card listing the nodes
 function todoGroups(issues) {
   const groups = [];
@@ -811,7 +826,7 @@ function renderTodo() {
   net.sort((a, b) => (a[0] === "info") - (b[0] === "info"));
   // notes can be hidden ("seen"), the orange ones too; a note that changes comes back
   const infoCards = net.filter(x => x[0] === "info" && !seenSet.has(x[1])).map(([k, txt]) => `<div class="card issue info"><span class="ic">${IC.info}</span>
-      <span style="flex:1"><span class="what" style="display:block">${L("w_info")}</span><span>${esc(txt)}</span></span>
+      <span style="flex:1"><span class="what" style="display:block">${L("w_info")}</span><span>${esc(txt)}</span>${unknownInfo(txt)}</span>
       ${seenBtn(txt)}</div>`).join("");
   $("#todo").innerHTML = fresh.map(x => `<div class="card issue info" data-id="${esc(x.id)}"><span class="ic">${IC.info}</span>
       <span style="flex:1"><span class="what">${L("pc_new_what")}</span><b><button class="open" data-id="${esc(x.id)}">${esc(x.name)}</button> <span class="mut" style="font-weight:400">${x.area ? "· " + esc(x.area) : ""}</span></b><span>${esc(L("pc_new"))}</span></span>${seenBtn("pcnew:" + x.id)}</div>`).join("") +

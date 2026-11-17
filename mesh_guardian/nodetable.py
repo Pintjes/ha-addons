@@ -1037,6 +1037,8 @@ class NodeTable:
         out.update({"time": time.time(), "lang": lang(), "thresholds": THRESHOLDS,
                     "advice_on": getattr(self.w, "advice_on", True),
                     "live": self.live.connected, "live_since": self.live.since,
+                    # announced on the fabric but unknown to the Matter Server: what their announcement says
+                    "unknown_nodes": self.w.unknown_nodes() if hasattr(self.w, "unknown_nodes") else [],
                     "reading": self.quality.reading() if getattr(self, "quality", None) else None})
         return out
 
