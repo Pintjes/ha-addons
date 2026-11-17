@@ -54,14 +54,14 @@ ns = {"LOG": logging.getLogger("x"), "time": time, "t": t, "load_json": load_jso
       "PREFIXES_FILE": os.path.join(TMP, "prefixes.json")}
 exec(compile(ast.fix_missing_locations(mod), "watcher_extrait", "exec"), ns)
 
-OLD, NEW = "fdc0:6359:d5be:1::/64", "fdd7:20e4:8187:1::/64"
+OLD, NEW = "fd00:cccc:dddd:1::/64", "fd00:aaaa:bbbb:1::/64"
 
 
 class W(ns["W"]):
     def __init__(self):
         self.lock, self.events, self.healer, self.dirty = threading.RLock(), [], None, False
         self.br = {"salon": {"online": True, "omr": NEW}, "cuisine": {"online": True, "omr": NEW}}
-        self.matter = {"000000000000005A": {"online": True, "prefix": OLD},
+        self.matter = {"000000000000004D": {"online": True, "prefix": OLD},
                        "0000000000000036": {"online": True, "prefix": NEW},
                        "00000000000000AA": {"online": True, "prefix": "fd59:30d4:9210:dc15::/64"}}   # Wi-Fi
         self.omr_left, self.omr_changes, self.usb_links = {}, [], None
@@ -74,34 +74,34 @@ class W(ns["W"]):
         return True
 
     def node_disp(self, node):
-        return "Prise Lave-linge Miele [0x5A]"
+        return "Prise Exemple [0x4D]"
 
     def node_name(self, node):
-        return "Prise Lave-linge Miele (Buanderie)"
+        return "Prise Exemple (Cave)"
 
 
 w = W()
 at = time.mktime(time.strptime("2026-11-17 06:17:38", "%Y-%m-%d %H:%M:%S"))
-w.omr_left[OLD] = (at, "Google TV Salon")
+w.omr_left[OLD] = (at, "Routeur tiers A")
 # la node restee sur l'ancien prefixe est reconnue ; celle qui a suivi et la node Wi-Fi non
-st = w.stale_prefix("5A")
-assert st == {"prefix": OLD, "br": "Google TV Salon", "t": at, "at": "06:17"}, st
+st = w.stale_prefix("4D")
+assert st == {"prefix": OLD, "br": "Routeur tiers A", "t": at, "at": "06:17"}, st
 assert w.stale_prefix("36") is None and w.stale_prefix("AA") is None and w.stale_prefix("FF") is None
 # perte de l'annonce mDNS : l'evenement dit la cause
-w.matter_gone("000000000000005A", "removed")
+w.matter_gone("000000000000004D", "removed")
 kinds = [k for k, _ in w.events]
 assert kinds == ["matter_offline", "node_stale_prefix"], kinds
-assert "fdc0:6359:d5be:1::/64" in w.events[1][1] and "Google TV Salon" in w.events[1][1] and "06:17" in w.events[1][1]
+assert "fd00:cccc:dddd:1::/64" in w.events[1][1] and "Routeur tiers A" in w.events[1][1] and "06:17" in w.events[1][1]
 # si un border router publie de nouveau l'ancien prefixe, ce n'est plus la cause
 w.br["salon"]["omr"] = OLD
-assert w.stale_prefix("5A") is None
+assert w.stale_prefix("4D") is None
 w.br["salon"]["omr"] = NEW
 # conserve entre deux demarrages
 w._save_prefixes()
 w2 = W()
-w2.matter["000000000000005A"]["prefix"] = None
+w2.matter["000000000000004D"]["prefix"] = None
 w2._load_prefixes()
-assert w2.stale_prefix("5A")["br"] == "Google TV Salon"
+assert w2.stale_prefix("4D")["br"] == "Routeur tiers A"
 
 # changements de prefixe : une rafale de 30 min compte pour un
 now = time.time()
@@ -109,13 +109,13 @@ w.omr_changes = [now - 20 * 3600 + i * 60 for i in range(13)] + [now - 11 * 3600
 assert w.omr_episodes_24h() == 3, w.omr_episodes_24h()
 
 # conseil d'une node indisponible : la cause, pas « verifier l'alimentation »
-row = {"id": "0x5A", "name": "Prise Lave-linge Miele", "area": "Buanderie", "network": "thread", "available": False,
+row = {"id": "0x4D", "name": "Prise Exemple", "area": "Cave", "network": "thread", "available": False,
        "since": now - 3600, "stale_prefix": st}
-other = {"id": "0x36", "name": "Prise Chauffe Eau", "area": "Buanderie", "network": "thread", "available": True}
+other = {"id": "0x36", "name": "Prise Voisine", "area": "Cave", "network": "thread", "available": True}
 ctx = {"now": now, "tried": {}, "forced": {}, "weak_since": {}, "unstable": {}, "history": lambda rid: [],
        "gave_up": set(), "ghosts": [], "omr_changes": 3}
 notes = advice.advise([row, other], [], ctx)
-assert row["advice"] == t("Stayed on the old address prefix after {br} changed it at {at}", br="Google TV Salon", at="06:17")
+assert row["advice"] == t("Stayed on the old address prefix after {br} changed it at {at}", br="Routeur tiers A", at="06:17")
 assert OLD in row["advice_detail"]
 assert any(lvl == "warn" and "3" in txt for lvl, txt in notes), notes
 ctx["omr_changes"] = 1
@@ -128,28 +128,28 @@ r.recovering, r.busy, r.results = set(), threading.Lock(), {}
 
 class H:
     lock = threading.Lock()
-    nodes = {"000000000000005A": {"name": "Prise Lave-linge Miele", "area": "Buanderie"}}
+    nodes = {"000000000000004D": {"name": "Prise Exemple", "area": "Cave"}}
 
 
 r.h, r.w, r.live, r.table = H(), w, None, None
 r._cached = lambda nid: {"0/49/1": [{"networkID": "AAA=", "connected": True}], "0/49/65529": [reattach.CONNECT_NETWORK]}
-r.h.matter_command = lambda cmd, args, timeout=0: {"fdc0:6359:d5be:1:e83c:35e9:edb8:ab71": False}
+r.h.matter_command = lambda cmd, args, timeout=0: {"fd00:cccc:dddd:1:e:f:1:2": False}
 
 
 class Live:
     def heard_by(self, ext):
-        assert ext == 0xCA7A34808B66E461
+        assert ext == 0x1A2B3C4D5E6F7081
         return [("0000000000000031", 42.0, -69)]
 
 
-H.nodes["0000000000000031"] = {"name": "Spot Hall d'entrée 6"}
+H.nodes["0000000000000031"] = {"name": "Spot Entree 2"}
 r.live = Live()
 import base64  # noqa: E402
 
 r._cached = lambda nid: {"0/49/1": [{"networkID": "AAA=", "connected": True}], "0/49/65529": [reattach.CONNECT_NETWORK],
-                         "0/51/0": [{"7": 4, "4": base64.b64encode(bytes.fromhex("ca7a34808b66e461")).decode()}]}
+                         "0/51/0": [{"7": 4, "4": base64.b64encode(bytes.fromhex("1a2b3c4d5e6f7081")).decode()}]}
 w.events.clear()
-res = r.recover_node("000000000000005A")
+res = r.recover_node("000000000000004D")
 assert res == {"result": "pending"}, res
 deadline = time.time() + 5
 while r.recovering and time.time() < deadline:
@@ -157,18 +157,18 @@ while r.recovering and time.time() < deadline:
 assert not r.busy.locked() and not r.recovering
 assert [k for k, _ in w.events] == ["recover_node", "recover_alive", "recover_result"], w.events
 alive_txt = w.events[1][1]
-assert "Spot Hall d'entrée 6 (-69 dBm)" in alive_txt and "42 s" in alive_txt and "fdc0:" in alive_txt, alive_txt
-assert r.results["000000000000005A"]["result"] == "stale" and OLD in r.results["000000000000005A"]["text"]
+assert "Spot Entree 2 (-69 dBm)" in alive_txt and "42 s" in alive_txt and "fd00:cccc:" in alive_txt, alive_txt
+assert r.results["000000000000004D"]["result"] == "stale" and OLD in r.results["000000000000004D"]["text"]
 
 # il repond au ping mais ne s'annonce plus : annoncee a sa place (essai), puis retiree
 w.br["salon"]["omr"], w.br["cuisine"]["omr"] = OLD, OLD   # plus d'ancien prefixe : pas « stale »
-w.matter["000000000000005A"]["online"] = False
+w.matter["000000000000004D"]["online"] = False
 calls = []
 w.proxy_announce = lambda nid, ips: calls.append(("announce", nid, ips)) or True
 w.proxy_withdraw = lambda nid: calls.append(("withdraw", nid))
 w.stop = threading.Event()
 reattach.PROXY_SETTLE_S = 0
-r.h.matter_command = lambda cmd, args, timeout=0: {"fdc0::1": True}
+r.h.matter_command = lambda cmd, args, timeout=0: {"fd00:cccc::1": True}
 sent = []
 
 
@@ -179,13 +179,13 @@ def command(node_id, cluster, name, payload, timeout=90):
 
 r._command = command
 w.events.clear()
-assert r.recover_node("000000000000005A") == {"result": "pending"}
+assert r.recover_node("000000000000004D") == {"result": "pending"}
 deadline = time.time() + 5
 while r.recovering and time.time() < deadline:
     time.sleep(0.05)
-assert calls == [("announce", "000000000000005A", ["fdc0::1"]), ("withdraw", "000000000000005A")], calls
+assert calls == [("announce", "000000000000004D", ["fd00:cccc::1"]), ("withdraw", "000000000000004D")], calls
 assert sent == ["ArmFailSafe"] and "recover_proxy" in [k for k, _ in w.events]
-assert r.results["000000000000005A"]["result"] == "unreachable"
+assert r.results["000000000000004D"]["result"] == "unreachable"
 
 # lien USB/IP coupe (add-on USB/IP Link) : note reseau rouge avec la raison ; rien quand il est attache
 ctx = {"now": now, "tried": {}, "forced": {}, "weak_since": {}, "unstable": {}, "history": lambda rid: [],
@@ -212,7 +212,7 @@ wu2.usb_link(st_off)   # premier etat deja coupe : dit tout de suite
 assert [k for k, _ in wu2.events] == ["usb_link_lost"]
 
 # prefixe OMR impose par USB/IP Link (cle "omr" de usbip_link/state)
-P = "fdd7:20e4:8187:1::/64"
+P = "fd00:aaaa:bbbb:1::/64"
 ok = {"wanted": P, "preference": "high", "mode": "custom", "current": P, "enforced": True, "error": None}
 gap = dict(ok, mode="auto", current=None, enforced=False)              # creux sans erreur (OTBR qui redemarre)
 err = dict(gap, mode=None, error="404 No such container")              # OTBR arrete

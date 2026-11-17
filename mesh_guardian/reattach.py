@@ -769,7 +769,7 @@ class Reattach:
             # is stuck. Any other error (busy, too soon, another node at this RLOC16…) proves nothing
             # the hearing must be a reliable one: a child of a parent that answers (a parent drops a
             # lost child), or a router neighbor heard in the last FROZEN_ROUTER_S. A router entry
-            # minutes old can outlive the node (17/11, Miele: 0x3000 in a table, absent from the topology)
+            # minutes old can outlive the node (17/11, a plug: 0x3000 in a table, absent from the topology)
             ago = hb.get("ago_s", AUTO_HEARD_S + 1) if hb else AUTO_HEARD_S + 1
             sure = bool(hb) and not hb.get("old") and ago <= AUTO_HEARD_S and (hb.get("child") or ago <= FROZEN_ROUTER_S)
             if err.startswith("no answer to the network diagnostic") and not ping.get("ok") and sure \
@@ -832,7 +832,7 @@ class Reattach:
                     d = self._thread_diag(nid, name, ext)
                     if d is not None:
                         # once the Thread diagnostic ran, the gentle way only: the fail-safe and
-                        # ConnectNetwork are never sent (17/11, Miele: the fail-safe was not closed,
+                        # ConnectNetwork are never sent (17/11, a plug: the fail-safe was not closed,
                         # it expired and dropped the node again 3 min after it came back)
                         alive_txt += " · " + d["text"]
                         if d["omr"] and self.announce_current(nid, name, d["omr"]):

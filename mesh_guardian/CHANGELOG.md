@@ -51,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **Automatic recovery by the Thread diagnostic** (option `thread_diag_recovery`, on by default, with Thread Anchor): an unavailable mains node that a neighbor heard in the last 15 min and whose address is not known (or on an old prefix) is reached through the mesh, then announced in its place on its current address. The gentle way only: its radio is never restarted (no fail-safe, no ConnectNetwork). At most once per node every 30 min and 5 nodes per hour, never during a pause (radio or prefix out) or a Thread storm. Events `auto_diag`, then `recover_result` (`back_announce`, `old_prefix_only`, `frozen`).
-- **Announcement in its place kept**: on the address given by the Thread diagnostic, it stays until the node announces itself again on the prefix of the network (`proxy_released`), 24 h at most (`proxy_expired`). Withdrawn at once (2.33), the old record came back after a reconnection and the node dropped again (17/11, Miele, 3 min later).
+- **Announcement in its place kept**: on the address given by the Thread diagnostic, it stays until the node announces itself again on the prefix of the network (`proxy_released`), 24 h at most (`proxy_expired`). Withdrawn at once (2.33), the old record came back after a reconnection and the node dropped again (17/11, a plug, 3 min later).
 - **Mesh-local EID in the diagnostic**: sent to Thread Anchor with the RLOC16 and the extended address; the diagnostic still leaves when the RLOC16 is not known (the node attached again elsewhere).
 - **Border router names from Home Assistant**: the name a user gave a border router in the device registry (`name_by_user`) comes first, for the OpenThread border router of Home Assistant (its integration or model) and for the others (by the original name of their device). Read every 10 min.
 - Table: `announced_prefix` (prefix of the node's own mDNS record) and `held` (announcement in its place kept).
@@ -74,7 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Thread diagnostic in the recovery attempt** (Thread Anchor 0.1.2): a node heard on the radio whose address is not known or still on an old OMR prefix is reached through the mesh by its RLOC16 (read in the neighbor tables of the nodes that hear it), Thread Anchor pings it and reads its current addresses (`thread_anchor/diag`). The alive test says so ("Thread diagnostic (RLOC 0xB45C): answers through the mesh; addresses: …"), then:
+- **Thread diagnostic in the recovery attempt** (Thread Anchor 0.1.2): a node heard on the radio whose address is not known or still on an old OMR prefix is reached through the mesh by its RLOC16 (read in the neighbor tables of the nodes that hear it), Thread Anchor pings it and reads its current addresses (`thread_anchor/diag`). The alive test says so ("Thread diagnostic (RLOC 0x6C05): answers through the mesh; addresses: …"), then:
   - an address on the prefix of the network: the node is announced in its place on it and the attempt goes on;
   - only old-prefix addresses: said plainly (`old_prefix_only`), with "a remedy on the border router is possible, with your agreement" (not done by the add-on);
   - no answer through the mesh while a neighbor hears it: network stack stuck (`frozen`): only then does cutting its power come up, as the last resort and the user's call.

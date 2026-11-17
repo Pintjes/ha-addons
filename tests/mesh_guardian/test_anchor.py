@@ -22,7 +22,7 @@ import healer as H  # noqa: E402
 
 TMP = tempfile.mkdtemp()
 A.ANCHOR_FILE = os.path.join(TMP, "anchor.json")
-P, G = "fdd7:20e4:8187:1::/64", "fd11:2222:3333:1::/64"   # prefixe impose, prefixe d'un Google TV
+P, G = "fd00:aaaa:bbbb:1::/64", "fd11:2222:3333:1::/64"   # prefixe impose, prefixe d'un Google TV
 
 
 class W:
@@ -160,7 +160,7 @@ assert r["after"]["omr"] == 0 and r["after"]["lost"] == 1 and r["after"]["lost_p
 # guerisseur : en pause, aucun ping et nodes tombees retenues ; rattrapage = ces nodes seules
 h = H.Healer.__new__(H.Healer)
 h.lock, h.w = threading.RLock(), types.SimpleNamespace(stop=threading.Event(), emit=lambda *x, **k: None, dirty=False)
-h.nodes = {"00000000000000AA": {"available": False, "pings": 5, "last_ping": 1, "gave_up": True, "name": "Miele"},
+h.nodes = {"00000000000000AA": {"available": False, "pings": 5, "last_ping": 1, "gave_up": True, "name": "Exemple"},
            "00000000000000BB": {"available": True, "pings": 0, "last_ping": None, "gave_up": False, "name": "Lampe"},
            "00000000000000CC": {"available": False, "pings": 5, "last_ping": 1, "gave_up": True, "name": "Autre"}}
 pinged = []
@@ -189,17 +189,17 @@ assert nodetable.is_ha_br({"vendor": "HomeAssistant", "model": "OpenThreadBorder
 assert not nodetable.is_ha_br({"vendor": "Google Inc.", "model": "Google Nest Hub"})
 assert nodetable.is_ha_br({"vendor": "Home Assistant", "model": "OpenThread Border Router"})   # annonce reelle
 
-# Miele (17/11) : indisponible, abandon des pings, mais entendue par un voisin -> jamais « debrancher »
-MIELE = 0xCA7A34808B66E461
+# Prise exemple (17/11) : indisponible, abandon des pings, mais entendue par un voisin -> jamais « debrancher »
+NODE = 0x1A2B3C4D5E6F7081
 live = types.SimpleNamespace(stamp=lambda nid, path: 5000.0)
-thread = {"36": {"name": "Prise Chauffe Eau Buanderie", "meta": {"available": True}, "node": {},
-                 "attrs": {"0/53/7": [{"0": MIELE, "1": 196, "2": 46172, "6": -54, "13": True},
+thread = {"36": {"name": "Prise Voisine Cave", "meta": {"available": True}, "node": {},
+                 "attrs": {"0/53/7": [{"0": NODE, "1": 196, "2": 27653, "6": -54, "13": True},
                                       {"0": 123, "1": 4000, "6": -70}]}},
-          "5A": {"name": "Prise Lave-linge Miele", "meta": {"available": False}, "node": {}, "attrs": {}}}
+          "4D": {"name": "Prise Exemple", "meta": {"available": False}, "node": {}, "attrs": {}}}
 hm = nodetable.heard_map(thread, live, 5060.0)
-assert {k: hm[MIELE][k] for k in ("by", "ago_s", "rssi", "rloc16", "child")} == \
-    {"by": "Prise Chauffe Eau Buanderie", "ago_s": 256, "rssi": -54, "rloc16": 0xB45C, "child": True} and 123 not in hm, hm
-assert MIELE not in nodetable.heard_map(thread, live, 5800.0)   # 196 s + 800 s : plus recente
+assert {k: hm[NODE][k] for k in ("by", "ago_s", "rssi", "rloc16", "child")} == \
+    {"by": "Prise Voisine Cave", "ago_s": 256, "rssi": -54, "rloc16": 0x6C05, "child": True} and 123 not in hm, hm
+assert NODE not in nodetable.heard_map(thread, live, 5800.0)   # 196 s + 800 s : plus recente
 
 
 def advice_of(row, gave_up=()):
@@ -209,14 +209,14 @@ def advice_of(row, gave_up=()):
     return row["advice"] or "", row["advice_detail"] or ""
 
 
-base = {"id": "0x5A", "name": "Prise Lave-linge Miele", "area": "Buanderie", "network": "thread", "available": False,
+base = {"id": "0x4D", "name": "Prise Exemple", "area": "Cave", "network": "thread", "available": False,
         "battery": False, "since": 1000.0}
 unplug = advice.t("Unplug it for 10s")
-adv, det = advice_of(dict(base, heard_by=hm[MIELE]), gave_up=["0x5A"])
-assert unplug not in adv and "Chauffe Eau" in det, (adv, det)
-adv, _ = advice_of(dict(base), gave_up=["0x5A"])            # personne ne l'entend : toujours pas de preuve (2.35.0)
+adv, det = advice_of(dict(base, heard_by=hm[NODE]), gave_up=["0x4D"])
+assert unplug not in adv and "Voisine" in det, (adv, det)
+adv, _ = advice_of(dict(base), gave_up=["0x4D"])            # personne ne l'entend : toujours pas de preuve (2.35.0)
 assert unplug not in adv and adv == advice.t("Unreachable: Thread diagnostic to do"), adv
-adv, det = advice_of(dict(base, heard_by=hm[MIELE], stale_prefix={"prefix": "fdc0:6359:d5be:1::/64", "br": None,
-                                                                    "t": None, "at": None}), gave_up=["0x5A"])
-assert unplug not in adv and "fdc0" in det and "Chauffe Eau" in det, (adv, det)
+adv, det = advice_of(dict(base, heard_by=hm[NODE], stale_prefix={"prefix": "fd00:cccc:dddd:1::/64", "br": None,
+                                                                    "t": None, "at": None}), gave_up=["0x4D"])
+assert unplug not in adv and "fd00:cccc" in det and "Voisine" in det, (adv, det)
 print("OK")

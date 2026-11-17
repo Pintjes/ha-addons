@@ -21,8 +21,8 @@ import nodetable  # noqa: E402
 import reattach as R  # noqa: E402
 
 A.ANCHOR_FILE = os.path.join(tempfile.mkdtemp(), "anchor.json")
-MIELE, MIELE_HEX = 0xCA7A34808B66E461, "000000000000005A"
-P = "fdd7:20e4:8187:1::/64"
+NODE, NODE_HEX = 0x1A2B3C4D5E6F7081, "000000000000004D"
+P = "fd00:aaaa:bbbb:1::/64"
 
 
 class Mq:
@@ -41,7 +41,7 @@ class Mq:
 class W:
     def __init__(self):
         self.lock, self.events, self.dirty, self.usb_links, self.br = threading.RLock(), [], False, None, {}
-        self.matter = {MIELE_HEX: {"online": False, "prefix": "fdc0:6359:d5be:1::/64"}}
+        self.matter = {NODE_HEX: {"online": False, "prefix": "fd00:cccc:dddd:1::/64"}}
         self.stop = threading.Event()
         self.proxied = []
 
@@ -76,26 +76,26 @@ w, a = anchor_with(None)
 assert a.anchored_since == A.parse_iso("2026-11-17T11:30:00+01:00"), a.anchored_since
 
 # requete / reponse MQTT
-ans = {"ping": {"ok": True, "rtt_ms": 41}, "addresses": ["fdd7:20e4:8187:1:1:2:3:4"],
-       "omr_addresses": ["fdd7:20e4:8187:1:1:2:3:4"], "other_prefix_addresses": [], "error": None}
+ans = {"ping": {"ok": True, "rtt_ms": 41}, "addresses": ["fd00:aaaa:bbbb:1:1:2:3:4"],
+       "omr_addresses": ["fd00:aaaa:bbbb:1:1:2:3:4"], "other_prefix_addresses": [], "error": None}
 w, a = anchor_with(ans)
-res = a.diag(0xB45C, MIELE, timeout=2)
+res = a.diag(0x6C05, NODE, timeout=2)
 assert w.mqtt.sent[0][0] == A.DIAG_REQUEST_TOPIC
-assert w.mqtt.sent[0][1]["rloc16"] == "0xB45C" and w.mqtt.sent[0][1]["ext"] == "ca7a34808b66e461" and w.mqtt.sent[0][1]["ping"]
-assert res["omr_addresses"] == ["fdd7:20e4:8187:1:1:2:3:4"] and not a._diag_waits
+assert w.mqtt.sent[0][1]["rloc16"] == "0x6C05" and w.mqtt.sent[0][1]["ext"] == "1a2b3c4d5e6f7081" and w.mqtt.sent[0][1]["ping"]
+assert res["omr_addresses"] == ["fd00:aaaa:bbbb:1:1:2:3:4"] and not a._diag_waits
 w2, a2 = anchor_with(None)
-assert a2.diag(0xB45C, MIELE, timeout=0.2) is None                     # pas de reponse : None
+assert a2.diag(0x6C05, NODE, timeout=0.2) is None                     # pas de reponse : None
 a2.on_available("offline")
-assert not a2.diag_ready() and a2.diag(0xB45C, MIELE, timeout=0.2) is None
+assert not a2.diag_ready() and a2.diag(0x6C05, NODE, timeout=0.2) is None
 
 # RLOC16 chez les voisins ; extAddress passee par un flottant : retrouvee quand meme
 live = types.SimpleNamespace(stamp=lambda nid, path: 1000.0, lock=threading.Lock())
-thread = {"36": {"name": "Prise Chauffe Eau Buanderie", "meta": {"available": True}, "node": {},
-                 "attrs": {"0/53/7": [{"0": float(MIELE), "1": 196, "2": 46172, "6": -54, "10": True, "11": True, "13": True}]}}}
+thread = {"36": {"name": "Prise Voisine Cave", "meta": {"available": True}, "node": {},
+                 "attrs": {"0/53/7": [{"0": float(NODE), "1": 196, "2": 27653, "6": -54, "10": True, "11": True, "13": True}]}}}
 hm = nodetable.heard_map(thread, live, 1060.0)
-e = nodetable.heard_of(hm, MIELE)
-assert e and e["rloc16"] == 0xB45C and e["child"] and e["ftd"] and e["fuzzy"], e
-assert nodetable.heard_of(hm, MIELE + 10 ** 6) is None
+e = nodetable.heard_of(hm, NODE)
+assert e and e["rloc16"] == 0x6C05 and e["child"] and e["ftd"] and e["fuzzy"], e
+assert nodetable.heard_of(hm, NODE + 10 ** 6) is None
 
 
 # tentative de recuperation : les trois issues du diagnostic
@@ -103,33 +103,33 @@ def reattach_for(answer):
     w, a = anchor_with(answer)
     r = R.Reattach.__new__(R.Reattach)
     r.w = w
-    r.h = types.SimpleNamespace(lock=threading.Lock(), nodes={MIELE_HEX: {"name": "Prise Lave-linge Miele"},
-                                                             "36": {"name": "Prise Chauffe Eau Buanderie"}})
+    r.h = types.SimpleNamespace(lock=threading.Lock(), nodes={NODE_HEX: {"name": "Prise Exemple"},
+                                                             "36": {"name": "Prise Voisine Cave"}})
     r.live = types.SimpleNamespace(lock=threading.Lock(), stamp=lambda nid, path: 1e12,
                                    nodes={"36": {"available": True, "attributes": thread["36"]["attrs"]},
-                                          MIELE_HEX: {"available": False, "attributes": {}}})
+                                          NODE_HEX: {"available": False, "attributes": {}}})
     return r, w
 
 
 r, w = reattach_for(ans)
-d = r._thread_diag(MIELE_HEX, "Prise Lave-linge Miele", MIELE)
-assert d["result"] == "omr" and d["omr"] == ["fdd7:20e4:8187:1:1:2:3:4"] and "0xB45C" in d["text"], d
-r, w = reattach_for(dict(ans, omr_addresses=[], other_prefix_addresses=["fdc0:6359:d5be:1:e83c:35e9:edb8:ab71"]))
-d = r._thread_diag(MIELE_HEX, "Prise Lave-linge Miele", MIELE)
-assert d["result"] == "old_prefix_only" and "fdc0" in d["outcome"], d
+d = r._thread_diag(NODE_HEX, "Prise Exemple", NODE)
+assert d["result"] == "omr" and d["omr"] == ["fd00:aaaa:bbbb:1:1:2:3:4"] and "0x6C05" in d["text"], d
+r, w = reattach_for(dict(ans, omr_addresses=[], other_prefix_addresses=["fd00:cccc:dddd:1:e:f:1:2"]))
+d = r._thread_diag(NODE_HEX, "Prise Exemple", NODE)
+assert d["result"] == "old_prefix_only" and "fd00:cccc" in d["outcome"], d
 # ping sans reponse mais diagnostic qui repond : pas figee (ancien prefixe seulement)
-r, w = reattach_for(dict(ans, ping={"ok": False, "rtt_ms": None}, omr_addresses=[], other_prefix_addresses=["fdc0::1"]))
-d = r._thread_diag(MIELE_HEX, "Prise Lave-linge Miele", MIELE)
+r, w = reattach_for(dict(ans, ping={"ok": False, "rtt_ms": None}, omr_addresses=[], other_prefix_addresses=["fd00:cccc::1"]))
+d = r._thread_diag(NODE_HEX, "Prise Exemple", NODE)
 assert d["result"] == "old_prefix_only", d
 # ni diagnostic ni ping : figee
 r, w = reattach_for({"ping": {"ok": False, "rtt_ms": None}, "addresses": [], "omr_addresses": [],
                      "other_prefix_addresses": [], "error": "no answer to the network diagnostic"})
-d = r._thread_diag(MIELE_HEX, "Prise Lave-linge Miele", MIELE)
-assert d["result"] == "frozen" and "Chauffe Eau" in d["outcome"], d
+d = r._thread_diag(NODE_HEX, "Prise Exemple", NODE)
+assert d["result"] == "frozen" and "Voisine" in d["outcome"], d
 # autres erreurs : rien de prouve (occupe, trop tot, une autre node a ce RLOC16)
-for err in ("busy", "too soon", "another node answers at this RLOC16: ext 01 instead of ca7a34808b66e461"):
+for err in ("busy", "too soon", "another node answers at this RLOC16: ext 01 instead of 1a2b3c4d5e6f7081"):
     r, w = reattach_for(dict(ans, error=err))
-    d = r._thread_diag(MIELE_HEX, "Prise Lave-linge Miele", MIELE)
+    d = r._thread_diag(NODE_HEX, "Prise Exemple", NODE)
     assert d["result"] == "unknown" and err.split(":")[0] in d["text"] and not d["omr"], d
 
 # conseil de la fiche : debrancher seulement apres « pile figee » prouvee
@@ -138,12 +138,12 @@ unplug = advice.t("Unplug it for 10s")
 
 def advice_of(row):
     c = {"now": 2000.0, "tried": {}, "forced": {}, "weak_since": {}, "unstable": {}, "history": lambda rid: [],
-         "gave_up": {"0x5A"}, "ghosts": [], "omr_changes": 0}
+         "gave_up": {"0x4D"}, "ghosts": [], "omr_changes": 0}
     advice.advise([row], [], c)
     return row["advice"] or ""
 
 
-base = {"id": "0x5A", "name": "Prise Lave-linge Miele", "area": "Buanderie", "network": "thread", "available": False,
+base = {"id": "0x4D", "name": "Prise Exemple", "area": "Cave", "network": "thread", "available": False,
         "battery": False, "since": 1000.0, "heard_by": e}
 assert unplug not in advice_of(dict(base))
 assert advice_of(dict(base, search={"result": "frozen", "text": "x"})) == \
@@ -155,17 +155,17 @@ import base64  # noqa: E402
 import ipaddress  # noqa: E402
 
 b64 = lambda a: base64.b64encode(ipaddress.IPv6Address(a).packed).decode()   # noqa: E731
-attrs = {"0/53/5": base64.b64encode(bytes([64]) + ipaddress.IPv6Address("fd27:7233:83bf::").packed[:8]).decode(),
-         "0/51/0": [{"7": 4, "6": [b64("fe80::c87a:3480:8b66:e461"), b64("fd27:7233:83bf::ff:fe00:b45c"),
-                                   b64("fd27:7233:83bf:0:1234:5678:9abc:def0"), b64("fdd7:20e4:8187:1:ef69:9a13:7033:2b07")]}]}
-assert R.mleid_of(attrs) == "fd27:7233:83bf:0:1234:5678:9abc:def0"
-assert R.mleid_of(dict(attrs, **{"0/53/5": base64.b64encode(ipaddress.IPv6Address("fd27:7233:83bf::").packed[:8]).decode()})) \
-    == "fd27:7233:83bf:0:1234:5678:9abc:def0"   # prefixe sans l'octet de longueur
+attrs = {"0/53/5": base64.b64encode(bytes([64]) + ipaddress.IPv6Address("fd00:9999:8888::").packed[:8]).decode(),
+         "0/51/0": [{"7": 4, "6": [b64("fe80::182b:3c4d:5e6f:7081"), b64("fd00:9999:8888::ff:fe00:6c05"),
+                                   b64("fd00:9999:8888:0:1234:5678:9abc:def0"), b64("fd00:aaaa:bbbb:1:a:b:c:d")]}]}
+assert R.mleid_of(attrs) == "fd00:9999:8888:0:1234:5678:9abc:def0"
+assert R.mleid_of(dict(attrs, **{"0/53/5": base64.b64encode(ipaddress.IPv6Address("fd00:9999:8888::").packed[:8]).decode()})) \
+    == "fd00:9999:8888:0:1234:5678:9abc:def0"   # prefixe sans l'octet de longueur
 assert R.mleid_of({}) is None
 w, a = anchor_with(ans)
-a.diag(None, MIELE, timeout=2, mleid="fd27:7233:83bf:0:1234:5678:9abc:def0")
-assert w.mqtt.sent[0][1] == {"id": w.mqtt.sent[0][1]["id"], "ping": True, "ext": "ca7a34808b66e461",
-                             "mleid": "fd27:7233:83bf:0:1234:5678:9abc:def0"}, w.mqtt.sent[0][1]
+a.diag(None, NODE, timeout=2, mleid="fd00:9999:8888:0:1234:5678:9abc:def0")
+assert w.mqtt.sent[0][1] == {"id": w.mqtt.sent[0][1]["id"], "ping": True, "ext": "1a2b3c4d5e6f7081",
+                             "mleid": "fd00:9999:8888:0:1234:5678:9abc:def0"}, w.mqtt.sent[0][1]
 
 # 2.33.0 en production : HTTP 503 « 'list' object has no attribute 'items' » sur /api/table. Le resultat
 # de heard_map() (un dict) portait le nom « heard », reutilise dans la boucle de build() pour la liste
@@ -182,7 +182,7 @@ again = [n.lineno for n in ast.walk(build) if isinstance(n, ast.Assign) for tg i
          if isinstance(tg, ast.Name) and tg.id == holder[0]]
 assert len(again) == 1, f"{holder[0]} assigned again in build() at lines {again}"
 try:   # et le symptome lui-meme : heard_of() sur la liste locale
-    nodetable.heard_of([(3, -60, "x")], MIELE)
+    nodetable.heard_of([(3, -60, "x")], NODE)
     raise AssertionError("heard_of on a list should fail")
 except AttributeError as err:
     assert "items" in str(err)

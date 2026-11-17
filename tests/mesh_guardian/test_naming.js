@@ -22,15 +22,15 @@ vm.runInContext(src + "\nthis.matterDevices = matterDevices; this.watchNewDevice
   await new Promise(r => setImmediate(r));
   assert(listeners["matter-commission-finish"], "ecoute de la fin d'appairage");
   listeners["matter-commission-finish"]({detail: {name: "Prise du telephone", success: true}});
-  devices = devices.concat([{id: "n", identifiers: [["matter", "w"]], name: "GRILLPLATS Plug", manufacturer: "IKEA", model: "GRILLPLATS Plug", area_id: "b"}]);
+  devices = devices.concat([{id: "n", identifiers: [["matter", "w"]], name: "Smart Plug", manufacturer: "IKEA", model: "Smart Plug", area_id: "b"}]);
   await p;
   assert(sheet.includes("nm_title") && sheet.includes('value="Prise du telephone"'), "fiche avec le nom donne sur le telephone: " + sheet.slice(0, 200));
   assert(sheet.includes('<option value="b" selected>Bureau</option>') && sheet.indexOf("Bureau") < sheet.indexOf("Salon"), "pieces triees, la sienne choisie");
   assert(!listeners["matter-commission-finish"], "ecoute retiree");
   const btn = {disabled: false};
-  await ctx.nameSave({n: {value: "  Prise TV Louise "}, a: {value: "s"}, querySelector: () => btn});
+  await ctx.nameSave({n: {value: "  Prise TV Test "}, a: {value: "s"}, querySelector: () => btn});
   const up = calls.find(c => c.type === "config/device_registry/update");
-  assert(up && up.device_id === "n" && up.name_by_user === "Prise TV Louise" && up.area_id === "s", "mise a jour envoyee");
+  assert(up && up.device_id === "n" && up.name_by_user === "Prise TV Test" && up.area_id === "s", "mise a jour envoyee");
   assert(toasts.includes("nm_saved") && closed === 1, "message et fermeture");
 
   // Home Assistant annonce l'ajout dans son registre : lu à ce moment-là, sans sondage

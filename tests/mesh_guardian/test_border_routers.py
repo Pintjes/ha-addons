@@ -35,20 +35,20 @@ class W(ns["W"]):
         return b.get("label") or "?"
 
 
-SALON = {"addrs": ["192.168.3.241", "fd59::c3b6", "fe80::62f5"], "ext_pan": "106d", "online": True}
-CUISINE = {"addrs": ["192.168.3.252", "fd59::c1ad", "fe80::d640"], "ext_pan": "106d", "online": True}
+SALON = {"addrs": ["192.168.10.241", "fd00:5959::c3b6", "fe80::62f5"], "ext_pan": "106d", "online": True}
+CUISINE = {"addrs": ["192.168.10.252", "fd00:5959::c1ad", "fe80::d640"], "ext_pan": "106d", "online": True}
 
 # nouvelle annonce du meme appareil : elle reprend la carte, son nom et son historique
 w = W()
-w.br = {"old": dict(SALON, label="Google TV Salon"), "cui": dict(CUISINE, label="Google TV Cuisine")}
-w.br_names = {"old": {"name": "Google TV Salon", "detached": [1.0]}, "cui": {"name": "Google TV Cuisine", "detached": []}}
-new = dict(SALON, addrs=["192.168.3.241", "fe80::62f5"])
+w.br = {"old": dict(SALON, label="Routeur tiers A"), "cui": dict(CUISINE, label="Routeur tiers B")}
+w.br_names = {"old": {"name": "Routeur tiers A", "detached": [1.0]}, "cui": {"name": "Routeur tiers B", "detached": []}}
+new = dict(SALON, addrs=["192.168.10.241", "fe80::62f5"])
 assert w._br_twin("new", new) == "old" and w._br_twin("new", dict(new, ext_pan="autre")) is None
 assert w._br_twin("new", {"addrs": ["fe80::62f5"], "ext_pan": "106d"}) is None      # lien-local seul : ne dit rien
 assert w._br_twin("cui", CUISINE) is None
 w._br_take_over("old", "new")
-assert set(w.br) == {"new", "cui"} and w.br["new"]["label"] == "Google TV Salon"
-assert w.br_names["new"] == {"name": "Google TV Salon", "detached": [1.0], "replaces": ["old"]} and w.cleared == ["old"]
+assert set(w.br) == {"new", "cui"} and w.br["new"]["label"] == "Routeur tiers A"
+assert w.br_names["new"] == {"name": "Routeur tiers A", "detached": [1.0], "replaces": ["old"]} and w.cleared == ["old"]
 # l'ancienne annonce, encore sur le reseau, est ignoree tant que la nouvelle est en ligne
 assert w._br_replaced("old") and not w._br_replaced("new") and not w._br_replaced("cui")
 w.br["new"]["online"] = False
@@ -60,10 +60,10 @@ assert set(w.br) == {"old", "cui"} and w.br_names["old"]["replaces"] == ["new"]
 # doublon deja present (versions precedentes) : la carte hors ligne est absorbee par celle en ligne
 w = W()
 w.br = {"old": dict(SALON, online=False), "new": dict(SALON), "cui": dict(CUISINE, online=False)}
-w.br_names = {"old": {"name": "Google TV Salon", "detached": [1.0, 2.0]}, "new": {"name": None, "detached": [3.0]}}
+w.br_names = {"old": {"name": "Routeur tiers A", "detached": [1.0, 2.0]}, "new": {"name": None, "detached": [3.0]}}
 assert w._br_fold_stale() and set(w.br) == {"new", "cui"}                           # Cuisine hors ligne sans double : reste
-assert w.br_names["new"] == {"name": "Google TV Salon", "detached": [1.0, 2.0, 3.0], "replaces": ["old"]}
-assert w.br["new"]["label"] == "Google TV Salon" and not w._br_fold_stale()
+assert w.br_names["new"] == {"name": "Routeur tiers A", "detached": [1.0, 2.0, 3.0], "replaces": ["old"]}
+assert w.br["new"]["label"] == "Routeur tiers A" and not w._br_fold_stale()
 # deux cartes en ligne : rien n'est devine
 w = W()
 w.br = {"a": dict(SALON), "b": dict(SALON)}
