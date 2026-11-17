@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.1.12] - 2026-11-17
+
+### Added
+
+- The change of the counters of the link **hour by hour**, to follow the radio over days: in the state
+  (`thread_link.stats.last`, with the derived `tx_no_ack` and the shares of aborted frames), on
+  `thread_anchor/link_stats` (retained, the last 72 hours, kept over a restart) and as 7 Home Assistant
+  sensors with a long history (*TX aborted per hour*, *TX CCA errors per hour*, *TX without ack per hour*,
+  *TX retries per hour*, *Detachments per hour*, *Parent changes per hour*, *TX abort ratio*). Nothing is read
+  for it: it uses the counters the link reading already gets. An hour in which the border router restarted, or
+  a counter went down, is not counted.
+- `tx_ack_requested` and `tx_acked` in the MAC counters, so that `tx_no_ack` can be told: `tx_retry` stays 0
+  on a radio co-processor that retries by itself.
+- Round trip to the radio chip, **on request only** (`thread_anchor/latency/request`): 100 pairs of reads
+  (`ot-ctl state` against `ot-ctl txpower`, or `ccathreshold` when `txpower` looks cached), one a second, each
+  timed; the answer gives min / median / p95 / max of the difference, the times above 50 ms and the frames sent
+  and aborted before / after. Reads only, no radio emission, one at a time, never while a diagnostic runs.
+
 ## [0.1.11] - 2026-11-17
 
 ### Added

@@ -34,7 +34,7 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
-VERSION = "0.1.11"
+VERSION = "0.1.12"
 LOG = logging.getLogger("thread_anchor")
 STATE_TOPIC = "thread_anchor/state"
 DISCOVERY = "homeassistant"
@@ -110,6 +110,11 @@ TEXTS = {
             "Pas d'accès à l'API Docker ({err}) ; désactiver le mode protection",
         "Connected to MQTT": "Connecté à MQTT",
         "Diagnostic request ignored (no usable id): {err}": "Demande de diagnostic ignorée (pas d'id utilisable) : {err}",
+        "Latency request ignored (no usable id): {err}": "Demande de mesure ignorée (pas d'id utilisable) : {err}",
+        "count 10 to 200, interval_s 0.5 to 3": "count de 10 à 200, interval_s de 0,5 à 3",
+        "no read of the chip answered": "aucune lecture de la puce n'a répondu",
+        "Latency to the chip: {st} ({cmd}, {n} pairs): median {m} ms, p95 {p} ms, max {x} ms, {sp} above {lim} ms":
+            "Aller-retour jusqu'à la puce : {st} ({cmd}, {n} paires) : médiane {m} ms, p95 {p} ms, max {x} ms, {sp} au-dessus de {lim} ms",
         "invalid rloc16: {v}": "rloc16 invalide : {v}",
         "invalid ext: {v}": "ext invalide : {v}",
         "invalid mleid: {v}": "mleid invalide : {v}",
@@ -301,8 +306,28 @@ def parse_router_list(text):
 LQ_WORDS = {0: "unknown", 1: "weak", 2: "medium", 3: "good"}     # Thread link quality, 0 to 3
 MLE_KEYS = ("role_detached", "role_child", "role_router", "role_leader", "attach_attempts",
             "partition_id_changes", "better_partition_attach_attempts", "parent_changes")
-MAC_KEYS = ("tx_total", "tx_retry", "tx_err_cca", "tx_err_abort", "tx_err_busy_channel", "rx_total",
-            "rx_err_no_frame", "rx_err_unknown_neighbor", "rx_err_sec", "rx_err_fcs")
+MAC_KEYS = ("tx_total", "tx_ack_requested", "tx_acked", "tx_retry", "tx_err_cca", "tx_err_abort",
+            "tx_err_busy_channel", "rx_total", "rx_err_no_frame", "rx_err_unknown_neighbor", "rx_err_sec", "rx_err_fcs")
+# counters of which the change over an hour is kept (LinkStats): they only go up, until the radio or the
+# border router starts again
+STATS_KEYS = ("tx_total", "tx_ack_requested", "tx_acked", "tx_retry", "tx_err_cca", "tx_err_abort",
+              "tx_err_busy_channel", "rx_total", "rx_err_no_frame", "rx_err_unknown_neighbor", "rx_err_sec",
+              "rx_err_fcs", "role_detached", "role_child", "role_router", "parent_changes", "attach_attempts",
+              "partition_id_changes")
+LINK_STATS_FILE = "/data/link_stats.json"        # the baseline and the hourly changes: kept over a restart
+LINK_STATS_TOPIC = "thread_anchor/link_stats"    # the last hourly changes, published (retained)
+LINK_HISTORY = 72                                # hourly windows kept (3 days)
+LINK_ALIGN_S = 120                               # a baseline taken this long after the hour starts is "aligned"
+LINK_WINDOW_S = (3300, 5400)                     # a window shorter or longer than this is not an hour: dropped
+STAT_SENSORS = (      # (key of the last window, name, unit, icon)
+    ("tx_err_abort", "TX aborted per hour", None, "mdi:close-octagon-outline"),
+    ("tx_err_cca", "TX CCA errors per hour", None, "mdi:radio-tower"),
+    ("tx_no_ack", "TX without ack per hour", None, "mdi:email-off-outline"),
+    ("tx_retry", "TX retries per hour", None, "mdi:repeat"),
+    ("role_detached", "Detachments per hour", None, "mdi:lan-disconnect"),
+    ("parent_changes", "Parent changes per hour", None, "mdi:swap-horizontal"),
+    ("tx_err_abort_pct", "TX abort ratio", "%", "mdi:percent-outline"),
+)
 
 
 def _int(value):
@@ -505,9 +530,98 @@ class Children:
                 LOG.debug("children: %s", err)
 
 
+class LinkStats:
+    """The change of the counters of the border router (`counters mac`, `counters mle`) over each hour,
+    to follow the health of the radio link over days (the counters themselves only say "since the
+    start"). A window runs from a reading just after the hour starts to the next one (about 60 min):
+    its change per counter, the frames sent without an ack (`tx_no_ack`: asked for an ack, not acked)
+    and the share of aborted frames. Nothing is read for it: it keeps the counters of the link reading.
+    A restart of the border router or a counter that went down starts a new baseline (no window: that
+    hour is not counted); so does a window that is not an hour (add-on stopped for long). Kept over a
+    restart of the add-on in `path`."""
+
+    def __init__(self, path=None, clock=time.time):
+        self.path, self.clock = path, clock
+        self.baseline, self.history, self.fresh = None, [], False    # fresh: a window was added, not published
+        self._load()
+
+    def _iso(self, ts):
+        return datetime.fromtimestamp(ts, timezone.utc).astimezone().isoformat(timespec="seconds")
+
+    def _load(self):
+        if not self.path:
+            return
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                kept = json.load(f)
+            base = kept.get("baseline")
+            if base:
+                self.baseline = {"at": float(base["at"]), "otbr": base["otbr"], "aligned": bool(base["aligned"]),
+                                 "c": {k: int(v) for k, v in base["c"].items()}}
+            self.history = [h for h in kept["history"] if isinstance(h, dict) and "to" in h][-LINK_HISTORY:]
+        except (OSError, ValueError, TypeError, KeyError, AttributeError) as err:
+            LOG.debug("link stats: %s", err)
+            self.baseline, self.history = None, []
+
+    def _save(self):
+        if not self.path:
+            return
+        try:
+            tmp = self.path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"baseline": self.baseline, "history": self.history}, f)
+            os.replace(tmp, self.path)
+        except OSError as err:
+            LOG.debug("link stats: %s", err)
+
+    def update(self, counters, otbr_started, role):
+        """Called at every reading of the link with {name: int} of both counter groups. The window that
+        just ended (a dict) when this reading closes one, else None."""
+        now = self.clock()
+        snap = {"at": now, "otbr": otbr_started, "aligned": now % 3600 < LINK_ALIGN_S,
+                "c": {k: v for k, v in counters.items() if k in STATS_KEYS}}
+        base = self.baseline
+        if base is None or base["otbr"] != otbr_started or any(v < base["c"].get(k, 0) for k, v in snap["c"].items()):
+            self.baseline = snap       # first reading, border router restarted, counter reset
+            self._save()
+            return None
+        if now // 3600 == base["at"] // 3600:
+            return None                # still in the hour of the baseline
+        rec = None
+        elapsed = now - base["at"]
+        if base["aligned"] and LINK_WINDOW_S[0] <= elapsed <= LINK_WINDOW_S[1]:
+            rec = {"from": self._iso(base["at"]), "to": self._iso(now), "seconds": int(elapsed), "role": role}
+            for k, v in snap["c"].items():
+                if k in base["c"]:
+                    rec[k] = v - base["c"][k]
+            if "tx_ack_requested" in rec and "tx_acked" in rec:
+                rec["tx_no_ack"] = max(0, rec["tx_ack_requested"] - rec["tx_acked"])
+            if rec.get("tx_total"):
+                for k in ("tx_err_abort", "tx_no_ack", "tx_err_cca"):
+                    if k in rec:
+                        rec[k + "_pct"] = round(100.0 * rec[k] / rec["tx_total"], 2)
+            self.history = (self.history + [rec])[-LINK_HISTORY:]
+            self.fresh = True
+        self.baseline = snap
+        self._save()
+        return rec
+
+    @property
+    def last(self):
+        return self.history[-1] if self.history else None
+
+    def public(self):
+        """For the state: the last window, and since when the current one runs."""
+        return {"last": self.last, "since": self._iso(self.baseline["at"]) if self.baseline else None}
+
+    def published(self):
+        self.fresh = False
+
+
 # ---------------------------------------------------------------- the anchor
 class Anchor:
-    def __init__(self, options, docker=None, clock=time.time, memory=None, history=None, children=None):
+    def __init__(self, options, docker=None, clock=time.time, memory=None, history=None, children=None,
+                 stats=None):
         self.prefix, self.config_error = None, None
         raw = str(options.get("omr_prefix") or "").strip()
         self.preference = str(options.get("omr_preference") or "high").strip().lower()
@@ -547,6 +661,7 @@ class Anchor:
         self.history = history       # file that keeps the changes of parent over a restart of the add-on
         self.last_parent, self.parent_log = self._load_history()
         self.children = Children(children, clock)     # what is learned about the nodes (published)
+        self.stats = LinkStats(stats, clock)          # the hourly change of the counters of the link
         self.own_rloc16 = None                        # RLOC16 of the border router, when read
 
     def _load_history(self):
@@ -760,7 +875,8 @@ class Anchor:
         if link:
             parent = link.get("parent") or {}
             pub["link"] = [link.get("rloc16"), parent.get("rloc16"), parent.get("ext"), parent.get("quality"),
-                           [b["rloc16"] for b in link.get("best", [])], len(link.get("parent_history", []))]
+                           [b["rloc16"] for b in link.get("best", [])], len(link.get("parent_history", [])),
+                           ((link.get("stats") or {}).get("last") or {}).get("to")]
         return json.dumps(pub, sort_keys=True)
 
     def _read_role(self):
@@ -838,6 +954,8 @@ class Anchor:
                                      "lq_out": row.get("lq_out"), "path_cost": row.get("path_cost"),
                                      "is_parent": bool(parent) and n["rloc16"] == parent["rloc16"]})
         link["counters"] = {k: v for k, v in (("mle", mle), ("mac", mac)) if v}
+        self.stats.update({**(mle or {}), **(mac or {})}, self.started_at, self.role)
+        link["stats"] = self.stats.public()
         link["read_at"] = self._now_iso()
         # the changes of parent: seen between two readings (a back and forth within a minute is not),
         # also across a restart of the add-on or a detachment (the last parent seen is kept)
@@ -1069,6 +1187,7 @@ class Diag:
         self.spawn = spawn or (lambda fn: threading.Thread(target=fn, daemon=True).start())
         self.lock = threading.Lock()
         self.running = False
+        self.blocked = lambda: False             # true while another measurement uses the border router
         self.last = {}   # rloc16 -> time of the last accepted request
         self.limit = DIAG_TIMEOUT_S              # budget in force, for the message of a timeout
         self.meshdiag, self.meshdiag_for = None, None   # `help` knows meshdiag (for this start of the OTBR)
@@ -1111,7 +1230,7 @@ class Diag:
         # the node asked for: its RLOC16 when given, else its extended address, else its ML-EID
         key = ("rloc16", rloc16) if rloc16 is not None else ("ext", ext) if ext else ("mleid", ml)
         with self.lock:
-            if self.running:
+            if self.running or self.blocked():
                 return self._done(base, "busy")
             last = self.last.get(key)
             if last is not None and self.clock() - last < DIAG_GAP_S:
@@ -1497,6 +1616,155 @@ class Diag:
         return res
 
 
+LATENCY_REQUEST_TOPIC = "thread_anchor/latency/request"
+LATENCY_RESULT_TOPIC = "thread_anchor/latency/result"    # + /<id>, not retained
+LATENCY_LAST_TOPIC = "thread_anchor/latency/last"        # the last measurement, retained
+LATENCY_N = (10, 200, 100)       # pairs of reads: least, most, default
+LATENCY_GAP_S = (0.5, 3.0, 1.0)  # s between two pairs: least, most, default
+LATENCY_SPIKE_MS = 50            # a difference above this is listed with its time
+LATENCY_SLOWER_MS = 1.0          # `txpower` must be this much slower than `state`, else it is a cache
+LATENCY_CANDIDATES = ("txpower", "ccathreshold")    # reads that go to the chip (spinel), no radio emission
+
+
+def _stats(values):
+    """min / median / p95 / max in ms of a list of times (nearest rank for the p95)."""
+    v = sorted(values)
+    if not v:
+        return None
+    mid = len(v) // 2
+    median = v[mid] if len(v) % 2 else (v[mid - 1] + v[mid]) / 2
+    return {"min": round(v[0], 2), "median": round(median, 2),
+            "p95": round(v[max(0, -(-95 * len(v) // 100) - 1)], 2), "max": round(v[-1], 2)}
+
+
+class Latency:
+    """Round trip to the radio chip, measured on request (`thread_anchor/latency/request`), never on
+    its own: `ot-ctl state` is answered by the host alone, `ot-ctl txpower` (or `ccathreshold`) reads a
+    setting of the chip over spinel, with no radio emission. Each read is timed; both go through the
+    same `docker exec`, so the difference of the two is the round trip to the chip (through USB/IP when
+    the radio is far). Pairs alternate, DEFAULT 100, one a second. `txpower` must be clearly slower
+    than `state` (else it was answered from a cache): `ccathreshold` is then tried. Reads only:
+    `state`, `txpower`, `ccathreshold`, `counters mac` (the frames sent and aborted before / after).
+    One measurement at a time, none while a diagnostic runs."""
+
+    def __init__(self, anchor, reply, clock=time.time, spawn=None, perf=time.perf_counter, sleep=time.sleep,
+                 busy=lambda: False):
+        self.anchor, self.reply, self.clock, self.perf, self.sleep, self.busy = anchor, reply, clock, perf, sleep, busy
+        self.spawn = spawn or (lambda fn: threading.Thread(target=fn, daemon=True).start())
+        self.lock = threading.Lock()
+        self.running = False
+
+    def submit(self, raw):
+        try:
+            req = json.loads(raw)
+            rid = str(req["id"]).strip()
+            if not rid or "/" in rid or "+" in rid or "#" in rid:
+                raise ValueError("id")
+        except (ValueError, TypeError, KeyError) as err:
+            LOG.warning(t("Latency request ignored (no usable id): {err}", err=err))
+            return
+        out = {"id": rid, "state": None, "error": None}
+
+        def num(key, bounds, kind):
+            try:
+                value = kind(req.get(key, bounds[2]))
+            except (ValueError, TypeError):
+                return None
+            return value if bounds[0] <= value <= bounds[1] else None
+
+        n, gap = num("count", LATENCY_N, int), num("interval_s", LATENCY_GAP_S, float)
+        if n is None or gap is None:
+            return self.reply(rid, dict(out, state="refused", error=t("count 10 to 200, interval_s 0.5 to 3")))
+        with self.lock:
+            if self.running or self.busy():
+                return self.reply(rid, dict(out, state="refused", error="busy"))
+            self.running = True
+        self.spawn(lambda: self.run(out, n, gap))
+
+    def _timed(self, *cmd):
+        """(milliseconds, output) of one read; RuntimeError when it fails."""
+        t0 = self.perf()
+        out = self.anchor.otctl(*cmd)
+        return (self.perf() - t0) * 1000.0, out
+
+    def _mac(self):
+        try:
+            c = parse_counters(self.anchor.otctl("counters", "mac"), ("tx_total", "tx_err_abort"))
+        except Exception as err:  # noqa: BLE001
+            LOG.debug("latency counters: %s", err)
+            return None
+        return c or None
+
+    def run(self, out, n, gap):
+        started = self.clock()
+        try:
+            out.update(self._measure(n, gap))
+            out["state"] = "ok"
+        except Exception as err:  # noqa: BLE001 - always an answer
+            out["state"], out["error"] = "error", str(err) or type(err).__name__
+        finally:
+            with self.lock:
+                self.running = False
+        out["seconds"] = int(self.clock() - started)
+        out["started"] = datetime.fromtimestamp(started, timezone.utc).astimezone().isoformat(timespec="seconds")
+        s = out.get("diff_ms") or {}
+        LOG.info(t("Latency to the chip: {st} ({cmd}, {n} pairs): median {m} ms, p95 {p} ms, max {x} ms, {sp} above {lim} ms",
+                   st=out["state"], cmd=out.get("command"), n=out.get("n", 0), m=s.get("median"), p=s.get("p95"),
+                   x=s.get("max"), sp=out.get("spikes_count", 0), lim=LATENCY_SPIKE_MS))
+        self.reply(out["id"], out)
+
+    def _measure(self, n, gap):
+        before = self._mac()
+        # the read that goes to the chip: the first of the candidates clearly slower than `state`
+        command, cached, tried = LATENCY_CANDIDATES[0], True, False
+        for cand in LATENCY_CANDIDATES:
+            diffs = []
+            try:
+                for _ in range(5):
+                    a, _out = self._timed("state")
+                    b, _out = self._timed(cand)
+                    diffs.append(b - a)
+            except (DockerError, OtctlNoAnswer):
+                raise                        # the border router itself does not answer: nothing to measure
+            except RuntimeError as err:      # this firmware does not know that read: the next one
+                LOG.debug("latency %s: %s", cand, err)
+                continue
+            tried = True
+            if _stats(diffs)["median"] >= LATENCY_SLOWER_MS:
+                command, cached = cand, False
+                break
+            self.sleep(gap)
+        if not tried:
+            raise RuntimeError(t("no read of the chip answered"))
+        times_a, times_b, diffs, spikes, errors = [], [], [], [], 0
+        for i in range(n):
+            if i:
+                self.sleep(gap)
+            try:
+                a, _out = self._timed("state")
+                b, _out = self._timed(command)
+            except DockerError:
+                raise
+            except RuntimeError:             # one read that did not answer (ignored, error): counted, the rest goes on
+                errors += 1
+                continue
+            times_a.append(a)
+            times_b.append(b)
+            diffs.append(b - a)
+            if b - a > LATENCY_SPIKE_MS:
+                spikes.append({"at": datetime.fromtimestamp(self.clock(), timezone.utc).astimezone()
+                               .isoformat(timespec="seconds"), "diff_ms": round(b - a, 1)})
+        after = self._mac()
+        res = {"command": command, "n": len(diffs), "errors": errors, "interval_s": gap, "cached_suspected": cached,
+               "state_ms": _stats(times_a), "chip_ms": _stats(times_b), "diff_ms": _stats(diffs),
+               "spikes_count": len(spikes), "spikes": spikes[:20]}
+        if before and after and all(k in before and k in after for k in ("tx_total", "tx_err_abort")):
+            d_tx, d_ab = after["tx_total"] - before["tx_total"], after["tx_err_abort"] - before["tx_err_abort"]
+            res["counters"] = {"before": before, "after": after, "delta": {"tx_total": d_tx, "tx_err_abort": d_ab},
+                               "abort_pct": round(100.0 * d_ab / d_tx, 2) if d_tx > 0 else None}
+        return res
+
+
 # ---------------------------------------------------------------- Home Assistant side
 def supervisor(path, method="GET", timeout=30):
     token = os.environ.get("SUPERVISOR_TOKEN")
@@ -1523,6 +1791,17 @@ class Mqtt:
         self.factory = factory
         self.next_try, self.last_error = 0.0, None
         self.diag = Diag(anchor, self._reply, clock=clock)
+        self.latency = Latency(anchor, self._latency_reply, clock=clock, busy=lambda: self.diag.running)
+        self.diag.blocked = lambda: self.latency.running
+
+    def _latency_reply(self, rid, payload):
+        """The answer of a measurement: on its own topic, and as the last one, retained."""
+        c = self.client
+        if c is not None:
+            body = json.dumps(payload)
+            c.publish(f"{LATENCY_RESULT_TOPIC}/{rid}", body)
+            if payload.get("state") == "ok":
+                c.publish(LATENCY_LAST_TOPIC, body, retain=True)
 
     def _reply(self, topic, payload):
         c = self.client
@@ -1532,6 +1811,8 @@ class Mqtt:
     def on_message(self, client, userdata, message):
         if message.topic == DIAG_REQUEST_TOPIC:
             self.diag.submit(message.payload)
+        elif message.topic == LATENCY_REQUEST_TOPIC:
+            self.latency.submit(message.payload)
 
     def start(self):
         """True when the MQTT client exists (made now or before)."""
@@ -1583,7 +1864,8 @@ class Mqtt:
         LOG.info(t("Connected to MQTT"))
         client.publish(STATE_TOPIC + "/available", "online", retain=True)
         client.subscribe(DIAG_REQUEST_TOPIC)
-        dev = {"identifiers": ["thread_anchor"], "name": "Thread Anchor", "manufacturer": "Pintjes", "sw_version": VERSION}
+        client.subscribe(LATENCY_REQUEST_TOPIC)
+        dev ={"identifiers": ["thread_anchor"], "name": "Thread Anchor", "manufacturer": "Pintjes", "sw_version": VERSION}
         common = {"state_topic": STATE_TOPIC, "availability_topic": STATE_TOPIC + "/available",
                   "json_attributes_topic": STATE_TOPIC, "device": dev}
         client.publish(f"{DISCOVERY}/binary_sensor/thread_anchor/anchored/config", json.dumps(dict(
@@ -1597,6 +1879,17 @@ class Mqtt:
         client.publish(f"{DISCOVERY}/sensor/thread_anchor/thread_role/config", json.dumps(dict(
             common, name="Thread role", unique_id="thread_anchor_thread_role", icon="mdi:router-network",
             value_template="{{ value_json.thread_role or 'unknown' }}")), retain=True)
+        # the change of the counters of the link over the last hour, one value per hour for the long
+        # history of Home Assistant (statistics): no attributes, only the value
+        light = {k: v for k, v in common.items() if k != "json_attributes_topic"}
+        for key, name, unit, icon in STAT_SENSORS:
+            cfg = dict(light, name=name, unique_id=f"thread_anchor_link_{key}", icon=icon, state_class="measurement",
+                       value_template="{% set s = (value_json.thread_link or {}).get('stats') or {} %}"
+                                      "{% set w = s.get('last') or {} %}{{ w.get('" + key + "', 'None') }}")
+            if unit:
+                cfg["unit_of_measurement"] = unit
+            client.publish(f"{DISCOVERY}/sensor/thread_anchor/link_{key}/config", json.dumps(cfg), retain=True)
+        self.anchor.stats.fresh = bool(self.anchor.stats.history)      # the retained history is sent again
         self.publish()
 
     def publish(self):
@@ -1604,6 +1897,16 @@ class Mqtt:
             state = dict(self.anchor.public(), version=VERSION,
                          updated=datetime.now().astimezone().isoformat(timespec="seconds"))
             self.client.publish(STATE_TOPIC, json.dumps(state), retain=True)
+
+    def publish_stats(self):
+        """The hourly changes of the counters of the link (`thread_anchor/link_stats`, retained), when a
+        window was added. Nothing is read for it: no radio traffic."""
+        if self.client is not None and self.anchor.stats.fresh:
+            self.client.publish(LINK_STATS_TOPIC, json.dumps({
+                "version": 1, "interval": "hour", "add_on_version": VERSION,
+                "updated": datetime.now().astimezone().isoformat(timespec="seconds"),
+                "history": self.anchor.stats.history}), retain=True)
+            self.anchor.stats.published()
 
     def publish_children(self):
         """What the add-on has learned about the nodes (`thread_anchor/children`, retained), when it
@@ -1626,7 +1929,7 @@ def main():
     if options.get("debug"):
         logging.getLogger().setLevel(logging.DEBUG)
     LOG.info(t("Thread Anchor {v} starting", v=VERSION))
-    anchor = Anchor(options, memory=MEMORY_FILE, history=PARENT_FILE, children=CHILDREN_FILE)
+    anchor = Anchor(options, memory=MEMORY_FILE, history=PARENT_FILE, children=CHILDREN_FILE, stats=LINK_STATS_FILE)
     if anchor.config_error:
         LOG.error(anchor.config_error)
     elif not anchor.enabled:
@@ -1651,8 +1954,9 @@ def main():
             last_pub = time.time()
         try:
             mq.publish_children()
+            mq.publish_stats()
         except Exception as err:  # noqa: BLE001 - the state does not depend on it
-            LOG.warning("children: %s", err)
+            LOG.warning("children / link stats: %s", err)
         stop.wait(TICK_S)
     mq.stop()
 

@@ -82,6 +82,10 @@ class FakeDocker:
         self.attempts = []     # commandes servies par `script`
         self.link_reads = []   # lectures du lien avec le parent (locales, sans trafic radio)
         self.link_out = dict(LINK_OUT)
+        # mesure de l'aller-retour jusqu'a la puce : le temps (virtuel) que prend chaque lecture
+        self.perf, self.cmds, self.fail = None, [], {}      # horloge de mesure, toutes les commandes, commande -> erreur
+        self.state_s, self.chip_s, self.nchip = 0.002, lambda k: 0.012, {"txpower": 0, "ccathreshold": 0}
+        self.cc_s = lambda k: 0.015
 
     def _check(self, container):
         if container != self.name:
@@ -95,12 +99,22 @@ class FakeDocker:
 
     def exec(self, container, cmd):
         self._check(container)
+        self.cmds.append(" ".join(cmd[1:]))
         queued = self.script.get(" ".join(cmd[1:]))
         if queued:
             self.attempts.append(" ".join(cmd[1:]))
             return 0, queued.pop(0)
+        if cmd[1] in self.fail:
+            return 1, self.fail[cmd[1]]
+        if cmd[1:] in (["txpower"], ["ccathreshold"]):          # lectures d'un reglage de la puce (spinel)
+            k = self.nchip[cmd[1]] = self.nchip[cmd[1]] + 1
+            if self.perf is not None:
+                self.perf.t += self.chip_s(k) if cmd[1] == "txpower" else self.cc_s(k)
+            return 0, ("8 dBm" if cmd[1] == "txpower" else "-75 dBm") + "\r\nDone\r\n"
         if cmd[1:] == ["state"]:
             self.reads.append("state")
+            if self.perf is not None:
+                self.perf.t += self.state_s
             return 0, f"{self.role}\r\nDone\r\n"
         if cmd[1:] == ["router", "list"]:
             self.reads.append("router list")
@@ -1524,8 +1538,9 @@ assert ta.parse_counters(LINK_OUT["counters mle"], ta.MLE_KEYS) == {
     "role_detached": 4, "role_child": 5, "role_router": 0, "role_leader": 0, "attach_attempts": 6,
     "partition_id_changes": 1, "better_partition_attach_attempts": 0, "parent_changes": 3}
 assert ta.parse_counters(LINK_OUT["counters mac"], ta.MAC_KEYS) == {     # 0.1.10 : lignes en retrait comprises
-    "tx_total": 1034, "tx_retry": 21, "tx_err_cca": 4, "tx_err_abort": 1, "tx_err_busy_channel": 2, "rx_total": 2210,
-    "rx_err_no_frame": 6, "rx_err_unknown_neighbor": 0, "rx_err_sec": 0, "rx_err_fcs": 7}
+    "tx_total": 1034, "tx_ack_requested": 900, "tx_acked": 880, "tx_retry": 21, "tx_err_cca": 4, "tx_err_abort": 1,
+    "tx_err_busy_channel": 2, "rx_total": 2210, "rx_err_no_frame": 6, "rx_err_unknown_neighbor": 0, "rx_err_sec": 0,
+    "rx_err_fcs": 7}
 assert "tx_unicast" not in ta.parse_counters(LINK_OUT["counters mac"], ta.MAC_KEYS)       # seules les cles voulues
 assert ta.parse_counters("TxTotal: 5\r\nTxRetry: 2\r\n", ta.MAC_KEYS) == {"tx_total": 5, "tx_retry": 2}   # a plat aussi
 assert ta.parse_counters("Done\r\n", ta.MAC_KEYS) == {}
@@ -1643,7 +1658,7 @@ assert aa.public()["thread_link"]["parent"]["in_neighbor_table"] is None and aa.
 hist = os.path.join(tempfile.mkdtemp(), "parent_history.json")
 dd = FakeDocker()
 aa = ta.Anchor({"omr_prefix": P}, docker=dd, clock=dd.clock, history=hist)
-parents = [f"{0x8400 + 0x400 * i:04x}" for i in range(12)]      # 8400, 8800, 8c00, 9000…
+parents = [f"{0x9400 + 0x400 * i:04x}" for i in range(12)]      # 9400, 9800, 9c00, a000…
 
 
 def read_with(a, d, rloc):
@@ -1657,11 +1672,11 @@ def read_with(a, d, rloc):
 assert read_with(aa, dd, parents[0]) == []          # le premier parent vu n'est pas un changement
 assert read_with(aa, dd, parents[0]) == []
 h = read_with(aa, dd, parents[1])
-assert len(h) == 1 and h[0]["from"] == "0x8400" and h[0]["to"] == "0x8800" and datetime.fromisoformat(h[0]["at"]).tzinfo
+assert len(h) == 1 and h[0]["from"] == "0x9400" and h[0]["to"] == "0x9800" and datetime.fromisoformat(h[0]["at"]).tzinfo
 assert read_with(aa, dd, parents[1]) == h           # pas de nouvelle ligne tant que le parent ne change pas
 for rl in parents[2:]:
     h = read_with(aa, dd, rl)
-assert len(h) == 10 and h[0]["from"] == "0x8800", h
+assert len(h) == 10 and h[0]["from"] == "0x9800", h
 assert h[-1]["from"] == "0x" + parents[-2] and h[-1]["to"] == "0x" + parents[-1]
 assert [e for e in aa.events if e[0] == "parent_changed"].__len__() == 11
 # un detachement puis le meme parent : pas un changement ; un autre parent : un changement
@@ -1806,7 +1821,116 @@ dd.now += 61
 aa.check()
 assert len(aa.children.nodes) == n_known and aa.public()["thread_link"] is None
 
-# publication retenue sur thread_anchor/children : quand ca change, au battement, jamais sans broker
+# ---- 0.1.12 : variation horaire des compteurs du lien (LinkStats), capteurs et sujet thread_anchor/link_stats
+H = 3600                                          # une heure
+BASE = 1000 * H                                   # un instant sur une frontiere d'heure
+MAC1 = {"tx_total": 1000, "tx_ack_requested": 900, "tx_acked": 880, "tx_retry": 0, "tx_err_cca": 10, "tx_err_abort": 40,
+        "tx_err_busy_channel": 10, "rx_total": 2000, "rx_err_sec": 5, "rx_err_fcs": 0, "rx_err_no_frame": 0,
+        "rx_err_unknown_neighbor": 0}
+MLE1 = {"role_detached": 4, "role_child": 4, "role_router": 0, "parent_changes": 3, "attach_attempts": 2,
+        "partition_id_changes": 1}
+clk = Clk()
+spath = os.path.join(tempfile.mkdtemp(), "link_stats.json")
+ls = ta.LinkStats(spath, clock=clk)
+clk.now = BASE + H + 30                                  # 1re lecture, juste apres l'heure : fenetre « alignee »
+assert ls.update({**MAC1, **MLE1}, "start-1", "router") is None and ls.baseline["aligned"] and ls.last is None
+clk.now = BASE + H + 90                                  # meme heure : rien
+assert ls.update({**MAC1, **MLE1}, "start-1", "router") is None
+# l'heure suivante : une fenetre, avec les variations, sans ack, et les parts en %
+clk.now = BASE + 2 * H + 40
+mac2 = dict(MAC1, tx_total=1900, tx_ack_requested=1700, tx_acked=1650, tx_err_abort=120, tx_err_cca=14, tx_retry=0,
+            rx_total=4100)
+rec = ls.update({**mac2, **dict(MLE1, role_detached=5, parent_changes=4)}, "start-1", "router")
+assert rec == ls.last and rec["seconds"] == 3610 and rec["role"] == "router"
+assert datetime.fromisoformat(rec["from"]).tzinfo and datetime.fromisoformat(rec["to"]) > datetime.fromisoformat(rec["from"])
+assert (rec["tx_total"], rec["tx_err_abort"], rec["tx_err_cca"], rec["tx_retry"], rec["rx_total"]) == (900, 80, 4, 0, 2100)
+assert (rec["role_detached"], rec["parent_changes"], rec["attach_attempts"]) == (1, 1, 0)
+assert rec["tx_no_ack"] == (1700 - 1650) - (900 - 880) == 30                      # demandes d'ack sans ack, sur la fenetre
+assert rec["tx_err_abort_pct"] == round(100 * 80 / 900, 2) == 8.89 and rec["tx_no_ack_pct"] == round(100 * 30 / 900, 2)
+assert ls.fresh and ls.public()["last"] == rec and datetime.fromisoformat(ls.public()["since"]).tzinfo
+ls.published()
+assert not ls.fresh
+# redemarrage de l'add-on (fichier) : la ligne de base et l'historique sont relus
+ls2 = ta.LinkStats(spath, clock=clk)
+assert ls2.baseline == ls.baseline and ls2.history == ls.history
+# l'OTBR redemarre (compteurs remis a zero) : pas de fenetre, nouvelle ligne de base
+clk.now = BASE + 3 * H + 20
+assert ls2.update({**mac2, **MLE1}, "start-2", "router") is None and ls2.baseline["otbr"] == "start-2" and len(ls2.history) == 1
+# un compteur qui baisse (meme demarrage) : pareil
+clk.now = BASE + 4 * H + 20
+assert ls2.update({**dict(mac2, tx_total=5), **MLE1}, "start-2", "router") is None and ls2.baseline["c"]["tx_total"] == 5
+# ligne de base prise en milieu d'heure : la 1re fenetre n'est pas comptee (pas une heure pleine)
+clk.now = BASE + 5 * H + 1800
+assert ls2.update({**MAC1, **MLE1}, "start-3", "router") is None and not ls2.baseline["aligned"]
+clk.now = BASE + 6 * H + 30
+assert ls2.update({**mac2, **MLE1}, "start-3", "router") is None and len(ls2.history) == 1 and ls2.baseline["aligned"]
+clk.now = BASE + 7 * H + 30                              # l'heure pleine suivante est comptee
+assert ls2.update({**dict(mac2, tx_total=2500), **MLE1}, "start-3", "router")["tx_total"] == 600 and len(ls2.history) == 2
+# add-on arrete trop longtemps : la fenetre n'est pas une heure, elle est ecartee
+clk.now = BASE + 10 * H + 30
+assert ls2.update({**dict(mac2, tx_total=3500), **MLE1}, "start-3", "router") is None and len(ls2.history) == 2
+# compteurs absents (lecture partielle) : la fenetre ne porte que ceux lus des deux cotes
+clk.now = BASE + 11 * H + 30
+rec = ls2.update({"tx_total": 4500, "tx_err_abort": 200}, "start-3", "router")
+assert rec is None or "role_detached" not in rec
+# pas de pourcentage sans envoi, un fichier abime ou absent : repart a vide
+ls3 = ta.LinkStats(None, clock=clk)
+clk.now = BASE + 20 * H + 5
+ls3.update({"tx_total": 0, "tx_err_abort": 0}, "s", "child")
+clk.now = BASE + 21 * H + 5
+assert "tx_err_abort_pct" not in ls3.update({"tx_total": 0, "tx_err_abort": 0}, "s", "child")
+with open(spath, "w", encoding="utf-8") as f:
+    f.write("{pas du json")
+assert ta.LinkStats(spath, clock=clk).baseline is None and ta.LinkStats(spath, clock=clk).history == []
+assert len(ta.LinkStats(None).history) == 0
+for _ in range(80):                              # 72 fenetres au plus
+    clk.now += H
+    ls2.update({**dict(mac2, tx_total=int(clk.now - BASE)), **MLE1}, "start-3", "router")
+    ls2.baseline["aligned"] = True
+assert len(ls2.history) <= ta.LINK_HISTORY
+
+# dans le lien et l'etat : l'ancre lit les memes compteurs qu'avant (aucune commande en plus) et publie la fenetre
+dd = FakeDocker()
+aa = ta.Anchor({"omr_prefix": P}, docker=dd, clock=dd.clock, stats=os.path.join(tempfile.mkdtemp(), "s.json"))
+dd.now = BASE + H + 30
+dd.link_out["counters mle"] = "Role Detached: 4\r\nParent Changes: 3\r\nDone\r\n"
+aa.check()
+assert dd.link_reads == LINK_CMDS and aa.public()["thread_link"]["stats"] == {"last": None, "since": aa.stats.public()["since"]}
+assert aa.public()["thread_link"]["counters"]["mac"]["tx_acked"] == 880 and aa.public()["thread_link"]["counters"]["mac"]["tx_ack_requested"] == 900
+dd.link_out["counters mac"] = dd.link_out["counters mac"].replace("TxTotal: 1034", "TxTotal: 2034").replace(
+    "TxErrAbort: 1", "TxErrAbort: 51").replace("TxAckRequested: 900", "TxAckRequested: 1500").replace("TxAcked: 880", "TxAcked: 1400")
+dd.link_out["counters mle"] = "Role Detached: 6\r\nParent Changes: 4\r\nDone\r\n"
+dd.now = BASE + 2 * H + 30
+before = aa._signature()
+assert aa.check() is not None
+win = aa.public()["thread_link"]["stats"]["last"]
+assert win["tx_total"] == 1000 and win["tx_err_abort"] == 50 and win["tx_no_ack"] == 100 - 20 and win["role_detached"] == 2
+assert win["tx_err_abort_pct"] == 5.0 and win["parent_changes"] == 1
+assert aa._signature() != before                                  # une nouvelle fenetre republie l'etat
+
+# capteurs et sujet retenu
+bs = Broker()
+bs.up = True
+mqs = ta.Mqtt(aa, service=bs.service, factory=bs.factory, clock=bs.clock)
+assert mqs.start()
+cs = mqs.client
+mqs.on_connect(cs, None, None, 0)
+cfgs = {tp: json.loads(pl) for tp, pl, _ in cs.sent if tp.startswith("homeassistant/sensor/thread_anchor/link_")}
+assert sorted(cfgs) == sorted(f"homeassistant/sensor/thread_anchor/link_{k}/config" for k, *_ in ta.STAT_SENSORS)
+abort = cfgs["homeassistant/sensor/thread_anchor/link_tx_err_abort/config"]
+assert abort["state_class"] == "measurement" and abort["unique_id"] == "thread_anchor_link_tx_err_abort" and "json_attributes_topic" not in abort
+assert cfgs["homeassistant/sensor/thread_anchor/link_tx_err_abort_pct/config"]["unit_of_measurement"] == "%"
+assert "tx_err_abort" in abort["value_template"] and abort["state_topic"] == "thread_anchor/state"
+mqs.publish_stats()                                               # a la connexion, l'historique garde est renvoye
+sent = [(tp, json.loads(pl), rt) for tp, pl, rt in cs.sent if tp == "thread_anchor/link_stats"]
+assert len(sent) == 1 and sent[0][2] is True and sent[0][1]["history"] == aa.stats.history and sent[0][1]["interval"] == "hour"
+cs.sent = []
+mqs.publish_stats()
+assert cs.sent == []                                              # rien de neuf : rien d'envoye
+aa.stats.fresh = True
+mqs.publish_stats()
+assert [tp for tp, _, _ in cs.sent] == ["thread_anchor/link_stats"] and not aa.stats.fresh
+
 bc = Broker()
 bc.up = True
 dd = FakeDocker()
@@ -1864,4 +1988,125 @@ mq2.on_message(c2, None, Msg("thread_anchor/diag/request", req(id="z").encode())
 assert [(tp, retain) for tp, _, retain in c2.sent] == [("thread_anchor/diag/result/z", False)]
 res = json.loads(c2.sent[0][1])
 assert res["id"] == "z" and res["other_prefix_addresses"] == [OLD] and res["error"] is None
+# ---- 0.1.12 : aller-retour jusqu'a la puce, a la demande (lectures seules : state, txpower, ccathreshold, counters mac)
+class Perf:
+    """Chrono virtuel : le faux border router y ajoute le temps de chaque lecture."""
+    t = 100.0
+
+    def __call__(self):
+        return self.t
+
+
+assert ta._stats([]) is None and ta._stats([5.0]) == {"min": 5.0, "median": 5.0, "p95": 5.0, "max": 5.0}
+assert ta._stats(list(range(1, 101)))["p95"] == 95 and ta._stats(list(range(1, 101)))["median"] == 50.5   # rang le plus proche
+
+
+def latency_rig(**kw):
+    dd = FakeDocker()
+    dd.perf = Perf()
+    aa = ta.Anchor({"omr_prefix": P}, docker=dd, clock=dd.clock)
+    replies = []
+    lt = ta.Latency(aa, lambda rid, payload: replies.append((rid, payload)), clock=dd.clock, spawn=kw.get("spawn", lambda fn: fn()),
+                    perf=dd.perf, sleep=lambda s: dd.__setattr__("now", dd.now + s), busy=kw.get("busy", lambda: False))
+    return dd, aa, lt, replies
+
+
+# cas normal : 100 paires, txpower 10 ms plus lent que state ; nombre de trames et d'abandons avant / apres
+dd, aa, lt, replies = latency_rig()
+dd.script["counters mac"] = [LINK_OUT["counters mac"], LINK_OUT["counters mac"].replace("TxTotal: 1034", "TxTotal: 1534").replace(
+    "TxErrAbort: 1", "TxErrAbort: 26")]
+lt.submit(json.dumps({"id": "m1"}))
+rid, res = replies[0]
+assert rid == "m1" and res["state"] == "ok" and res["error"] is None and res["command"] == "txpower" and res["n"] == 100
+assert res["errors"] == 0 and res["cached_suspected"] is False and res["interval_s"] == 1.0
+assert res["diff_ms"] == {"min": 10.0, "median": 10.0, "p95": 10.0, "max": 10.0}
+assert res["state_ms"]["median"] == 2.0 and res["chip_ms"]["median"] == 12.0 and res["spikes_count"] == 0 and res["spikes"] == []
+assert res["counters"]["delta"] == {"tx_total": 500, "tx_err_abort": 25} and res["counters"]["abort_pct"] == 5.0
+assert res["counters"]["before"] == {"tx_total": 1034, "tx_err_abort": 1}
+assert datetime.fromisoformat(res["started"]).tzinfo and res["seconds"] >= 99          # une paire par seconde
+assert not lt.running
+assert set(dd.cmds) == {"counters mac", "state", "txpower"} and dd.cmds.count("txpower") == 105       # 5 d'essai + 100
+assert not [c for c in dd.cmds if c.split()[0] not in ("state", "txpower", "ccathreshold", "counters")]   # que des lectures
+# des pics sont dates et comptes
+dd, aa, lt, replies = latency_rig()
+dd.chip_s = lambda k: 0.012 + (0.08 if k in (30, 77) else 0)
+lt.submit(json.dumps({"id": "m2", "count": 100, "interval_s": 1}))
+res = replies[0][1]
+assert res["spikes_count"] == 2 and [s["diff_ms"] for s in res["spikes"]] == [90.0, 90.0]
+assert all(datetime.fromisoformat(s["at"]).tzinfo for s in res["spikes"]) and res["diff_ms"]["max"] == 90.0
+assert res["diff_ms"]["median"] == 10.0 and res["diff_ms"]["p95"] == 10.0
+# txpower repondu depuis un cache (aussi rapide que state) : ccathreshold essaye ; sinon dit « cache suspecte »
+dd, aa, lt, replies = latency_rig()
+dd.chip_s = lambda k: 0.0021
+lt.submit(json.dumps({"id": "m3", "count": 10}))
+res = replies[0][1]
+assert res["command"] == "ccathreshold" and res["cached_suspected"] is False and res["diff_ms"]["median"] == 13.0 and res["n"] == 10
+dd, aa, lt, replies = latency_rig()
+dd.chip_s = lambda k: 0.0021
+dd.cc_s = lambda k: 0.0022
+lt.submit(json.dumps({"id": "m4", "count": 10}))
+res = replies[0][1]
+assert res["command"] == "txpower" and res["cached_suspected"] is True and res["state"] == "ok"
+# txpower inconnu de ce firmware : la lecture suivante est essayee ; aucune ne repond : erreur dite, rien d'invente
+dd, aa, lt, replies = latency_rig()
+dd.fail["txpower"] = "Error 35: InvalidCommand\r\n"
+lt.submit(json.dumps({"id": "m5", "count": 10}))
+assert replies[0][1]["state"] == "ok" and replies[0][1]["command"] == "ccathreshold"
+dd, aa, lt, replies = latency_rig()
+dd.fail.update({"txpower": "Error 35: InvalidCommand\r\n", "ccathreshold": "Error 35: InvalidCommand\r\n"})
+lt.submit(json.dumps({"id": "m6", "count": 10}))
+assert replies[0][1]["state"] == "error" and replies[0][1]["error"] == "no read of the chip answered" and not lt.running
+# border router arrete : erreur, pas d'exception
+dd, aa, lt, replies = latency_rig()
+dd.running = False
+lt.submit(json.dumps({"id": "m7", "count": 10}))
+assert replies[0][1]["state"] == "error" and "409" in replies[0][1]["error"] and not lt.running
+# demandes refusees : id inutilisable (ignoree), bornes, deja en cours, diagnostic en cours
+dd, aa, lt, replies = latency_rig()
+for raw in ("pas du json", "{}", json.dumps({"id": "a/b"}), json.dumps({"id": ""})):
+    lt.submit(raw)
+assert replies == []
+for bad in ({"count": 5}, {"count": 500}, {"interval_s": 0.1}, {"interval_s": 10}, {"count": "x"}):
+    lt.submit(json.dumps(dict({"id": "b"}, **bad)))
+assert [r[1]["state"] for r in replies] == ["refused"] * 5 and "interval_s" in replies[0][1]["error"] and dd.cmds == []
+later = []
+dd, aa, lt, replies = latency_rig(spawn=later.append)
+lt.submit(json.dumps({"id": "c1", "count": 10}))
+lt.submit(json.dumps({"id": "c2", "count": 10}))
+assert len(later) == 1 and replies == [("c2", {"id": "c2", "state": "refused", "error": "busy"})] and lt.running
+later.pop()()
+assert replies[-1][0] == "c1" and replies[-1][1]["state"] == "ok" and not lt.running
+dd, aa, lt, replies = latency_rig(busy=lambda: True)
+lt.submit(json.dumps({"id": "d1"}))
+assert replies == [("d1", {"id": "d1", "state": "refused", "error": "busy"})] and dd.cmds == []
+# par MQTT : abonne, jamais lance seul, resultat non retenu + dernier retenu ; diagnostic et mesure s'excluent
+bl = Broker()
+bl.up = True
+dd = FakeDocker()
+dd.perf = Perf()
+aa = ta.Anchor({"omr_prefix": P}, docker=dd, clock=bl.clock)
+mql = ta.Mqtt(aa, service=bl.service, factory=bl.factory, clock=bl.clock)
+mql.latency.spawn = lambda fn: fn()
+mql.latency.perf, mql.latency.sleep = dd.perf, lambda s: None
+assert mql.start()
+cl = mql.client
+mql.on_connect(cl, None, None, 0)
+assert ("subscribe", "thread_anchor/latency/request") in cl.log and dd.cmds == []                 # rien sans demande
+cl.sent = []
+mql.on_message(cl, None, Msg("thread_anchor/latency/request", json.dumps({"id": "z1", "count": 10}).encode()))
+tops = [(tp, rt) for tp, _, rt in cl.sent]
+assert tops == [("thread_anchor/latency/result/z1", False), ("thread_anchor/latency/last", True)], tops
+assert json.loads(cl.sent[0][1])["state"] == "ok" and json.loads(cl.sent[1][1])["id"] == "z1"
+cl.sent = []
+mql.on_message(cl, None, Msg("thread_anchor/latency/request", json.dumps({"id": "z2", "count": 3}).encode()))
+assert [(tp, rt) for tp, _, rt in cl.sent] == [("thread_anchor/latency/result/z2", False)]      # refusee : pas retenue
+mql.latency.running = True
+cl.sent = []
+mql.diag.submit(req(id="y1"))
+assert json.loads(cl.sent[0][1])["error"] == "busy"               # pas de diagnostic pendant la mesure
+mql.latency.running, mql.diag.running = False, True
+cl.sent = []
+mql.on_message(cl, None, Msg("thread_anchor/latency/request", json.dumps({"id": "z3", "count": 10}).encode()))
+assert json.loads(cl.sent[0][1])["error"] == "busy"               # ni de mesure pendant un diagnostic
+mql.diag.running = False
 print("OK")

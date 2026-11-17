@@ -102,6 +102,47 @@ Fields of `thread_anchor/state` (JSON):
 | `otbr_started_at`, `error` | start of the border router container, last error |
 | `version`, `updated` | version of the add-on, time of this state |
 
+### The change of the counters, hour by hour (`thread_anchor/link_stats` and 7 sensors)
+
+The counters of `thread_link.counters` only say « since the start of the radio »: they hide when things
+happened. The add-on keeps the **change over each hour** (reads nothing more: it uses the counters of the
+link reading), to follow the health of the radio link over days.
+
+- `thread_link.stats.last`: the last hour that ended, `{"from", "to", "seconds", "role", ...}` with, per counter,
+  the change over the window (`tx_total`, `tx_ack_requested`, `tx_acked`, `tx_retry`, `tx_err_cca`,
+  `tx_err_abort`, `tx_err_busy_channel`, `rx_total`, `rx_err_*`, `role_detached`, `role_child`, `role_router`,
+  `parent_changes`, `attach_attempts`, `partition_id_changes`), and the derived `tx_no_ack` (frames sent
+  expecting an ack that did not come: `tx_ack_requested − tx_acked`), `tx_err_abort_pct`, `tx_no_ack_pct` and
+  `tx_err_cca_pct` (share of `tx_total`). `stats.since`: start of the window in progress.
+- A window runs from a reading just after the hour starts to the next one (about 60 min, 55 to 90 accepted).
+  Not counted: the first (partial) hour after a start, an hour in which the border router restarted or a
+  counter went down, a window that is not an hour (add-on stopped for long).
+- `thread_anchor/link_stats` (retained): the last 72 windows (3 days), kept over a restart in
+  `/data/link_stats.json`, to correlate over days.
+- 7 sensors in Home Assistant (device *Thread Anchor*, `state_class: measurement`, so Home Assistant keeps
+  their long statistics): *TX aborted per hour*, *TX CCA errors per hour*, *TX without ack per hour*,
+  *TX retries per hour*, *Detachments per hour*, *Parent changes per hour*, *TX abort ratio* (%). *unknown*
+  until the first full hour.
+- `tx_retry` is 0 on a radio co-processor that retries by itself (the counter of the host only counts the
+  retries the host makes): the frames that never got their ack are in `tx_no_ack`, the better figure.
+
+### Round trip to the radio chip, on request: `thread_anchor/latency/request`
+
+To tell a slow USB/IP link from a healthy one. **Never run on its own**, only when asked:
+`{"id": "x1", "count": 100, "interval_s": 1}` (`count` 10 to 200, default 100; `interval_s` 0.5 to 3, default 1).
+It alternates `ot-ctl state` (answered by the host alone) and `ot-ctl txpower` (reads a setting of the chip over
+spinel: no radio emission), times each, and the difference of the two is the round trip to the chip. `txpower`
+must be at least 1 ms slower than `state`, else it was answered from a cache and `ccathreshold` is tried (the
+answer says `command`, and `cached_suspected: true` when neither is slower). Reads only: `state`, `txpower`,
+`ccathreshold`, `counters mac` (frames sent and aborted before and after). One at a time, refused (`busy`)
+while a diagnostic runs, and no diagnostic while it runs. About `count × (interval_s + 0.1)` seconds.
+
+Answer on `thread_anchor/latency/result/<id>` (not retained; the last good one also on
+`thread_anchor/latency/last`, retained): `state` (`ok`, `error`, `refused`), `command`, `n`, `errors`,
+`state_ms`, `chip_ms`, `diff_ms` (`min`, `median`, `p95`, `max`), `spikes_count` and `spikes` (the first 20
+differences above 50 ms, with their time), `counters` (`before`, `after`, `delta`, `abort_pct`), `started`,
+`seconds`. The log has one line with the median, p95 and max.
+
 ### What the add-on knows about the nodes: `thread_anchor/children`
 
 Published retained, JSON, **no reading of its own and no radio traffic**: it is only what the add-on already
