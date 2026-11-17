@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.40.1] - 2026-11-17
+
+### Fixed
+
+- "i" of the preferred border router: "Android / iOS credentials (HA)".
+- No "unknown node" alert for an announcement made from Home Assistant's own machine (one of its addresses is ours): the controller node of the Matter Server announces itself on the fabric. The alert no longer guesses a cause: "Announced on the fabric, unknown to the Matter Server".
+
 ## [2.40.0] - 2026-11-17
 
 ### Changed
@@ -18,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Preferred border router of Home Assistant**: its card shows a phone-and-key icon with its "i", and its panel says "Preferred by Home Assistant": the border router whose Thread credentials Home Assistant gives to the Android and iOS apps. Read from the Thread integration (`thread/list_datasets`: preferred border agent id, else extended address), read only, every 10 min with the names of the border routers.
+- **Preferred border router of Home Assistant**: its card shows a phone-and-key icon with its "i", and its panel says "Preferred by Home Assistant" ("i": "Android / iOS credentials (HA)"). Read from the Thread integration (`thread/list_datasets`: preferred border agent id, else extended address), read only, every 10 min with the names of the border routers.
 - **Parent of a child of a border router, from Thread Anchor**: when nothing else gives the parent of a child (a child of a Google TV or another border router whose tables cannot be read), the children Thread Anchor learned in its own searches (`thread_anchor/children`, retained, version 1) give it: parent = its router, named by the tables of the mesh, the link marked as old when the reading is. No radio traffic of its own. Its signal comes from the child's own neighbor table only: the signal Thread Anchor measures toward its border router is never shown as the signal of that link (no signal: "—"). Entries older than 24 h are not used.
 
 ## [2.39.0] - 2026-11-17

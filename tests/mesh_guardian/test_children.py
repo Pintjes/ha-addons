@@ -86,4 +86,6 @@ assert not w.is_preferred({"xa": BR})
 # (4) la page : icone et « i » du border router prefere, en anglais et en francais
 page = open(os.path.join(MG, "web", "index.html"), encoding="utf-8").read()
 assert "IC.phonekey" in page and 'tipI(L("br_pref_tip"))' in page and page.count("br_pref_tip:") == 2 and page.count("br_pref_l:") == 2
+# 2.40.1 : le texte court choisi par l'utilisateur, exactement
+assert 'br_pref_tip:"Identifiants Android / iOS (HA)"' in page and 'br_pref_tip:"Android / iOS credentials (HA)"' in page
 print("OK")

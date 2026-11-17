@@ -385,8 +385,7 @@ def advise(rows, brs, ctx):
         notes.append(("warn", t("The border routers changed the address prefix {n}× in 24h: each time every node must "
                                 "take a new address, the ones that do not follow drop", n=n_omr)))
     if ctx["ghosts"]:
-        notes.append(("info", t("Announced but unknown to the Matter Server: {ids} (removed without a factory reset?)",
-                                ids=", ".join(ctx["ghosts"]))))
+        notes.append(("info", t("Announced on the fabric, unknown to the Matter Server: {ids}", ids=", ".join(ctx["ghosts"]))))
     return notes
 
 

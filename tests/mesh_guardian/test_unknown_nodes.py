@@ -13,8 +13,9 @@ import types
 MG = sys.argv[1]
 src = open(os.path.join(MG, "watcher.py"), encoding="utf-8").read()
 tree = ast.parse(src)
-funcs = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in ("txt_of", "unknown_records", "short", "prefix64")]
-assert len(funcs) == 4, [f.name for f in funcs]
+funcs = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in ("txt_of", "unknown_records", "short", "prefix64",
+                                                                              "local_addresses", "own_announcement")]
+assert len(funcs) == 6, [f.name for f in funcs]
 cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Watch")
 body = [m for m in cls.body if isinstance(m, ast.FunctionDef) and m.name in ("update_matter", "unknown_nodes")]
 assert len(body) == 2
@@ -66,6 +67,24 @@ w.matter["00000000000000FE"] = {"online": True, "addrs": []}
 w.ghosts = ["00000000000000FE"]
 u = w.unknown_nodes()
 assert u[0]["host"] is None and u[0]["addresses"] == [] and u[0]["txt"] == {} and u[0]["first"] is None
+
+# 2.40.1 : une annonce faite depuis cette machine (le noeud controleur du Matter Server de HA) n'est pas
+# une node inconnue : ses adresses sont les notres (lues dans /proc/net/if_inet6 et fib_trie)
+import tempfile  # noqa: E402
+
+d = tempfile.mkdtemp()
+with open(os.path.join(d, "if_inet6"), "w", encoding="ascii") as f:
+    f.write("fd005959000000000000000000000020 02 40 00 80 eth0\n00000000000000000000000000000001 01 80 10 80 lo\n")
+with open(os.path.join(d, "fib_trie"), "w", encoding="ascii") as f:
+    f.write("Main:\n  +-- 0.0.0.0/0 3 0 5\n     |-- 192.168.10.20\n        /32 host LOCAL\n     |-- 192.168.10.255\n"
+            "        /32 link BROADCAST\n     |-- 127.0.0.1\n        /32 host LOCAL\n")
+own = ns["local_addresses"](os.path.join(d, "if_inet6"), os.path.join(d, "fib_trie"))
+assert own == {"fd00:5959::20", "192.168.10.20"}, own
+assert ns["own_announcement"]({"addrs": ["192.168.10.20", "fd00:5959::20"]}, own)
+assert ns["own_announcement"]({"addrs": ["fd00:5959::20%eth0"]}, own)
+assert not ns["own_announcement"]({"addrs": ["fd00:aaaa:bbbb:1:a:b:c:d"]}, own)
+assert not ns["own_announcement"]({"addrs": ["192.168.10.20"]}, set())          # adresses locales inconnues : rien d'exclu
+assert ns["local_addresses"](os.path.join(d, "absent"), os.path.join(d, "absent")) == set()
 
 # la page affiche ces infos sous la note qui nomme la node
 page = open(os.path.join(MG, "web", "index.html"), encoding="utf-8").read()

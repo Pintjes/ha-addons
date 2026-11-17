@@ -129,7 +129,7 @@ FR = {
     "{names} detached in the last 24h, the last time at {t}": "{names} : décroché dans les dernières 24 h, la dernière fois à {t}",
     "{names} detached in the last 24h": "{names} : décroché dans les dernières 24 h",
     "{name} detaches ({n}× in 24h): check its power and its network": "{name} décroche ({n}× en 24 h) : vérifier son alimentation et son réseau",
-    "Announced but unknown to the Matter Server: {ids} (removed without a factory reset?)": "Annoncée mais inconnue du Matter Server : {ids} (retirée sans réinitialisation ?)",
+    "Announced on the fabric, unknown to the Matter Server: {ids}": "Annoncée sur le fabric, inconnue du Matter Server : {ids}",
     "{node}: {action}": "{node} : {action}",
     "{parent} restarts ({n}× in 24h): finding a new link could improve the situation":
         "{parent} redémarre ({n}× en 24 h) : rechercher un nouveau lien pourrait améliorer la situation",
@@ -201,7 +201,7 @@ FR = {
     "Network quality": "Qualité du réseau",
     "Wi-Fi": "Wi-Fi",
     "Ethernet": "Ethernet",
-    "Announced on the Matter fabric but unknown to the Matter Server (removed without a factory reset?): {ids}": "Nodes inconnues du Matter Server : {ids}",
+    "Announced on the Matter fabric but unknown to the Matter Server: {ids}": "Nodes inconnues du Matter Server : {ids}",
     "Passive contact unavailable: {err}": "Contact passif indisponible : {err}",
     "Passive contact on: every packet of a node counts as a contact": "Contact passif activé",
     "Passive contact stopped: {err}": "Contact passif arrêté : {err}",

@@ -79,7 +79,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.40.0"
+VERSION = "2.40.1"
 OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
 OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
@@ -234,6 +234,39 @@ def _int16(text):
         return int(text, 16)
     except ValueError:
         return None
+
+
+def local_addresses(if_inet6="/proc/net/if_inet6", fib_trie="/proc/net/fib_trie"):
+    """Addresses of this machine (the add-on runs on the host network: those of Home Assistant's host),
+    IPv6 from if_inet6, IPv4 from the local routes of fib_trie. Empty set when they cannot be read."""
+    out = set()
+    try:
+        with open(if_inet6, encoding="ascii") as f:
+            for line in f:
+                raw = line.split()[0] if line.split() else ""
+                if len(raw) == 32:
+                    out.add(str(ipaddress.IPv6Address(int(raw, 16))))
+    except (OSError, ValueError):
+        pass
+    try:
+        with open(fib_trie, encoding="ascii") as f:
+            last = None
+            for line in f:
+                s = line.strip()
+                if s.startswith("|--"):
+                    last = s[3:].strip()
+                elif "/32 host LOCAL" in s and last:
+                    out.add(last)
+    except OSError:
+        pass
+    out.discard("127.0.0.1")
+    out.discard("::1")
+    return out
+
+
+def own_announcement(n, own):
+    """True for an announcement made from this machine: one of its addresses is ours."""
+    return bool(own) and any(str(a).split("%")[0] in own for a in (n or {}).get("addrs") or [])
 
 
 def txt_of(props):
@@ -1029,21 +1062,21 @@ class Watch:
             gone = [k for k in self.matter if _int16(k) not in ids and not self.matter[k].get("online")]
             for k in gone:
                 del self.matter[k]
-            # still announced on the fabric but unknown to the Matter Server: a device removed
-            # from Home Assistant without a factory reset keeps announcing itself
-            # A node reset with the Reset button is not one of them: its old identity stays
-            # announced by the border routers until their record of it expires, and nobody
-            # but the device could withdraw it (the Matter Server no longer knows the node)
+            # still announced on the fabric but unknown to the Matter Server. Not one of them: a node
+            # reset with the Reset button (its old identity stays announced by the border routers until
+            # their record of it expires), nor an announcement made from this machine (the controller
+            # node of the Matter Server of Home Assistant announces itself on the fabric too)
             rt = getattr(self, "reattach", None)
+            own = local_addresses()
             ghosts = sorted(k for k in self.matter if _int16(k) not in ids and self.matter[k].get("online")
-                            and not (rt and rt.was_reset(_int16(k))))
+                            and not (rt and rt.was_reset(_int16(k))) and not own_announcement(self.matter[k], own))
         if gone:
             self._save_known()
         if ghosts != getattr(self, "ghosts", []):
             self.ghosts = ghosts
             if ghosts:
-                LOG.warning(t("Announced on the Matter fabric but unknown to the Matter Server (removed without a "
-                              "factory reset?): {ids}", ids=", ".join("0x" + (k.lstrip("0") or "0") for k in ghosts)))
+                LOG.warning(t("Announced on the Matter fabric but unknown to the Matter Server: {ids}",
+                              ids=", ".join("0x" + (k.lstrip("0") or "0") for k in ghosts)))
         if getattr(self, "advisor", None) and getattr(self, "radio", None) and self.radio.last:
             names = {v for v in (self.radio.last.get("names") or [])}
             if names:
