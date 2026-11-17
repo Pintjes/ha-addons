@@ -34,7 +34,7 @@ import time
 
 from i18n import t, tn
 from store import load_json, save_json
-from nodetable import nb_rssi
+from nodetable import heard_map, heard_of, nb_rssi
 from advice import weak_link
 
 LOG = logging.getLogger("mg.reattach")
@@ -595,6 +595,54 @@ class Reattach:
         return {"ok": sorted(ip for ip, v in res.items() if v), "ko": sorted(ip for ip, v in res.items() if not v),
                 "heard": heard, "radio_known": ext is not None}
 
+    def _thread_diag(self, nid, name, ext):
+        """Thread diagnostic of a node by Thread Anchor (its RLOC16 read in the neighbor tables of the
+        nodes that hear it). None when it cannot be asked (no Thread Anchor, RLOC16 not known).
+        Else {"text", "omr": [addresses on the network prefix], "result": "omr" | "old_prefix_only" |
+        "frozen" | "unknown", "outcome": text of the result when the attempt stops there}."""
+        anchor = getattr(self.w, "anchor", None)
+        if anchor is None or not anchor.diag_ready() or ext is None or not self.live:
+            return None
+        with self.h.lock:
+            names = {k: v.get("name") or k for k, v in self.h.nodes.items()}
+        with self.live.lock:
+            snap = {k: {"attrs": dict(n.get("attributes") or {}), "meta": {"available": n.get("available")},
+                        "node": {}, "name": names.get(k, k)} for k, n in self.live.nodes.items() if k != nid}
+        hb = heard_of(heard_map(snap, self.live, time.time(), recent=3600), ext)
+        if not hb or hb.get("rloc16") is None:
+            return None
+        rloc = hb["rloc16"]
+        res = anchor.diag(rloc, ext)
+        if not isinstance(res, dict):
+            return {"text": t("Thread diagnostic (RLOC 0x{r:04X}) failed: {why}", r=rloc, why=t("no answer from Thread Anchor")),
+                    "omr": [], "result": "unknown", "outcome": ""}
+        ping = res.get("ping") or {}
+        err = str(res.get("error") or "")
+        pinged = (t("answers through the mesh ({ms} ms)", ms=ping.get("rtt_ms")) if ping.get("ok")
+                  else t("no answer through the mesh") if ping else t("not pinged"))
+        if err:
+            text = t("Thread diagnostic (RLOC 0x{r:04X}) failed: {why}", r=rloc, why=err) + (f" ({pinged})" if ping else "")
+            # neither the diagnostic nor the ping answers while a neighbor hears it: its network stack
+            # is stuck. Any other error (busy, too soon, another node at this RLOC16…) proves nothing
+            if err.startswith("no answer to the network diagnostic") and not ping.get("ok"):
+                return {"text": text, "omr": [], "result": "frozen", "outcome": t(
+                    "{node}: heard by {who} but no answer through the mesh: its network stack is stuck. No remote way "
+                    "is left: cutting its power for 10 s is the last resort, your call", node=name, who=hb["by"])}
+            return {"text": text, "omr": [], "result": "unknown", "outcome": ""}
+        # the diagnostic answered (the ping may not: some nodes answer one and not the other)
+        omr = [str(x) for x in res.get("omr_addresses") or []]
+        old = [str(x) for x in res.get("other_prefix_addresses") or []]
+        addrs = ", ".join(omr + old) or t("no routable address")
+        text = t("Thread diagnostic (RLOC 0x{r:04X}): {ping}; addresses: {addrs}", r=rloc, ping=pinged, addrs=addrs)
+        if omr:
+            return {"text": text, "omr": omr, "result": "omr", "outcome": ""}
+        if old:
+            return {"text": text, "omr": [], "result": "old_prefix_only", "outcome": t(
+                "{node}: only has the old prefix ({addrs}): it did not take the prefix of the network. A remedy on the "
+                "border router of Home Assistant is possible (a route to the old prefix for a while), with your agreement",
+                node=name, addrs=", ".join(old))}
+        return {"text": text, "omr": [], "result": "unknown", "outcome": ""}
+
     @staticmethod
     def _alive_text(name, a):
         if a["heard"]:
@@ -623,17 +671,35 @@ class Reattach:
                 alive_txt = self._alive_text(name, alive)
                 self.w.emit("recover_alive", alive_txt, node=name, ping_ok=alive["ok"], ping_ko=alive["ko"],
                             heard=[[w, round(s), r] for w, s, r in alive["heard"]])
-                st = self.w.stale_prefix(nid) if hasattr(self.w, "stale_prefix") else None
+                st = self.w.stale_prefix(nid, thread=True) if hasattr(self.w, "stale_prefix") else None
+                announced = (self.w.matter.get(nid) or {}).get("online") if hasattr(self.w, "matter") else None
+                if (st or (announced is False and not alive["ok"])) and alive["heard"]:
+                    # address not known or on an old prefix, but its neighbors hear it: Thread Anchor
+                    # reaches it through the mesh (RLOC16) and tells its current addresses
+                    d = self._thread_diag(nid, name, ext)
+                    if d is not None:
+                        alive_txt += " · " + d["text"]
+                        if d["omr"] and hasattr(self.w, "proxy_announce"):
+                            proxied = self.w.proxy_announce(nid, d["omr"])
+                            if proxied:
+                                self.w.emit("recover_proxy", t("{node}: announced in its place on {ip} (address given by the Thread diagnostic)",
+                                                               node=name, ip=", ".join(d["omr"])), node=name, ip=d["omr"])
+                                self.w.stop.wait(PROXY_SETTLE_S)
+                                st = None   # its current address is announced: the command can leave
+                        elif d["result"] in ("old_prefix_only", "frozen"):
+                            self._recover_result(nid, name, d["result"], d["outcome"] + " · " + alive_txt)
+                            return
                 if st:
                     # still on a prefix the border routers left: its address is not known, the
                     # command cannot leave (the Matter Server gives up at once)
-                    self._recover_result(nid, name, "stale", t(
+                    self._recover_result(nid, name, "stale", (t(
                         "{node}: recovery attempt not sent: stayed on the old prefix {prefix} after {br} changed it at {at}, "
-                        "its new address is not known", node=name, prefix=st["prefix"], br=st["br"], at=st["at"])
+                        "its new address is not known", node=name, prefix=st["prefix"], br=st["br"], at=st["at"]) if st.get("br")
+                        else t("{node}: recovery attempt not sent: stayed on the old prefix {prefix}, its new address is not known",
+                               node=name, prefix=st["prefix"]))
                         + " · " + alive_txt)
                     return
-                announced = (self.w.matter.get(nid) or {}).get("online") if hasattr(self.w, "matter") else None
-                if alive["ok"] and announced is False and hasattr(self.w, "proxy_announce"):
+                if not proxied and alive["ok"] and announced is False and hasattr(self.w, "proxy_announce"):
                     # TRIAL: it answers on an address but no longer announces itself: announced in
                     # its place, the Matter Server can find it again and the command can leave
                     proxied = self.w.proxy_announce(nid, alive["ok"])

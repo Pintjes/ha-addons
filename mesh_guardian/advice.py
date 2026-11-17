@@ -193,12 +193,30 @@ def advise(rows, brs, ctx):
                 cut = sum(1 for o in rows if o is not r and not o.get("available") and not o.get("battery")
                           and o.get("area") == r["area"] and o.get("since") and abs(o["since"] - r["since"]) <= POWER_CUT_S)
             st = r.get("stale_prefix")
-            if st:
+            hb = r.get("heard_by")
+            alive = (t("heard by {name} {m} min ago ({rssi} dBm)", name=hb["by"], m=max(1, round(hb["ago_s"] / 60)),
+                       rssi=hb["rssi"] if hb.get("rssi") is not None else "?") if hb else "")
+            diag = (r.get("search") or {}).get("result")   # outcome of the last recovery attempt (Thread diagnostic)
+            if hb and diag == "frozen":
+                # the Thread diagnostic proved it: heard on the radio, no answer through the mesh
+                out.append((t("Network stack stuck: last resort, cut its power for 10s (your call)"),
+                            (r.get("search") or {}).get("text") or alive, "high"))
+            elif diag == "old_prefix_only":
+                out.append((t("Only has the old address prefix: a remedy on the border router is possible"),
+                            (r.get("search") or {}).get("text") or "", "high"))
+            elif st:
                 # the border routers changed the address prefix and this node did not follow: the
-                # cause is known, "check its power" would be wrong
-                out.append((t("Stayed on the old address prefix after {br} changed it at {at}", br=st["br"], at=st["at"]),
-                            t("{prefix}: its new address is not known, no command reaches it until it announces itself again",
-                              prefix=st["prefix"]), "high"))
+                # cause is known, "check its power" or "unplug it" would be wrong
+                short = (t("Stayed on the old address prefix after {br} changed it at {at}", br=st["br"], at=st["at"])
+                         if st.get("br") else t("Stayed on an old address prefix, no longer used on the network"))
+                out.append((short, t("{prefix}: its new address is not known, no command reaches it until it announces itself again",
+                                     prefix=st["prefix"]) + (" · " + alive if alive else ""), "high"))
+            elif hb:
+                # still in the neighbor table of a node that answers: it has power and its radio works,
+                # unplugging is not the answer (only once every remote way failed)
+                out.append((t("Alive but unreachable: try the recovery attempt"),
+                            t("{alive}: it has power and its radio works, it cannot be reached at its address "
+                              "(announcement or prefix out of date)", alive=alive), "high"))
             elif par is not None and not par.get("available"):
                 out.append((t("Comes back with {parent}", parent=par["name"]),
                             t("its parent {parent} is unavailable too", parent=par["name"]), "high"))
@@ -208,6 +226,7 @@ def advise(rows, brs, ctx):
             elif bat:
                 out.append((bat, bat, "high"))
             elif r["id"] in ctx["gave_up"]:
+                # nobody hears it on the radio (else the branch above): no power, or a stuck radio
                 out.append((t("Remove the battery for 10s") if r.get("battery") else t("Unplug it for 10s"),
                             t("it did not come back after the recovery pings"), "high"))
             elif r.get("ping_ok") is True or (r.get("server") or {}).get("opened_1h", 0) >= 2:

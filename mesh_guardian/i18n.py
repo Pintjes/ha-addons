@@ -380,6 +380,37 @@ FR = {
     # node left on an OMR prefix the border routers no longer publish
     "{node}: stayed on the old prefix {prefix} after {br} changed it at {at}: its new address is not known":
         "{node} : restée sur l'ancien préfixe {prefix} après le changement fait par {br} à {at} : sa nouvelle adresse n'est pas connue",
+    # Thread diagnostic by Thread Anchor (recovery attempt)
+    "Network stack stuck: last resort, cut its power for 10s (your call)":
+        "Pile réseau figée : dernier recours, couper son alimentation 10 s (à toi de décider)",
+    "Only has the old address prefix: a remedy on the border router is possible":
+        "N'a que l'ancien préfixe d'adresse : un remède sur le border router est possible",
+    "no answer from Thread Anchor": "pas de réponse de Thread Anchor",
+    "Thread diagnostic (RLOC 0x{r:04X}) failed: {why}": "Diagnostic Thread (RLOC 0x{r:04X}) impossible : {why}",
+    "answers through the mesh ({ms} ms)": "répond par le maillage ({ms} ms)",
+    "no answer through the mesh": "pas de réponse par le maillage",
+    "not pinged": "pas de ping",
+    "no routable address": "aucune adresse routable",
+    "Thread diagnostic (RLOC 0x{r:04X}): {ping}; addresses: {addrs}":
+        "Diagnostic Thread (RLOC 0x{r:04X}) : {ping} ; adresses : {addrs}",
+    "{node}: announced in its place on {ip} (address given by the Thread diagnostic)":
+        "{node} : annoncée à sa place sur {ip} (adresse donnée par le diagnostic Thread)",
+    "{node}: only has the old prefix ({addrs}): it did not take the prefix of the network. A remedy on the "
+    "border router of Home Assistant is possible (a route to the old prefix for a while), with your agreement":
+        "{node} : n'a que l'ancien préfixe ({addrs}) : elle n'a pas pris le préfixe du réseau. Un remède sur le "
+        "border router de Home Assistant est possible (une route vers l'ancien préfixe pendant un moment), avec ton accord",
+    "{node}: heard by {who} but no answer through the mesh: its network stack is stuck. No remote way "
+    "is left: cutting its power for 10 s is the last resort, your call":
+        "{node} : entendue par {who} mais aucune réponse par le maillage : sa pile réseau est figée. Plus aucune voie "
+        "à distance : couper son alimentation 10 s est le dernier recours, à toi de décider",
+    "{node}: recovery attempt not sent: stayed on the old prefix {prefix}, its new address is not known":
+        "{node} : tentative de récupération non envoyée : restée sur l'ancien préfixe {prefix}, sa nouvelle adresse n'est pas connue",
+    "Stayed on an old address prefix, no longer used on the network":
+        "Restée sur un ancien préfixe d'adresse, plus utilisé sur le réseau",
+    "heard by {name} {m} min ago ({rssi} dBm)": "entendue par {name} il y a {m} min ({rssi} dBm)",
+    "Alive but unreachable: try the recovery attempt": "Vivante mais injoignable : lancer la tentative de récupération",
+    "{alive}: it has power and its radio works, it cannot be reached at its address (announcement or prefix out of date)":
+        "{alive} : elle a du courant et sa radio fonctionne, mais elle est injoignable à son adresse (annonce ou préfixe périmé)",
     "Stayed on the old address prefix after {br} changed it at {at}":
         "Restée sur l'ancien préfixe d'adresse après le changement fait par {br} à {at}",
     "{prefix}: its new address is not known, no command reaches it until it announces itself again":

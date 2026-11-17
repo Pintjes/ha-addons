@@ -64,7 +64,7 @@ i18n.set_language(OPTIONS.get("language", "en"))
 from i18n import t, tn  # noqa: E402
 
 from advice import Advisor  # noqa: E402
-from anchor import ANCHOR_AVAIL_TOPIC, ANCHOR_TOPIC, Anchor  # noqa: E402
+from anchor import ANCHOR_AVAIL_TOPIC, ANCHOR_TOPIC, DIAG_RESULT_TOPIC, Anchor  # noqa: E402
 from healer import Healer  # noqa: E402
 from labels import LabelSync  # noqa: E402
 from matterlive import MatterLive  # noqa: E402
@@ -79,7 +79,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.32.0"
+VERSION = "2.33.0"
 OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
 OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
@@ -1090,16 +1090,22 @@ class Watch:
     def _omr_now(self):
         return {b["omr"] for b in self.br.values() if b.get("online") and b.get("omr") and self.br_relevant(b)}
 
-    def stale_prefix(self, node):
+    def stale_prefix(self, node, thread=False):
         """{"prefix", "br", "at", "t"} when the last address announced by this node is on an OMR
         prefix the border routers no longer publish: it did not take the new prefix, so nothing
-        (Matter Server, recovery attempt) can reach it until it announces itself again. Else None."""
+        (Matter Server, recovery attempt) can reach it until it announces itself again. Else None.
+        thread: the node is a Thread node; a prefix no border router publishes now is then an old
+        OMR prefix even when its change was not seen (before the add-on, more than a week ago):
+        "br" and "at" are None."""
         with self.lock:
             n = self.matter.get(str(node).upper().zfill(16))
             p = (n or {}).get("prefix")
             left = self.omr_left.get(p) if p else None
-            if not left or p in self._omr_now():
+            now_omr = self._omr_now()
+            if not p or p in now_omr:
                 return None
+            if not left:
+                return {"prefix": p, "br": None, "t": None, "at": None} if thread and now_omr else None
             return {"prefix": p, "br": left[1], "t": left[0],
                     "at": time.strftime("%H:%M", time.localtime(left[0]))}
 
@@ -1734,6 +1740,7 @@ class Watch:
         client.subscribe(USB_LINK_TOPIC)   # USB/IP Link add-on: a radio plugged into another computer
         client.subscribe(ANCHOR_TOPIC)     # Thread Anchor add-on: OMR prefix of the border router of HA
         client.subscribe(ANCHOR_AVAIL_TOPIC)
+        client.subscribe(DIAG_RESULT_TOPIC + "+")   # answers of the Thread diagnostic (recovery attempt)
         self.publish_discovery()
         self.dirty = True
 
@@ -1795,6 +1802,10 @@ class Watch:
         if msg.topic in (ANCHOR_TOPIC, ANCHOR_AVAIL_TOPIC):
             if self.anchor:
                 (self.anchor.on_state if msg.topic == ANCHOR_TOPIC else self.anchor.on_available)(msg.payload)
+            return
+        if msg.topic.startswith(DIAG_RESULT_TOPIC):
+            if self.anchor:
+                self.anchor.on_diag(msg.topic, msg.payload)
             return
         if msg.topic == f"{BASE}/rename/set" and getattr(self, "labels", None) and msg.payload:
             threading.Thread(target=self.labels.rename, args=(t("the button in Home Assistant"),),

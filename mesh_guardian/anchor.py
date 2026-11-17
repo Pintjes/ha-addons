@@ -28,6 +28,7 @@ import os
 import threading
 import time
 import urllib.request
+import uuid
 from datetime import datetime
 
 from i18n import t, tn
@@ -37,6 +38,9 @@ LOG = logging.getLogger("mesh_guardian")
 
 ANCHOR_TOPIC = "thread_anchor/state"
 ANCHOR_AVAIL_TOPIC = "thread_anchor/state/available"
+DIAG_REQUEST_TOPIC = "thread_anchor/diag/request"    # Thread diagnostic of one node, run by Thread Anchor (ot-ctl)
+DIAG_RESULT_TOPIC = "thread_anchor/diag/result/"    # + request id
+DIAG_WAIT_S = 25         # Thread Anchor answers within 15 s
 ANCHOR_FILE = "/data/anchor.json"
 ANCHOR_SUFFIX = "_thread_anchor"   # slug of the add-on in the Supervisor: <repository hash>_thread_anchor
 CATCHUP_SETTLE_S = 60   # after the return of radio and prefix: time left to the nodes to follow
@@ -103,6 +107,7 @@ class Anchor:
         self.event_files = event_files or []
         self._report, self._report_t = None, 0
         self.slug = None
+        self._diag_waits = {}        # request id -> [Event, result]
         self._load()
 
     # ------------------------------------------------------------ persistence
@@ -135,6 +140,47 @@ class Anchor:
         with self.lock:
             self.available = True if txt == "online" else False if txt == "offline" else None
         self.update()
+
+    # ------------------------------------------------------------ Thread diagnostic of one node
+    def diag_ready(self):
+        """Thread Anchor publishes and is not stopped: it can run a diagnostic."""
+        return isinstance(self.state, dict) and self.available is not False
+
+    def diag(self, rloc16, ext=None, ping=True, timeout=DIAG_WAIT_S):
+        """Asks Thread Anchor for the Thread diagnostic of a node, reached through the mesh by its
+        RLOC16 (whatever its OMR prefix): ping and current addresses. Returns its answer
+        ({"ping": {"ok", "rtt_ms"}, "addresses", "omr_addresses", "other_prefix_addresses", "error"…}),
+        or None when nothing came back in time."""
+        mq = getattr(self.w, "mqtt", None)
+        if mq is None or not self.diag_ready():
+            return None
+        rid = uuid.uuid4().hex[:12]
+        ev = threading.Event()
+        with self.lock:
+            self._diag_waits[rid] = [ev, None]
+        try:
+            req = {"id": rid, "rloc16": f"0x{int(rloc16):04X}", "ping": bool(ping)}
+            if ext is not None:
+                req["ext"] = f"{int(ext):016x}"
+            mq.publish(DIAG_REQUEST_TOPIC, json.dumps(req))
+            ev.wait(timeout)
+            with self.lock:
+                return self._diag_waits[rid][1]
+        finally:
+            with self.lock:
+                self._diag_waits.pop(rid, None)
+
+    def on_diag(self, topic, payload):
+        rid = topic[len(DIAG_RESULT_TOPIC):]
+        try:
+            data = json.loads(payload) if payload else None
+        except ValueError:
+            return
+        with self.lock:
+            w = self._diag_waits.get(rid)
+            if w is not None and isinstance(data, dict):
+                w[1] = data
+                w[0].set()
 
     # ------------------------------------------------------------ reading
     def omr(self):
@@ -193,9 +239,13 @@ class Anchor:
         events = []
         with self.lock:
             if omr and omr.get("enforced"):
+                # Thread Anchor 0.1.1+ says since when the prefix is in place without a break: it
+                # knows better (its own start, a prefix already in place); else the first time seen
+                told = parse_iso(omr.get("anchored_since"))
                 first = omr.get("applied_at")
-                since = min(x for x in (now, first if isinstance(first, (int, float)) else None) if x is not None)
-                if self.anchored_since is None or since < self.anchored_since:
+                since = told if told is not None else \
+                    min(x for x in (now, first if isinstance(first, (int, float)) else None) if x is not None)
+                if self.anchored_since is None or since < self.anchored_since or (told is not None and since != self.anchored_since):
                     self.anchored_since = since
                     self._save()
                     self._report_t = 0

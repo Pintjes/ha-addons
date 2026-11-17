@@ -4,11 +4,26 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## Highlights of 2.9 to 2.32 (16 November 2026)
+## Highlights of 2.9 to 2.33 (16 November 2026)
 
 - **Act on a node from its panel**: recovery attempt on an unavailable node, reset from a distance, pairing codes kept by the add-on (photo or scan of the label), pairing and naming a new device without leaving the page.
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
+
+## [2.33.0] - 2026-11-17
+
+### Added
+
+- **Thread diagnostic in the recovery attempt** (Thread Anchor 0.1.2): a node heard on the radio whose address is not known or still on an old OMR prefix is reached through the mesh by its RLOC16 (read in the neighbor tables of the nodes that hear it), Thread Anchor pings it and reads its current addresses (`thread_anchor/diag`). The alive test says so ("Thread diagnostic (RLOC 0xB45C): answers through the mesh; addresses: …"), then:
+  - an address on the prefix of the network: the node is announced in its place on it and the attempt goes on;
+  - only old-prefix addresses: said plainly (`old_prefix_only`), with "a remedy on the border router is possible, with your agreement" (not done by the add-on);
+  - no answer through the mesh while a neighbor hears it: network stack stuck (`frozen`): only then does cutting its power come up, as the last resort and the user's call.
+- **Where an unavailable node is now**: its RLOC16 and its role (a child is not a router) as a neighbor that answers sees it, instead of its old cached values.
+
+### Changed
+
+- **No "unplug it" for a node that is alive**: an unavailable node heard on the radio by a neighbor in the last 15 min gets "Alive but unreachable: try the recovery attempt" (or the old-prefix advice), never "Unplug it for 10s", until the Thread diagnostic proved its network stack stuck. A Thread node on a prefix no border router publishes is recognized as stayed on an old prefix even when the change was not seen.
+- **Anchoring date**: `anchored_since` of Thread Anchor (0.1.1) is taken when it is given and the prefix is in place.
 
 ## [2.32.0] - 2026-11-17
 

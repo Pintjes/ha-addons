@@ -43,6 +43,52 @@ def is_ha_br(b):
     return "homeassistant" in txt or "openthread" in txt
 
 
+HEARD_RECENT_S = 900   # a node heard by a neighbor this recently is alive (its radio works)
+
+
+FUZZY_EXT = 4096   # an extended address that went through a float (JSON of some tools) lost its last ~11 bits
+
+
+def heard_map(thread, live, now, recent=HEARD_RECENT_S):
+    """extended address -> {"by", "by_id", "ago_s", "rssi", "rloc16", "child", "ftd", "fuzzy"}: the most recent
+    hearing of that node in the neighbor table of an available node (age of the entry + age of the
+    table), within `recent`. rloc16 (field 2), child (13) and full Thread device (11) say where it is
+    attached now. Read it with heard_of()."""
+    out = {}
+    for nid, v in thread.items():
+        m = v.get("meta") or {}
+        if m.get("available") is False or v.get("node", {}).get("available") is False:
+            continue
+        read = live.stamp(nid, "0/53/7") if live else None
+        if read is None:
+            continue
+        for nb in v["attrs"].get("0/53/7") or []:
+            if not isinstance(nb, dict) or nb.get("0") is None or not isinstance(nb.get("1"), (int, float)):
+                continue
+            try:
+                ext = int(nb["0"])
+            except (TypeError, ValueError):
+                continue
+            ago = nb["1"] + max(0, now - read)
+            if ago <= recent and (ext not in out or ago < out[ext]["ago_s"]):
+                rloc = nb.get("2")
+                out[ext] = {"by": v["name"], "by_id": nid, "ago_s": round(ago), "rssi": nb_rssi(nb),
+                            "rloc16": int(rloc) if isinstance(rloc, (int, float)) else None,
+                            "child": bool(nb.get("13")), "ftd": bool(nb.get("11")), "rx_on": nb.get("10") is not False,
+                            "fuzzy": isinstance(nb["0"], float)}
+    return out
+
+
+def heard_of(hm, ext):
+    """Entry of heard_map for an extended address (exact, or within FUZZY_EXT for one read as a float)."""
+    if ext is None:
+        return None
+    if ext in hm:
+        return hm[ext]
+    near = [(abs(k - ext), k) for k, e in hm.items() if e.get("fuzzy") and abs(k - ext) <= FUZZY_EXT]
+    return hm[min(near)[1]] if near else None
+
+
 def nb_rssi(nb):
     """Signal of a neighbor entry: average RSSI (field 6), or the last RSSI (field 7) when
     the average is implausible — some firmwares report e.g. -21dBm for a link heard at -77."""
@@ -509,12 +555,22 @@ class NodeTable:
             leader = self.radio.leader_name   # Home Assistant names loaded: parent history can start
         ref_snap = (self.radio.reference(now, min_age=3600) or {}) if self.radio else {}
         ref, ref_t = ref_snap.get("nodes", {}), ref_snap.get("t")
+        heard = heard_map(thread, self.live, now)
         rows = []
         for nid, v in thread.items():
             a, m = v["attrs"], v["meta"]
             role = a.get("0/53/1")
             rloc = rlocs.get(nid)
-            if role in (2, 3, 4, 5, 6) or rloc is not None:
+            hb = heard_of(heard, ext_of(a))
+            if hb and hb.get("rloc16") is not None and (rloc is None or m.get("available") is False):
+                # where a neighbor that answers sees it now (the cached values of an unavailable
+                # node are old): its RLOC16, and a child is not a router
+                rloc = hb["rloc16"]
+                if hb["child"]:
+                    role = 4 if hb["ftd"] else 3 if hb["rx_on"] else 2
+            if hb and hb.get("child") and role in (4, 3, 2) and rloc is not None and m.get("available") is False:
+                pass   # keep the child role found above (router_of would read the old route table)
+            elif role in (2, 3, 4, 5, 6) or rloc is not None:
                 if router_of(a, rloc):
                     role = role if role in (5, 6) else 5
                 else:
@@ -625,7 +681,9 @@ class NodeTable:
                 "last_report": v["node"].get("last"), "last_radio": v["node"].get("radio"),
                 "search": self.w.reattach.result_of(nid) if getattr(self.w, "reattach", None) else None,
                 # unavailable and still on an OMR prefix the border routers left: unreachable
-                "stale_prefix": self.w.stale_prefix(nid) if not avail and hasattr(self.w, "stale_prefix") else None,
+                "stale_prefix": self.w.stale_prefix(nid, thread=True) if not avail and hasattr(self.w, "stale_prefix") else None,
+                # unavailable but still in the neighbor table of a node that answers: it is alive
+                "heard_by": hb if not avail else None,
             })
         for nid, v in other.items():
             rows.append(self._other_row(nid, v))
