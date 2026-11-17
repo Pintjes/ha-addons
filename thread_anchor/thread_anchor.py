@@ -32,7 +32,7 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
-VERSION = "0.1.3"
+VERSION = "0.1.4"
 LOG = logging.getLogger("thread_anchor")
 STATE_TOPIC = "thread_anchor/state"
 DISCOVERY = "homeassistant"
@@ -48,6 +48,18 @@ DIAG_REQUEST_TOPIC = "thread_anchor/diag/request"
 DIAG_RESULT_TOPIC = "thread_anchor/diag/result"
 DIAG_TIMEOUT_S = 15      # at most this long for one diagnostic
 DIAG_GAP_S = 10          # at most one diagnostic of the same node this often
+DIAG_SCAN_TIMEOUT_S = 90   # budget of the meshdiag step (routers asked one by one)
+DIAG_SCAN_GAP_S = 300      # at most one meshdiag scan of the network this often
+SEARCH_TEXTS = {           # one line of the log per step of the search for an RLOC16
+    "found": "ext found, RLOC16 {d}",
+    "not_found": "{n} rows, ext not in it",
+    "no_answer": "no answer",
+    "ext_differs": "answered with another ext ({d})",
+    "error": "error: {d}",
+    "not_supported": "not supported by this border router",
+    "too_soon": "scan done {d} s ago, ext not in it",
+    "stopped": "stopped: {d}",
+}
 
 TEXTS = {
     "fr": {
@@ -83,6 +95,16 @@ TEXTS = {
         "rloc16, ext or mleid needed": "rloc16, ext ou mleid nécessaire",
         "mleid is not in the mesh-local prefix": "mleid n'est pas dans le préfixe mesh-local",
         "RLOC16 found by {m}": "RLOC16 trouvé par {m}",
+        "Search {step}: {text}": "Recherche {step} : {text}",
+        "ext found, RLOC16 {d}": "ext trouvée, RLOC16 {d}",
+        "{n} rows, ext not in it": "{n} lignes, ext absente",
+        "no answer": "pas de réponse",
+        "answered with another ext ({d})": "a répondu avec une autre ext ({d})",
+        "error: {d}": "erreur : {d}",
+        "not supported by this border router": "non pris en charge par ce border router",
+        "scan done {d} s ago, ext not in it": "balayage fait il y a {d} s, ext absente",
+        "stopped: {d}": "arrêtée : {d}",
+        "time budget used": "budget de temps épuisé",
         "no answer to the network diagnostic": "pas de réponse au diagnostic réseau",
         "another node answers at this RLOC16: ext {got} instead of {want}":
             "une autre node répond à ce RLOC16 : ext {got} au lieu de {want}",
@@ -461,6 +483,37 @@ def parse_table(text):
     return out
 
 
+MESHDIAG_RE = re.compile(r"rloc16:(0x[0-9a-fA-F]{1,4})\s+ext-addr:([0-9a-fA-F]{16})")
+ME_RE = re.compile(r"\s-\s+me\b")
+
+
+def parse_help(text):
+    """`help` -> set of the commands (one per line)."""
+    return set(_lines(text))
+
+
+def parse_topology(text):
+    """`meshdiag topology` -> routers [{"rloc16", "ext", "me"}] ("me": the border router itself).
+    Lines look like `id:02 rloc16:0x0800 ext-addr:8aa57d2c603fe16c ver:4 - me - leader`."""
+    out = []
+    for ln in _lines(text):
+        m = MESHDIAG_RE.search(ln) if ln.startswith("id:") else None
+        if m:
+            out.append({"rloc16": int(m.group(1), 16), "ext": m.group(2).lower(), "me": bool(ME_RE.search(ln))})
+    return out
+
+
+def parse_childtable(text):
+    """`meshdiag childtable <router>` -> {extended address: rloc16} of its children.
+    Each child starts with `rloc16:0x6402 ext-addr:8e6f4d323bbed1fe ver:4`; the lines under it are details."""
+    out = {}
+    for ln in _lines(text):
+        m = MESHDIAG_RE.match(ln)
+        if m:
+            out[m.group(2).lower()] = int(m.group(1), 16)
+    return out
+
+
 def rloc_address(mesh_local, rloc16):
     """RLOC address of a node: <mesh-local prefix>:0:ff:fe00:<rloc16>."""
     net = ipaddress.IPv6Network(mesh_local, strict=False)
@@ -526,7 +579,8 @@ class Diag:
     and its IPv6 addresses read with a network diagnostic. Reads only: nothing is set on the
     border router. One at a time, at most one per node every DIAG_GAP_S, DIAG_TIMEOUT_S each.
     Without `rloc16`, it is found from the extended address (`ext`): in the tables of the border
-    router (child, neighbor, router), or from the mesh-local address of the node (`mleid`)."""
+    router (child, neighbor, router), or from the mesh-local address of the node (`mleid`), and
+    last by asking the routers one by one (`meshdiag`), at most one scan every DIAG_SCAN_GAP_S."""
 
     def __init__(self, anchor, reply, clock=time.time, spawn=None):
         self.anchor, self.reply, self.clock = anchor, reply, clock
@@ -534,6 +588,9 @@ class Diag:
         self.lock = threading.Lock()
         self.running = False
         self.last = {}   # rloc16 -> time of the last accepted request
+        self.limit = DIAG_TIMEOUT_S              # budget in force, for the message of a timeout
+        self.meshdiag, self.meshdiag_for = None, None   # `help` knows meshdiag (for this start of the OTBR)
+        self.scan_at, self.scan_map = None, {}   # last scan: when, and {ext: (rloc16, parent rloc16)}
 
     def submit(self, raw):
         """A request from MQTT: answered at once when refused, else run in the background."""
@@ -545,8 +602,9 @@ class Diag:
         except (ValueError, TypeError, KeyError) as err:
             LOG.warning(t("Diagnostic request ignored (no usable id): {err}", err=err))
             return
-        base = {"id": rid, "rloc16": req.get("rloc16"), "rloc16_from": None, "rloc_address": None, "ext": None,
-                "ping": None, "addresses": [], "omr_addresses": [], "other_prefix_addresses": []}
+        base = {"id": rid, "rloc16": req.get("rloc16"), "rloc16_from": None, "parent": None, "alive": None,
+                "rloc_address": None, "ext": None, "ping": None, "addresses": [], "omr_addresses": [],
+                "other_prefix_addresses": [], "search": []}
         raw16, raw_ext, raw_ml = req.get("rloc16"), req.get("ext"), req.get("mleid", req.get("ml_eid"))
         try:
             rloc16 = None if raw16 is None or raw16 == "" else parse_rloc16(raw16)
@@ -571,11 +629,19 @@ class Diag:
             if last is not None and self.clock() - last < DIAG_GAP_S:
                 return self._done(base, "too soon")
             self.running, self.last[key] = True, self.clock()
-        self.spawn(lambda: self.run(base, rloc16, ext, ml, req.get("ping", True) is not False))
+        # routers to ask first in the meshdiag step: any RLOC16 (of a router or of one of its children)
+        hints = []
+        for v in req.get("routers") if isinstance(req.get("routers"), list) else []:
+            try:
+                hints.append(parse_rloc16(v) & 0xFC00)
+            except (ValueError, TypeError):
+                LOG.debug("routers: ignored %r", v)
+        self.spawn(lambda: self.run(base, rloc16, ext, ml, req.get("ping", True) is not False, hints,
+                                    req.get("scan", True) is not False))
 
-    def run(self, res, rloc16, ext, ml, ping):
+    def run(self, res, rloc16, ext, ml, ping, hints=(), scan=True):
         try:
-            self._run(res, rloc16, ext, ml, ping)
+            self._run(res, rloc16, ext, ml, ping, hints, scan)
         except Exception as err:  # noqa: BLE001 - always an answer
             res["error"] = str(err) or type(err).__name__
         finally:
@@ -586,17 +652,23 @@ class Diag:
     def _otctl(self, deadline, *args):
         left = deadline - self.clock()
         if left < 1:
-            raise RuntimeError(f"timeout ({DIAG_TIMEOUT_S} s)")
+            raise RuntimeError(f"timeout ({self.limit} s)")
         code, out = self.anchor._call(self.anchor.docker.exec, ["ot-ctl", *args], left)
         if code not in (0, None) and "Done" not in out:
             raise RuntimeError((out.strip().splitlines() or [f"exit {code}"])[-1])
         return out
 
-    def _resolve(self, deadline, mlp, ext, ml):
-        """RLOC16 of a node known by its extended address and / or its ML-EID: (rloc16, how, diag)
-        or (None, None, None). The ML-EID answers by itself (one request: ext, RLOC16, addresses);
-        the tables of the border router cost no radio traffic but hold only its own children and
-        neighbors, and the routers."""
+    def _step(self, res, step, result, detail=None, rows=None):
+        """One step of the search for an RLOC16: kept in the answer (`search`) and said in the log."""
+        res["search"].append({"step": step, "result": result, "rows": rows, "detail": detail})
+        LOG.info(t("Search {step}: {text}", step=step, text=t(SEARCH_TEXTS[result], d=detail, n=rows)))
+
+    def _resolve(self, res, deadline, mlp, ext, ml, hints, scan):
+        """RLOC16 of a node known by its extended address and / or its ML-EID:
+        (rloc16, how, diag, parent rloc16) or (None, None, None, None). The ML-EID answers by itself
+        (one request: ext, RLOC16, addresses); the tables of the border router cost no radio traffic
+        but hold only its own children and neighbors, and the routers; the meshdiag step asks the
+        other routers for their children."""
         if ml:
             if ipaddress.IPv6Address(ml) not in ipaddress.IPv6Network(mlp):
                 raise RuntimeError(t("mleid is not in the mesh-local prefix"))
@@ -605,44 +677,124 @@ class Diag:
             except RuntimeError as err:
                 if "timeout" in str(err):
                     raise
-                LOG.debug("mleid: %s", err)
+                self._step(res, "mleid", "error", str(err))
             else:
-                if diag["answered"] and diag["rloc16"] is not None:
+                if not (diag["answered"] and diag["rloc16"] is not None):
+                    self._step(res, "mleid", "no_answer")
+                elif ext and diag["ext"] != ext:
                     # another extended address than asked: the address is not that node's any more
-                    if ext and diag["ext"] != ext:
-                        LOG.debug("mleid answered with ext %s, not %s", diag["ext"], ext)
-                    else:
-                        return diag["rloc16"], "mleid", diag
+                    self._step(res, "mleid", "ext_differs", diag["ext"])
+                else:
+                    self._step(res, "mleid", "found", f"0x{diag['rloc16']:04x}")
+                    return diag["rloc16"], "mleid", diag, None
         if ext:
             for name, cmd in (("child table", ("child", "table")), ("neighbor table", ("neighbor", "table")),
                               ("router table", ("router", "table"))):
                 try:
-                    found = parse_table(self._otctl(deadline, *cmd)).get(ext)
+                    rows = parse_table(self._otctl(deadline, *cmd))
                 except RuntimeError as err:
                     if "timeout" in str(err):
                         raise
-                    LOG.debug("%s: %s", name, err)
+                    self._step(res, name, "error", str(err))
                     continue
+                found = rows.get(ext)
                 if found is not None:
-                    return found, name, None
-        return None, None, None
+                    self._step(res, name, "found", f"0x{found:04x}", rows=len(rows))
+                    return found, name, None, None
+                self._step(res, name, "not_found", rows=len(rows))
+            if scan:
+                hit = self._scan(res, ext, hints)
+                if hit:
+                    return hit[0], "meshdiag", None, hit[1]
+        return None, None, None, None
 
-    def _run(self, res, rloc16, ext, ml, ping):
+    def _scan(self, res, ext, hints):
+        """The meshdiag step: (rloc16, parent rloc16 or None) or None. The routers are asked one by
+        one for their children, in DIAG_SCAN_TIMEOUT_S at most, at most one scan every DIAG_SCAN_GAP_S
+        (in between, the last scan is read again, no traffic). Listing a child proves nothing about
+        its being alive: only a ping or a diagnostic answer does."""
+        self.limit = DIAG_SCAN_TIMEOUT_S
+        try:
+            return self._scan_run(res, ext, hints)
+        finally:
+            self.limit = DIAG_TIMEOUT_S
+
+    def _scan_run(self, res, ext, hints):
+        now = self.clock()
+        deadline = now + DIAG_SCAN_TIMEOUT_S
+        started = self.anchor.started_at
+        if self.meshdiag is None or self.meshdiag_for != started:
+            try:     # asked once per start of the border router, when a search needs it
+                self.meshdiag = "meshdiag" in parse_help(self._otctl(deadline, "help"))
+            except RuntimeError as err:
+                self._step(res, "meshdiag help", "error", str(err))
+                return None
+            self.meshdiag_for = started
+        if not self.meshdiag:
+            self._step(res, "meshdiag", "not_supported")
+            return None
+        if self.scan_at is not None and now - self.scan_at < DIAG_SCAN_GAP_S:
+            hit = self.scan_map.get(ext)
+            if hit:
+                self._step(res, "meshdiag", "found", f"0x{hit[0]:04x}")
+                return hit
+            self._step(res, "meshdiag", "too_soon", int(now - self.scan_at))
+            return None
+        self.scan_at, self.scan_map = now, {}   # a scan counts as done even when it fails
+        try:
+            routers = parse_topology(self._otctl(deadline, "meshdiag", "topology"))
+        except RuntimeError as err:
+            self._step(res, "meshdiag topology", "error", str(err))
+            return None
+        for r in routers:
+            self.scan_map[r["ext"]] = (r["rloc16"], None)
+        hit = self.scan_map.get(ext)
+        self._step(res, "meshdiag topology", "found" if hit else "not_found", f"0x{hit[0]:04x}" if hit else None,
+                   rows=len(routers))
+        if hit:
+            return hit
+        # the border router's own children are in `child table` already
+        others = [r["rloc16"] for r in routers if not r["me"]]
+        for router in [h for h in dict.fromkeys(hints) if h in others] + [o for o in others if o not in hints]:
+            name = f"meshdiag childtable 0x{router:04x}"
+            if deadline - self.clock() < 1:
+                self._step(res, name, "stopped", t("time budget used"))
+                break
+            try:
+                kids = parse_childtable(self._otctl(deadline, "meshdiag", "childtable", f"0x{router:04x}"))
+            except RuntimeError as err:
+                self._step(res, name, "error", str(err))
+                if "Busy" in str(err):     # another meshdiag is running: not worth insisting
+                    break
+                continue
+            for e, rl in kids.items():
+                self.scan_map[e] = (rl, router)
+            if ext in kids:
+                self._step(res, name, "found", f"0x{kids[ext]:04x}", rows=len(kids))
+                return kids[ext], router
+            self._step(res, name, "not_found", rows=len(kids))
+        return None
+
+    def _run(self, res, rloc16, ext, ml, ping, hints=(), scan=True):
         deadline = self.clock() + DIAG_TIMEOUT_S
+        self.limit = DIAG_TIMEOUT_S
         # mesh-local prefix from the RLOC address of the border router itself (no secret in it,
         # unlike `dataset active`)
         own = _lines(self._otctl(deadline, "ipaddr", "rloc"))
         mlp = str(ipaddress.IPv6Network(f"{ipaddress.IPv6Address(own[0])}/64", strict=False))
         diag = None
         if rloc16 is None:
-            rloc16, how, diag = self._resolve(deadline, mlp, ext, ml)
+            rloc16, how, diag, parent = self._resolve(res, deadline, mlp, ext, ml, hints, scan)
             if rloc16 is None:
                 res["error"] = "not found"
                 return
             res["rloc16"], res["rloc16_from"] = f"0x{rloc16:04x}", how
+            res["parent"] = f"0x{parent:04x}" if parent is not None else None
+            deadline = self.clock() + DIAG_TIMEOUT_S   # the search had its own time
         else:
             res["rloc16_from"] = "request"
         res["rloc_address"] = addr = rloc_address(mlp, rloc16)
+        res["alive"] = False   # a table lists the node, which proves nothing: only an answer does
         if ping:
             try:
                 res["ping"] = parse_ping(self._otctl(deadline, "ping", addr, "16", "1"))
@@ -651,15 +803,18 @@ class Diag:
                     raise
                 res["ping"] = {"ok": False, "rtt_ms": None}
                 LOG.debug("ping: %s", err)
+            res["alive"] = res["ping"]["ok"]
         if diag is None:
             diag = parse_diag(self._otctl(deadline, "networkdiagnostic", "get", addr, "0", "8"))
         if not diag["answered"]:
             res["error"] = t("no answer to the network diagnostic")
             return
+        res["alive"] = True
         res["ext"], res["addresses"] = diag["ext"], diag["addresses"]
         a = self.anchor
         res["omr_addresses"], res["other_prefix_addresses"] = classify(diag["addresses"], mlp, (a.prefix, a.favored))
         if ext and diag["ext"] and diag["ext"] != ext:
+            res["alive"] = False   # somebody else is alive at this RLOC16
             res["error"] = t("another node answers at this RLOC16: ext {got} instead of {want}", got=diag["ext"], want=ext)
 
     def _done(self, res, error):

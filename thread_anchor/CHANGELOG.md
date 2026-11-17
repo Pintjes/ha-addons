@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.4] - 2026-11-17
+
+### Added
+
+- The search for an unknown RLOC16 says what it did: one line of the log per step (ML-EID,
+  `child table`, `neighbor table`, `router table`, with the number of rows read) and a `search`
+  list in the answer.
+- A **meshdiag** step when the tables do not have the node: the other routers are asked, one by
+  one, for their children (`ot-ctl meshdiag topology`, then `meshdiag childtable <router>`),
+  the routers named in the request's `routers` first, until the extended address is found, 90 s
+  at most, one scan every 5 minutes (the last one is read again in between). `help` is read first,
+  once per start of the border router: without `meshdiag` the step says `not supported` and the
+  answer is `not found`. `"scan": false` skips it. The answer says the router in `parent`.
+- `alive` in the answer: true only when the ping or the network diagnostic answered. A node
+  listed in a child table is not proved alive, a parent keeps its children a while.
+
+### Changed
+
+- The ping and the diagnostic that follow a search have their own 15 s; the search no longer
+  eats into them.
+
 ## [0.1.3] - 2026-11-17
 
 ### Added
