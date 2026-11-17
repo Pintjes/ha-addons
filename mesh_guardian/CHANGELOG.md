@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.35.1] - 2026-11-17
+
+### Fixed
+
+- **"Network stack stuck" only on a reliable hearing**: a router entry minutes old in a neighbor table can outlive the node (17/11: a node absent from the topology still listed as a router at 339 s). `frozen` now needs a child entry of a parent that answers (heard within 15 min) or a router neighbor heard within 2 min, and never comes when Thread Anchor says `alive`. A diagnostic with `alive` false (Thread Anchor 0.1.4) never leads to an announcement in the node's place.
+
 ## [2.35.0] - 2026-11-17
 
 ### Changed

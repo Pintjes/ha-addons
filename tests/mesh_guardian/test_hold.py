@@ -252,9 +252,20 @@ r, w, calls = setup()
 del r._thread_diag
 r.live = types.SimpleNamespace(lock=threading.Lock(), nodes={})
 w.anchor.diag = lambda *a, **k: {"ping": {"ok": False, "rtt_ms": None}, "error": "no answer to the network diagnostic"}
-for ago, expect in ((60, "frozen"), (1800, "unknown")):
-    r._hearing = lambda nid, ext, recent, ago=ago: {"by": "Prise Chauffe Eau", "rloc16": 0xB45C, "ago_s": ago}
-    assert r._thread_diag(MIELE, "Prise Lave-linge Miele", 0xCA7A34808B66E461)["result"] == expect
+# 2.35.1 : et seulement sur une entree fiable : enfant d'un parent qui repond, ou routeur entendu il y a < 2 min
+# (17/11 : 0x3000 dans la table de 0x59 a 339 s, la Miele absente de la topologie)
+for ago, child, extra, expect in ((60, False, {}, "frozen"), (339, False, {}, "unknown"), (600, True, {}, "frozen"),
+                                  (1800, True, {}, "unknown"), (60, False, {"old": True}, "unknown")):
+    r._hearing = lambda nid, ext, recent, ago=ago, child=child, extra=extra: dict(
+        {"by": "Prise Chauffe Eau", "rloc16": 0xB45C, "ago_s": ago, "child": child}, **extra)
+    assert r._thread_diag(MIELE, "Prise Lave-linge Miele", 0xCA7A34808B66E461)["result"] == expect, (ago, child, extra)
+# alive (Thread Anchor 0.1.4) : vrai = jamais figee ; faux = jamais d'annonce
+r._hearing = lambda nid, ext, recent: {"by": "x", "rloc16": 0xB45C, "ago_s": 30, "child": True}
+w.anchor.diag = lambda *a, **k: {"ping": {"ok": False}, "alive": True, "error": "no answer to the network diagnostic"}
+assert r._thread_diag(MIELE, "Prise Lave-linge Miele", 0xCA7A34808B66E461)["result"] == "unknown"
+w.anchor.diag = lambda *a, **k: {"ping": {"ok": False}, "alive": False, "error": None, "omr_addresses": ["fdd7::9"]}
+d = r._thread_diag(MIELE, "Prise Lave-linge Miele", 0xCA7A34808B66E461)
+assert d["result"] == "unknown" and not d["omr"]
 
 # 2.35.0 : le « dernier entendu » survit a un redemarrage (fichier dans /data)
 import nodetable  # noqa: E402

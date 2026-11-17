@@ -77,6 +77,7 @@ AUTO_NODE_S = 1800    # s: at most one automatic diagnostic per node in this tim
 AUTO_PER_HOUR = 5     # nodes at most per hour (automatic)
 AUTO_HEARD_S = 900    # s: a node a neighbor heard this recently: every AUTO_NODE_S
 AUTO_UNHEARD_S = 7200  # s: a node nobody hears: asked by its mesh-local EID only this often
+FROZEN_ROUTER_S = 120  # s: "stuck" needs a child entry, or a router neighbor heard this recently
 
 
 def _ago(s):
@@ -760,8 +761,13 @@ class Reattach:
             text = t("Thread diagnostic ({where}) failed: {why}", where=where, why=err) + (f" ({pinged})" if ping else "")
             # neither the diagnostic nor the ping answers while a neighbor hears it: its network stack
             # is stuck. Any other error (busy, too soon, another node at this RLOC16…) proves nothing
-            if err.startswith("no answer to the network diagnostic") and not ping.get("ok") and hb \
-                    and hb.get("ago_s", AUTO_HEARD_S + 1) <= AUTO_HEARD_S:
+            # the hearing must be a reliable one: a child of a parent that answers (a parent drops a
+            # lost child), or a router neighbor heard in the last FROZEN_ROUTER_S. A router entry
+            # minutes old can outlive the node (17/11, Miele: 0x3000 in a table, absent from the topology)
+            ago = hb.get("ago_s", AUTO_HEARD_S + 1) if hb else AUTO_HEARD_S + 1
+            sure = bool(hb) and not hb.get("old") and ago <= AUTO_HEARD_S and (hb.get("child") or ago <= FROZEN_ROUTER_S)
+            if err.startswith("no answer to the network diagnostic") and not ping.get("ok") and sure \
+                    and res.get("alive") is not True:
                 return {"text": text, "omr": [], "result": "frozen", "outcome": t(
                     "{node}: heard by {who} but no answer through the mesh: its network stack is stuck. No remote way "
                     "is left: cutting its power for 10 s is the last resort, your call", node=name, who=hb["by"])}
@@ -771,6 +777,9 @@ class Reattach:
         old = [str(x) for x in res.get("other_prefix_addresses") or []]
         addrs = ", ".join(omr + old) or t("no routable address")
         text = t("Thread diagnostic ({where}): {ping}; addresses: {addrs}", where=where, ping=pinged, addrs=addrs)
+        if res.get("alive") is False:
+            # Thread Anchor 0.1.4+: alive is the only proof of life (the ping or the diagnostic answered)
+            return {"text": text, "omr": [], "result": "unknown", "outcome": ""}
         if omr:
             return {"text": text, "omr": omr, "result": "omr", "outcome": ""}
         if old:
