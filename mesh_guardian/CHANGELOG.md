@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.37.0] - 2026-11-17
+
+### Changed
+
+- **Less radio traffic**, the same watch:
+  - the Thread values read again every hour (role, neighbor and route tables, addresses, counters) come in **one** read per node instead of one read per value (7 for a mains node, 3 for a battery one);
+  - a mains node that gave a sign of life of its own since the last read (a report, passive contact, a ping…) has its response time read hourly instead of every 15 min (its tables stay hourly);
+  - the hourly sweep only pings the nodes not heard within the hour: the others are alive (the log says how many were left out).
+
 ## [2.36.0] - 2026-11-17
 
 ### Changed

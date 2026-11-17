@@ -31,6 +31,8 @@ LOG = logging.getLogger("mg.quality")
 STATE_FILE = "/data/quality.json"
 
 PROBE_MAINS_S = 15 * 60
+PROBE_MAINS_QUIET_S = 60 * 60   # a mains node that gave a sign of life of its own since the last read (report,
+                                # passive contact, ping…) within PROBE_MAINS_S: read only this often
 PROBE_BATTERY_S = 60 * 60
 PROBE_RETRY_S = 2 * 60
 NEIGHBOR_REFRESH_S = 60 * 60   # mains nodes: role and neighbor table read again at most hourly   # first new try after a failed read
@@ -137,12 +139,21 @@ class Quality:
         known = self.live.node_ids()
         with self.h.lock:
             nodes = [(k, n) for k, n in self.h.nodes.items() if n["available"] and int(k, 16) in known]
+        contacts = {}
+        if isinstance(getattr(self.live, "contacts", None), dict):
+            with self.live.lock:
+                contacts = dict(self.live.contacts)
         best = None
         with self.lock:
             for k, n in nodes:
                 every = PROBE_BATTERY_S if n.get("battery") else PROBE_MAINS_S
                 r = self.rtt.get(k) or {}
                 last = r.get("t") or 0
+                # less radio traffic: a mains node that showed a sign of life of its own since our last read
+                # (not the read itself), within the usual gap, is read hourly only (its tables stay hourly)
+                seen = contacts.get(f"{int(k, 16):016X}") or 0
+                if not n.get("battery") and seen > last + 5 and now - seen < PROBE_MAINS_S:
+                    every = PROBE_MAINS_QUIET_S
                 if r.get("streak"):
                     # last read failed (node switched off, out of reach…): retry soon once it is
                     # available again, then back off (2, 4, 8… min) so a node that keeps failing costs little
@@ -254,16 +265,22 @@ class Quality:
         return None if self.tables_ready else {"done": None, "total": None}
 
     def _read_paths(self, nid, paths, timeout=30):
+        """Every path in ONE read (one exchange with the node instead of one per path: less radio
+        traffic). The Matter Server answers {path: value}."""
+        paths = list(paths)
+        try:
+            res = self.h.matter_command("read_attribute", {"node_id": int(nid, 16),
+                                                           "attribute_path": paths if len(paths) > 1 else paths[0]},
+                                        timeout=timeout)
+        except Exception as err:  # noqa: BLE001
+            LOG.debug("thread read %s %s: %s", nid, paths, err)
+            return
+        if not isinstance(res, dict):
+            res = {paths[0]: res} if len(paths) == 1 else {}
         for path in paths:
-            try:
-                res = self.h.matter_command("read_attribute", {"node_id": int(nid, 16), "attribute_path": path},
-                                            timeout=timeout)
-                value = res.get(path) if isinstance(res, dict) else res
-                if value is not None:
-                    self.live.set_attribute(nid, path, value)
-            except Exception as err:  # noqa: BLE001
-                LOG.debug("thread read %s %s: %s", nid, path, err)
-                return
+            value = res.get(path)
+            if value is not None:
+                self.live.set_attribute(nid, path, value)
 
     def _refresh_thread(self, nid, battery=False):
         """Read again, at most hourly, the values a node does not report by itself (some never
@@ -294,16 +311,7 @@ class Quality:
             if now - (r.get("thr_t") or 0) < NEIGHBOR_REFRESH_S - 120:
                 return
             r["thr_t"] = now
-        for path in paths:
-            try:
-                res = self.h.matter_command("read_attribute", {"node_id": int(nid, 16), "attribute_path": path},
-                                            timeout=120 if battery else 30)
-                value = res.get(path) if isinstance(res, dict) else res
-                if value is not None:
-                    self.live.set_attribute(nid, path, value)
-            except Exception as err:  # noqa: BLE001
-                LOG.debug("thread read %s %s: %s", nid, path, err)
-                return
+        self._read_paths(nid, paths, 120 if battery else 30)
 
     def startup_tables(self):
         """At start, read again the Thread tables of every mains node: the values read before

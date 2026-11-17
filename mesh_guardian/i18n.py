@@ -150,6 +150,7 @@ FR = {
     "does not answer": "ne répond pas",
     'Ping {i}/{max} {name}: {result}': 'Ping {i}/{max} {name} : {result}',
     'Sweep: {ok}/{total} answer': 'Balayage : {ok}/{total} répondent',
+    ' ({n} heard within the hour, not pinged)': ' ({n} entendues dans l\'heure, pas pingées)',
     'Automatic recovery on': 'Récupération automatique activée',
     'Automatic recovery off': 'Récupération automatique désactivée',
     '{n} nodes unavailable together: pings paused 5min': "{n} nodes indisponibles ensemble : pings suspendus 5 min",

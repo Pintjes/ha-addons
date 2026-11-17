@@ -382,6 +382,18 @@ class Healer:
         known = live.node_ids() if live and live.connected else None
         if known:
             targets = [k for k in targets if int(k, 16) in known]
+        # less radio traffic: a node that gave a sign of life within the interval of the sweep (a report,
+        # a read, a ping, passive contact) is alive: no ping. The sweep looks for the silent ones
+        skipped = 0
+        if isinstance(getattr(live, "contacts", None), dict):
+            now = time.time()
+            with live.lock:
+                contacts = dict(live.contacts)
+            quiet = [k for k in targets if now - (contacts.get(f"{int(k, 16):016X}") or 0) >= self.ping_all_interval]
+            skipped, targets = len(targets) - len(quiet), quiet
+        if not targets:
+            self.sweep = {"date": hhmm(time.time()), "ok": 0, "total": 0, "unreachable": [], "skipped": skipped}
+            return
         ok, bad = 0, []
         for node in targets:
             if self.w.stop.is_set():
@@ -401,9 +413,11 @@ class Healer:
             else:
                 bad.append(self.nodes.get(node, {}).get("name", short_id(node)))
             time.sleep(2)
-        self.sweep = {"date": hhmm(time.time()), "ok": ok, "total": len(targets), "unreachable": bad}
+        self.sweep = {"date": hhmm(time.time()), "ok": ok, "total": len(targets), "unreachable": bad, "skipped": skipped}
         self.last_result = t("{time} sweep: {ok}/{total}", time=hhmm(time.time()), ok=ok, total=len(targets))
-        self.w.emit("sweep", t("Sweep: {ok}/{total} answer", ok=ok, total=len(targets)), ok=ok, total=len(targets), bad=bad)
+        self.w.emit("sweep", t("Sweep: {ok}/{total} answer", ok=ok, total=len(targets))
+                    + (t(" ({n} heard within the hour, not pinged)", n=skipped) if skipped else ""),
+                    ok=ok, total=len(targets), bad=bad, skipped=skipped)
         self._save_state()
         self.w.dirty = True
 
