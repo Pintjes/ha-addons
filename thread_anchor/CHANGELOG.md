@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.1.10] - 2026-11-17
+
+### Fixed
+
+- The MAC counters of `thread_link` were almost all missing (only `tx_total` and `rx_total` came out):
+  OpenThread writes `TxRetry`, `TxErrCca`, `TxErrAbort`, `TxErrBusyChannel`, `RxErrNoFrame`,
+  `RxErrUnknownNeighbor`, `RxErrSec`, `RxErrFcs` indented under `TxTotal` / `RxTotal`, and the
+  lines in an indent were left out. They are read now. The tests use the real, indented format.
+- The RSSI of the parent (`rssi_avg`, `rssi_last`) came out empty. The parent is now looked for in
+  the neighbor table by its RLOC16 and then by its extended address, and `in_neighbor_table` says
+  whether it was found (`null`: the table could not be read). When it is not, the raw table is in
+  the log in Debug mode (`link: parent 0x… not in the neighbor table`), to see the real format.
+
+### Added
+
+- `parent_history` in `thread_link`: the last 10 changes of parent of the border router
+  (`{"at", "from", "to"}`, oldest first), also kept over a restart of the add-on in
+  `/data/parent_history.json`. A change made while the add-on was off, or between a detachment and
+  the next attachment, is seen too. Read only, as the rest of `thread_link`.
+
 ## [0.1.9] - 2026-11-17
 
 ### Added

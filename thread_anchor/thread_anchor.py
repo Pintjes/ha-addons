@@ -34,7 +34,7 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
-VERSION = "0.1.9"
+VERSION = "0.1.10"
 LOG = logging.getLogger("thread_anchor")
 STATE_TOPIC = "thread_anchor/state"
 DISCOVERY = "homeassistant"
@@ -43,6 +43,8 @@ PREFERENCES = ("high", "med", "low")
 ULA = ipaddress.IPv6Network("fc00::/7")   # local prefixes: the only ones accepted as omr_prefix
 DOCKER_SOCK = "/run/docker.sock"
 MEMORY_FILE = "/data/anchor.json"         # since when the prefix is anchored: kept over a restart
+PARENT_FILE = "/data/parent_history.json"  # the last parent changes of the border router: kept over a restart
+PARENT_HISTORY = 10                        # how many changes of parent are kept
 TICK_S = 5               # s between two looks at the border router container (restart detection)
 HEARTBEAT_S = 300        # the state is published again this often, even unchanged
 MQTT_RETRY_S = 60        # s before the MQTT broker is looked for again when it was not found
@@ -371,13 +373,15 @@ def parse_router_rows(text):
 
 
 def parse_counters(text, keys):
-    """`counters mle` or `counters mac` -> {snake_case name: int} of the top-level lines (`TxTotal: 12`,
-    `Parent Changes: 3`) named in `keys`; the lines under a section (indented) are left out."""
+    """`counters mle` or `counters mac` -> {snake_case name: int} of the lines (`TxTotal: 12`,
+    `Parent Changes: 3`) named in `keys`. OpenThread writes the counters of `counters mac` indented
+    under `TxTotal` / `RxTotal` (`    TxRetry: 4`): the indentation does not matter, the names are
+    unique."""
     out = {}
     for raw in (text or "").splitlines():
-        if not raw.strip() or raw[:1] in " \t":
+        if ":" not in raw:
             continue
-        key, _, val = raw.partition(":")
+        key, _, val = raw.strip().partition(":")
         key = re.sub(r"[\s_]+", "_", re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", key.strip())).lower()
         n = _int(val)
         if key in keys and n is not None:
@@ -407,7 +411,7 @@ def parse_omrprefix(text):
 
 # ---------------------------------------------------------------- the anchor
 class Anchor:
-    def __init__(self, options, docker=None, clock=time.time, memory=None):
+    def __init__(self, options, docker=None, clock=time.time, memory=None, history=None):
         self.prefix, self.config_error = None, None
         raw = str(options.get("omr_prefix") or "").strip()
         self.preference = str(options.get("omr_preference") or "high").strip().lower()
@@ -444,6 +448,33 @@ class Anchor:
         self.unfollowed = False      # the "network does not follow" warning was given for this episode
         self.memory = memory         # file that keeps anchored_since over a restart of the add-on
         self.anchored_since = self._remember()
+        self.history = history       # file that keeps the changes of parent over a restart of the add-on
+        self.last_parent, self.parent_log = self._load_history()
+
+    def _load_history(self):
+        """(last parent seen, [{"at", "from", "to"}] of the last changes) of the earlier runs."""
+        if not self.history:
+            return None, []
+        try:
+            with open(self.history, encoding="utf-8") as f:
+                kept = json.load(f)
+            log = [{"at": str(e["at"]), "from": str(e["from"]), "to": str(e["to"])} for e in kept["log"]]
+            last = kept.get("last")
+            return (str(last) if last else None), log[-PARENT_HISTORY:]
+        except (OSError, ValueError, TypeError, KeyError, AttributeError) as err:
+            LOG.debug("parent history: %s", err)
+            return None, []
+
+    def _save_history(self):
+        if not self.history:
+            return
+        try:
+            tmp = self.history + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"last": self.last_parent, "log": self.parent_log}, f)
+            os.replace(tmp, self.history)
+        except OSError as err:
+            LOG.debug("parent history: %s", err)
 
     @property
     def enabled(self):
@@ -631,7 +662,7 @@ class Anchor:
         if link:
             parent = link.get("parent") or {}
             pub["link"] = [link.get("rloc16"), parent.get("rloc16"), parent.get("ext"), parent.get("quality"),
-                           [b["rloc16"] for b in link.get("best", [])]]
+                           [b["rloc16"] for b in link.get("best", [])], len(link.get("parent_history", []))]
         return json.dumps(pub, sort_keys=True)
 
     def _read_role(self):
@@ -674,7 +705,7 @@ class Anchor:
             own = read(("rloc16",), lambda text: parse_rloc16(_lines(text)[0]))
             link["rloc16"] = f"0x{own:04x}" if own is not None else None
             parent = read(("parent",), parse_parent) if self.role == "child" else None
-            neighbors = read(("neighbor", "table"), parse_neighbors)
+            raw_nb, neighbors = read(("neighbor", "table"), lambda text: (text, parse_neighbors(text))) or (None, None)
             routers = read(("router", "table"), parse_router_rows)
             mle = read(("counters", "mle"), parse_counters, MLE_KEYS)
             mac = read(("counters", "mac"), parse_counters, MAC_KEYS)
@@ -683,12 +714,19 @@ class Anchor:
             return
         by_rloc = {n["rloc16"]: n for n in neighbors or []}
         if parent:
-            seen = by_rloc.get(parent["rloc16"], {})
+            # the parent is looked for by its RLOC16, then by its extended address
+            seen = by_rloc.get(parent["rloc16"]) or next(
+                (n for n in neighbors or [] if parent["ext"] and n["ext"] == parent["ext"]), None)
+            if neighbors is not None and seen is None:
+                LOG.debug("link: parent 0x%04x not in the neighbor table (%d rows read), raw table:\n%s",
+                          parent["rloc16"], len(neighbors), "\n".join((raw_nb or "").splitlines()[:30]))
+            seen = seen or {}
             lq = [q for q in (parent["lq_in"], parent["lq_out"]) if q is not None]
             link["parent"] = {"rloc16": f"0x{parent['rloc16']:04x}", "ext": parent["ext"],
                               "lq_in": parent["lq_in"], "lq_out": parent["lq_out"],
                               "quality": LQ_WORDS.get(min(lq)) if lq else None, "age": parent["age"],
-                              "rssi_avg": seen.get("rssi_avg"), "rssi_last": seen.get("rssi_last")}
+                              "rssi_avg": seen.get("rssi_avg"), "rssi_last": seen.get("rssi_last"),
+                              "in_neighbor_table": bool(seen) if neighbors is not None else None}
         if neighbors is not None:
             heard = [n for n in neighbors if n["role"] == "R"]
             link["routers_heard"] = len(heard)
@@ -701,10 +739,17 @@ class Anchor:
                                      "is_parent": bool(parent) and n["rloc16"] == parent["rloc16"]})
         link["counters"] = {k: v for k, v in (("mle", mle), ("mac", mac)) if v}
         link["read_at"] = self._now_iso()
-        before = ((self.link or {}).get("parent") or {}).get("rloc16")
+        # the changes of parent: seen between two readings (a back and forth within a minute is not),
+        # also across a restart of the add-on or a detachment (the last parent seen is kept)
         after = (link["parent"] or {}).get("rloc16")
-        if before and after and before != after:
-            self.emit("parent_changed", t("Parent of the border router changed: {a} -> {b}", a=before, b=after))
+        if after and after != self.last_parent:
+            before = self.last_parent
+            self.last_parent = after
+            if before:
+                self.parent_log = (self.parent_log + [{"at": self._now_iso(), "from": before, "to": after}])[-PARENT_HISTORY:]
+                self.emit("parent_changed", t("Parent of the border router changed: {a} -> {b}", a=before, b=after))
+            self._save_history()
+        link["parent_history"] = list(self.parent_log)
         self.link, self.link_at, self.link_role = link, now, self.role
 
     def _fail(self, txt, keep=False):
@@ -1435,7 +1480,7 @@ def main():
     if options.get("debug"):
         logging.getLogger().setLevel(logging.DEBUG)
     LOG.info(t("Thread Anchor {v} starting", v=VERSION))
-    anchor = Anchor(options, memory=MEMORY_FILE)
+    anchor = Anchor(options, memory=MEMORY_FILE, history=PARENT_FILE)
     if anchor.config_error:
         LOG.error(anchor.config_error)
     elif not anchor.enabled:

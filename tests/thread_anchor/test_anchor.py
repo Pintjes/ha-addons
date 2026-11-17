@@ -3,6 +3,7 @@ version trop ancienne, autre nommage des conteneurs, prefixe deja en place, date
 reseau qui ne suit pas, prefixe non local refuse, broker MQTT absent puis trouve, arret).
 Lancer : python tests/thread_anchor/test_anchor.py thread_anchor"""
 import json
+import logging
 import os
 import sys
 import tempfile
@@ -52,8 +53,16 @@ LINK_OUT = {      # sorties d'ot-ctl pour le lien du border router (enfant) avec
     "counters mle": ("Role Disabled: 0\r\nRole Detached: 4\r\nRole Child: 5\r\nRole Router: 0\r\nRole Leader: 0\r\n"
                      "Attach Attempts: 6\r\nPartition Id Changes: 1\r\nBetter Partition Attach Attempts: 0\r\n"
                      "Parent Changes: 3\r\nDone\r\n"),
-    "counters mac": ("TxTotal: 1034\r\n    TxUnicast: 1000\r\nTxRetry: 21\r\nTxErrCca: 4\r\nRxTotal: 2210\r\n"
-                     "    RxUnicast: 2000\r\nRxErrFcs: 7\r\nDone\r\n"),
+    # format reel d'OpenThread : les compteurs sont en retrait sous TxTotal / RxTotal
+    "counters mac": ("TxTotal: 1034\r\n    TxUnicast: 1000\r\n    TxBroadcast: 34\r\n    TxAckRequested: 900\r\n"
+                     "    TxAcked: 880\r\n    TxNoAckRequested: 134\r\n    TxData: 1000\r\n    TxDataPoll: 30\r\n"
+                     "    TxBeacon: 2\r\n    TxBeaconRequest: 2\r\n    TxOther: 0\r\n    TxRetry: 21\r\n"
+                     "    TxErrCca: 4\r\n    TxErrAbort: 1\r\n    TxErrBusyChannel: 2\r\n"
+                     "RxTotal: 2210\r\n    RxUnicast: 2000\r\n    RxBroadcast: 210\r\n    RxData: 2100\r\n"
+                     "    RxDataPoll: 0\r\n    RxBeacon: 4\r\n    RxBeaconRequest: 0\r\n    RxOther: 0\r\n"
+                     "    RxAddressFiltered: 3\r\n    RxDestAddrFiltered: 5\r\n    RxDuplicated: 1\r\n"
+                     "    RxErrNoFrame: 6\r\n    RxErrUnknownNeighbor: 0\r\n    RxErrInvalidSrcAddr: 0\r\n"
+                     "    RxErrSec: 0\r\n    RxErrFcs: 7\r\n    RxErrOther: 0\r\nDone\r\n"),
 }
 
 
@@ -481,9 +490,9 @@ assert d["addresses"][1] == OLD
 assert ta.parse_diag("Done\r\n") == {"answered": False, "ext": None, "rloc16": None, "addresses": []}
 assert ta.parse_diag("DIAG_GET.rsp/ans from fd00::1: 00\r\nExt Address: 'AABBCCDDEEFF0011'\r\nDone\r\n") == \
     {"answered": True, "ext": "aabbccddeeff0011", "rloc16": None, "addresses": []}
-assert ta.parse_diag("DIAG_GET.rsp/ans from fd00::1: 00\r\nExt Address: 'aabbccddeeff0011'\r\nRloc16: 0x0c00\r\n"
+assert ta.parse_diag("DIAG_GET.rsp/ans from fd00::1: 00\r\nExt Address: 'aabbccddeeff0011'\r\nRloc16: 0x3000\r\n"
                      "IP6 Address List:\r\n    - fd00::5\r\nDone\r\n") == \
-    {"answered": True, "ext": "aabbccddeeff0011", "rloc16": 0x0C00, "addresses": ["fd00::5"]}
+    {"answered": True, "ext": "aabbccddeeff0011", "rloc16": 0x3000, "addresses": ["fd00::5"]}
 # adresse etendue : majuscules, 0x, espaces
 assert ta.parse_ext(" 0x1A2B3C4D5E6F7081 ") == "1a2b3c4d5e6f7081"
 for bad in ("1a2b3c4d5e6f708", "1a2b3c4d5e6f70811", "zz7a34808b66e461", "", None):
@@ -1513,8 +1522,11 @@ assert ta.parse_router_rows(LINK_OUT["router table"]) == {0x3400: {"lq_in": 3, "
 assert ta.parse_counters(LINK_OUT["counters mle"], ta.MLE_KEYS) == {
     "role_detached": 4, "role_child": 5, "role_router": 0, "role_leader": 0, "attach_attempts": 6,
     "partition_id_changes": 1, "better_partition_attach_attempts": 0, "parent_changes": 3}
-assert ta.parse_counters(LINK_OUT["counters mac"], ta.MAC_KEYS) == {     # les lignes en retrait (TxUnicast…) ne comptent pas
-    "tx_total": 1034, "tx_retry": 21, "tx_err_cca": 4, "rx_total": 2210, "rx_err_fcs": 7}
+assert ta.parse_counters(LINK_OUT["counters mac"], ta.MAC_KEYS) == {     # 0.1.10 : lignes en retrait comprises
+    "tx_total": 1034, "tx_retry": 21, "tx_err_cca": 4, "tx_err_abort": 1, "tx_err_busy_channel": 2, "rx_total": 2210,
+    "rx_err_no_frame": 6, "rx_err_unknown_neighbor": 0, "rx_err_sec": 0, "rx_err_fcs": 7}
+assert "tx_unicast" not in ta.parse_counters(LINK_OUT["counters mac"], ta.MAC_KEYS)       # seules les cles voulues
+assert ta.parse_counters("TxTotal: 5\r\nTxRetry: 2\r\n", ta.MAC_KEYS) == {"tx_total": 5, "tx_retry": 2}   # a plat aussi
 assert ta.parse_counters("Done\r\n", ta.MAC_KEYS) == {}
 LINK_CMDS = ["rloc16", "parent", "neighbor table", "router table", "counters mle", "counters mac"]
 dd = FakeDocker()
@@ -1525,7 +1537,8 @@ assert dd.link_reads == LINK_CMDS, dd.link_reads
 assert not [c for c in dd.calls if c.split()[0] != "br"]                      # aucune ecriture, que des `br ...`
 assert lk["rloc16"] == "0x6c05" and lk["routers_heard"] == 4 and datetime.fromisoformat(lk["read_at"]).tzinfo
 assert lk["parent"] == {"rloc16": "0x3400", "ext": "5a6b7c8d9e0f1a2b", "lq_in": 3, "lq_out": 2, "quality": "medium",
-                        "age": 17, "rssi_avg": -62, "rssi_last": -64}
+                        "age": 17, "rssi_avg": -62, "rssi_last": -64, "in_neighbor_table": True}
+assert lk["parent_history"] == [] and lk["counters"]["mac"]["tx_err_busy_channel"] == 2
 # les 3 meilleurs routeurs entendus, par RSSI moyen ; l'enfant (0x6c0a) n'en est pas un
 assert [(b["rloc16"], b["rssi_avg"], b["is_parent"]) for b in lk["best"]] == [
     ("0x5800", -48, False), ("0xb800", -55, False), ("0x3400", -62, True)]
@@ -1590,6 +1603,85 @@ assert aa.public()["thread_link"] is None and aa.public()["error"]
 # anciens champs toujours la
 for key in ("thread_role", "thread_routers", "followed", "anchored_since"):
     assert key in aa.public(), key
+
+# ---- 0.1.10 : RSSI du parent (par RLOC16, puis par ext, sinon dit absent) et historique des changements de parent
+dd = FakeDocker()
+aa = ta.Anchor({"omr_prefix": P}, docker=dd, clock=dd.clock)
+dd.link_out["parent"] = dd.link_out["parent"].replace("Rloc: 3400", "Rloc: 3800")     # RLOC16 inconnu, ext connue
+aa.check()
+par = aa.public()["thread_link"]["parent"]
+assert par["rloc16"] == "0x3800" and par["rssi_avg"] == -62 and par["rssi_last"] == -64 and par["in_neighbor_table"] is True
+# parent absent de la table des voisins : RSSI null, dit, et la table brute part dans le journal en mode debug
+dd.link_out["parent"] = ("Ext Addr: 9999999999999999\r\nRloc: 7400\r\nLink Quality In: 3\r\nLink Quality Out: 3\r\n"
+                         "Age: 5\r\nDone\r\n")
+logged = []
+
+
+class Catch(logging.Handler):
+    def emit(self, record):
+        logged.append(record.getMessage())
+
+
+catch, old_level = Catch(), ta.LOG.level
+ta.LOG.addHandler(catch)
+ta.LOG.setLevel(logging.DEBUG)
+dd.now += 61
+aa.check()
+ta.LOG.removeHandler(catch)
+ta.LOG.setLevel(old_level)
+par = aa.public()["thread_link"]["parent"]
+assert par["rssi_avg"] is None and par["rssi_last"] is None and par["in_neighbor_table"] is False and par["quality"] == "good"
+assert [m for m in logged if "not in the neighbor table" in m and "0x5800" in m and "0x7400" in m], logged
+# table des voisins illisible : on ne sait pas (None), ce n'est pas « absent »
+dd.link_out["neighbor table"] = "Error 13: InvalidState\r\n"
+dd.now += 61
+aa.check()
+assert aa.public()["thread_link"]["parent"]["in_neighbor_table"] is None and aa.public()["thread_link"]["routers_heard"] is None
+
+# historique : un changement = {at, from, to}, les 10 derniers seulement, gardes d'un redemarrage a l'autre
+hist = os.path.join(tempfile.mkdtemp(), "parent_history.json")
+dd = FakeDocker()
+aa = ta.Anchor({"omr_prefix": P}, docker=dd, clock=dd.clock, history=hist)
+parents = [f"{0x8400 + 0x400 * i:04x}" for i in range(12)]      # 8400, 8800, 8c00, 9000…
+
+
+def read_with(a, d, rloc):
+    d.link_out["parent"] = dd.link_out["parent"].split("Rloc: ")[0] + f"Rloc: {rloc}\r\n" + \
+        dd.link_out["parent"].split("\r\n", 2)[2]
+    d.now += 61
+    a.check()
+    return a.public()["thread_link"]["parent_history"]
+
+
+assert read_with(aa, dd, parents[0]) == []          # le premier parent vu n'est pas un changement
+assert read_with(aa, dd, parents[0]) == []
+h = read_with(aa, dd, parents[1])
+assert len(h) == 1 and h[0]["from"] == "0x8400" and h[0]["to"] == "0x8800" and datetime.fromisoformat(h[0]["at"]).tzinfo
+assert read_with(aa, dd, parents[1]) == h           # pas de nouvelle ligne tant que le parent ne change pas
+for rl in parents[2:]:
+    h = read_with(aa, dd, rl)
+assert len(h) == 10 and h[0]["from"] == "0x8800", h
+assert h[-1]["from"] == "0x" + parents[-2] and h[-1]["to"] == "0x" + parents[-1]
+assert [e for e in aa.events if e[0] == "parent_changed"].__len__() == 11
+# un detachement puis le meme parent : pas un changement ; un autre parent : un changement
+dd.role = "detached"
+dd.now += 61
+aa.check()
+assert aa.public()["thread_link"]["parent"] is None and len(aa.public()["thread_link"]["parent_history"]) == 10
+# redemarrage de l'add-on : l'historique et le dernier parent sont relus
+aa2 = ta.Anchor({"omr_prefix": P}, docker=dd, clock=dd.clock, history=hist)
+assert aa2.last_parent == "0x" + parents[-1] and aa2.parent_log == h
+dd.role = "child"
+assert read_with(aa2, dd, parents[-1]) == h                       # meme parent qu'avant le redemarrage
+assert read_with(aa2, dd, "7400")[-1]["from"] == "0x" + parents[-1] and len(aa2.parent_log) == 10
+# fichier absent ou abime : historique vide, pas d'erreur
+with open(hist, "w", encoding="utf-8") as f:
+    f.write("{pas du json")
+aa3 = ta.Anchor({"omr_prefix": P}, docker=dd, clock=dd.clock, history=hist)
+assert aa3.parent_log == [] and aa3.last_parent is None
+assert ta.Anchor({"omr_prefix": P}, docker=dd, history=os.path.join(tempfile.mkdtemp(), "none.json")).parent_log == []
+# sans fichier (tests, observation) : en memoire seulement
+assert ta.Anchor({}, docker=dd).history is None
 
 # par MQTT : demande sur thread_anchor/diag/request, reponse non retenue
 b2 = Broker()
