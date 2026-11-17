@@ -256,7 +256,7 @@ def router_of(attrs, rloc):
     return len(links) >= 2
 
 
-def find_parents(thread, labels, used=None):
+def find_parents(thread, labels, used=None, learned=None):
     """Parent of every child node, with the weakest direction of their link.
 
     thread: node hex -> {"name", "attrs"}; labels: extended address -> name
@@ -271,6 +271,9 @@ def find_parents(thread, labels, used=None):
        Works when the parent is a border router (not a Matter node).
     2. Otherwise the neighbor entry flagged "is child" in the parent's table.
     3. Otherwise the only neighbor of an end device.
+    4. Otherwise what Thread Anchor learned of the child (learned: node hex -> {"rloc16", "parent",
+       "rssi", "lqi", "t"}, from thread_anchor/children): its parent router, often a border router
+       whose tables cannot be read (no radio traffic of our own). Its link time is "t".
     A router (see router_of) has no parent.
     used, when given, receives for every child the tables its link was taken from, as
     (node hex, attribute path): the link is as old as the oldest of them.
@@ -328,6 +331,20 @@ def find_parents(thread, labels, used=None):
             parents[nid] = (match(nbs[0].get("0"), labels) or f"0x{(nbs[0].get('2') or 0):04x}",
                             nb_rssi(nbs[0]), nbs[0].get("5"), nbs[0].get("0"))
             used[nid] = {(nid, "0/53/7")}
+    for nid, e in (learned or {}).items():   # what Thread Anchor learned in its searches
+        if nid in parents or nid not in thread or router.get(nid) or not e:
+            continue
+        prloc = e["parent"] if e.get("parent") is not None else e["rloc16"] & 0xFC00
+        ext = rloc_ext.get(prloc)
+        own = [nb for nb in thread[nid]["attrs"].get("0/53/7") or [] if isinstance(nb, dict) and nb.get("2") == prloc]
+        name = (match(ext, labels) if ext else None) or f"router {prloc >> 10} (0x{prloc:04x})"
+        # the signal: what Thread Anchor gives, else the child's own entry of that parent when it has one
+        rssi = e.get("rssi") if e.get("rssi") is not None else (nb_rssi(own[0]) if own else None)
+        lqi = e.get("lqi") if e.get("lqi") is not None else (own[0].get("5") if own else None)
+        parents[nid] = (name, rssi, lqi, ext or prloc)
+        used[nid] = {("thread_anchor", e.get("t"))}
+        if rlocs.get(nid) is None:
+            rlocs[nid] = e["rloc16"]
     for nid in [k for k in parents if router[k]]:
         del parents[nid]   # a router has no parent (stale "is child" entry in a neighbor table)
     return parents, rlocs
@@ -532,7 +549,14 @@ class NodeTable:
             if ext is not None:
                 labels[ext] = thread[nid]["name"]
         src_p, src_h = {}, {}   # node hex -> tables its link was taken from
-        parent_of, rlocs = find_parents(thread, labels, src_p)
+        anchor = getattr(self.w, "anchor", None)
+        learned = {}
+        if anchor is not None and getattr(anchor, "children", None):
+            for nid, v in thread.items():
+                e = anchor.child(ext_of(v["attrs"]), now)
+                if e:
+                    learned[nid] = e
+        parent_of, rlocs = find_parents(thread, labels, src_p, learned)
         with self.w.lock:
             br_exts = [b["xa"] for b in self.w.br.values() if b.get("xa") is not None]
         try:
@@ -547,7 +571,8 @@ class NodeTable:
 
         def given(pairs):
             """When the nodes gave these values: the oldest time, None if one is not known."""
-            times = [self.live.stamp(k, path) for k, path in pairs]
+            # ("thread_anchor", time): a parent learned by Thread Anchor, given at that time
+            times = [path if k == "thread_anchor" else self.live.stamp(k, path) for k, path in pairs]
             return min(times) if times and None not in times else None
 
         def is_old(when):
@@ -885,6 +910,8 @@ class NodeTable:
                 brs.append({"name": self.w.br_label(b), "key": key[:16], "role": b.get("role") if b["online"] else "offline",
                             "online": bool(b["online"]), "partition": b.get("partition"), "omr": b.get("omr"),
                             "primary": bool(b.get("bbr_primary")) and bool(b["online"]),
+                            # Home Assistant's preferred border router (its credentials go to the phone apps)
+                            "preferred": bool(self.w.is_preferred(b)) if hasattr(self.w, "is_preferred") else False,
                             "_seen": b.get("mdns_seen") or b.get("last_seen") or 0,
                             "last_contact": self.w.br_contact(b)[0], "contact_src": self.w.br_contact(b)[1],
                             "detached_24h": st["detached_24h"], "last_detached": st["last_detached"],

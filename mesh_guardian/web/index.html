@@ -367,6 +367,7 @@ const T = {
     br_open:"Details of this border router", br_state:"State", br_online:"online", br_offline_since:"offline since {t}", br_primary_l:"Primary", yes:"yes", no:"no",
     br_end_tip:"End device: attached to a router, it does not relay the messages of the others. Usual for the border router of Home Assistant when other border routers are routers.",
     br_primary_tip:"Primary: the border router that links the Thread network to the home network for group messages (primary backbone border router, multicast). One per network; another one takes over if it goes away.",
+    br_pref_l:"Preferred by Home Assistant", br_pref_tip:"Home Assistant's preferred border router (Thread settings): its Thread credentials are the ones Home Assistant gives to the Android and iOS apps to add devices.",
     br_prefix_own:"Prefix it announces", br_stab:"Stability", br_netw:"Network", br_usb_l:"Radio over USB/IP", br_ms:"{v} ms on average",
     br_net:"Thread network", br_prefix:"Prefix", br_last:"Last contact", br_subnet:"Same subnet as Home Assistant", br_det:"Detaches (24h)", br_detaches:"Detaches of the last 7 days",
     br_through:"Nodes going through it ({n})", br_children:"Nodes attached to it ({n})", br_model:"Model", br_id:"Identifier", br_ext:"Extended address", br_xpan:"Extended PAN ID", br_part:"Partition", br_addr:"Addresses", br_if:"Thread interface",
@@ -470,6 +471,7 @@ const T = {
     br_open:"Détails de ce border router", br_state:"État", br_online:"en ligne", br_offline_since:"hors ligne depuis {t}", br_primary_l:"Primaire", yes:"oui", no:"non",
     br_end_tip:"Appareil final : rattaché à un routeur, il ne relaie pas les messages des autres. Normal pour le border router de Home Assistant quand d'autres border routers sont routeurs.",
     br_primary_tip:"Primaire : le border router qui relie le réseau Thread au réseau de la maison pour les messages de groupe (BBR primaire, multicast). Un seul par réseau ; un autre prend le relais s'il disparaît.",
+    br_pref_l:"Préféré par Home Assistant", br_pref_tip:"Border router préféré de Home Assistant (réglages Thread) : ce sont ses identifiants Thread que Home Assistant donne aux applications Android et iOS pour ajouter des appareils.",
     br_prefix_own:"Préfixe qu'il annonce", br_stab:"Stabilité", br_netw:"Réseau", br_usb_l:"Radio via USB/IP", br_ms:"{v} ms en moyenne",
     br_net:"Réseau Thread", br_prefix:"Préfixe", br_last:"Dernier contact", br_subnet:"Même sous-réseau que Home Assistant", br_det:"Décrochages (24 h)", br_detaches:"Décrochages des 7 derniers jours",
     br_through:"Nodes qui passent par lui ({n})", br_children:"Nodes rattachées à lui ({n})", br_model:"Modèle", br_id:"Identifiant", br_ext:"Adresse étendue", br_xpan:"Extended PAN ID", br_part:"Partition", br_addr:"Adresses", br_if:"Interface Thread",
@@ -587,6 +589,7 @@ const IC = {
   bulb: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.3 1 2.1h5c0-.8.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>',
   bat: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="8" width="16" height="9" rx="2"/><path d="M22 11v3"/></svg>',
   crown: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 18h16l1-11-5 4-4-6-4 6-5-4z"/></svg>',
+  phonekey: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2.5" width="10" height="19" rx="2"/><path d="M7 18.5h2"/><circle cx="16.5" cy="9" r="2.8"/><path d="M16.5 11.8V20M16.5 15.5h2.5M16.5 18h2"/></svg>',
   primary: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
 };
 const bars = n => '<svg class="i" viewBox="0 0 24 24" fill="currentColor">' + [0, 1, 2, 3].map(i =>
@@ -895,7 +898,8 @@ function renderBrs() {
     if (b.same_subnet === false) seen.push(L("other_subnet"));
     return `<div class="card br" data-br="${esc(b.id)}" role="button" tabindex="0" title="${esc(L("br_open"))}"><span class="st ${k} ic">${k === "ok" ? IC.ok : k === "bad" ? IC.bad : IC.warn}</span>
       <div class="brx"><span class="brn"><b>${esc(b.name)}</b>${b.role === "leader" && b.online ? `<span title="Leader">${IC.crown}</span>` : ""}${b.primary && b.online
-        ? `<span class="brp" title="${esc(L("br_primary_l"))}">${IC.primary}</span>${tipI(L("br_primary_tip"))}` : ""}</span>
+        ? `<span class="brp" title="${esc(L("br_primary_l"))}">${IC.primary}</span>${tipI(L("br_primary_tip"))}` : ""}${b.preferred
+        ? `<span class="brp" title="${esc(L("br_pref_l"))}">${IC.phonekey}</span>${tipI(L("br_pref_tip"))}` : ""}</span>
       <small>${esc(role)}</small><small>${esc(seen.join(" · "))}</small></div>${b.ha ? ancLine(D.anchor) : ""}</div>`;
   }).join("");
 }
@@ -1421,6 +1425,7 @@ function openBr(id) {
     `<h4 class="sub">${L("br_detaches")}</h4>` + (det.length ? `<ul>${det.join("")}</ul>` : `<p class="mut">${L("none")}</p>`), true);
   const u = b.usb_latency;
   const netRows = [[L("br_subnet"), yn(b.same_subnet)], [L("br_primary_l") + tipI(L("br_primary_tip")), b.online ? yn(b.primary) : "—"],
+    [L("br_pref_l") + tipI(L("br_pref_tip")), b.preferred ? `<span class="brp">${IC.phonekey}</span> ${esc(L("yes"))}` : esc(L("no"))],
     [L("br_last"), b.last_contact ? ago(b.last_contact) + (b.contact_src ? ` <small class="mut">(${esc(L("br_src")[b.contact_src] || b.contact_src)})</small>` : "") : L("br_never")]];
   if (u && u.avg_ms != null) netRows.push([L("br_usb_l"), esc(F("br_ms", {v: u.avg_ms < 10 ? dec(u.avg_ms) : Math.round(u.avg_ms)}))]);
   const netw = sec("br_netw", esc(L("br_netw")), grid(netRows), true);

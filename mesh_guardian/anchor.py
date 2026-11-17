@@ -40,7 +40,9 @@ ANCHOR_TOPIC = "thread_anchor/state"
 ANCHOR_AVAIL_TOPIC = "thread_anchor/state/available"
 DIAG_REQUEST_TOPIC = "thread_anchor/diag/request"    # Thread diagnostic of one node, run by Thread Anchor (ot-ctl)
 DIAG_RESULT_TOPIC = "thread_anchor/diag/result/"    # + request id
-DIAG_WAIT_S = 130        # one answer: 15 s for a known RLOC16, but a search by ext / ML-EID runs the
+CHILDREN_TOPIC = "thread_anchor/children"   # retained: the children Thread Anchor learned in its searches
+CHILDREN_KEEP_S = 24 * 3600   # an entry older than this is not used (the child may have changed parent)
+DIAG_WAIT_S = 130       # one answer: 15 s for a known RLOC16, but a search by ext / ML-EID runs the
                          # meshdiag scan of Thread Anchor (90 s budget) plus its other steps: 90 + 15 + margin
 DIAG_BUSY_WAIT_S = 120   # "busy" (another diagnostic runs): asked again for this long
 DIAG_BUSY_RETRY_S = 10   # every this often
@@ -60,6 +62,21 @@ def parse_iso(s):
     try:
         return datetime.fromisoformat(str(s)).timestamp()
     except (TypeError, ValueError):
+        return None
+
+
+def _num(v):
+    """A number given as a number or as text (hex with 0x, else hex for 16 digits, else decimal)."""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return int(v)
+    s = str(v or "").strip().lower()
+    try:
+        if s.startswith("0x"):
+            return int(s, 16)
+        return int(s, 16) if len(s) == 16 or any(c in "abcdef" for c in s) else int(s)
+    except ValueError:
         return None
 
 
@@ -111,6 +128,7 @@ class Anchor:
         self._report, self._report_t = None, 0
         self.slug = None
         self._diag_waits = {}        # request id -> [Event, result]
+        self.children = {}           # extended address -> {"rloc16", "parent", "rssi", "lqi", "t"} (thread_anchor/children)
         self._load()
 
     # ------------------------------------------------------------ persistence
@@ -143,6 +161,50 @@ class Anchor:
         with self.lock:
             self.available = True if txt == "online" else False if txt == "offline" else None
         self.update()
+
+    def on_children(self, payload):
+        """thread_anchor/children (Thread Anchor 0.1.11, version 1): the nodes Thread Anchor learned in its
+        searches (meshdiag, child tables), no radio traffic of its own:
+        {"version": 1, "nodes": {"<ext, 16 hex>": {"rloc16": "0x6c05", "parent": "0x6c00" | null, "role":
+        "child" | "router", "read_at": ISO, "signal": {...}}}}. Only the children are kept. "signal" is
+        measured toward the border router of Home Assistant, not toward the node's parent: never used
+        as the signal of its link. Read leniently (also "children", a list of entries with "ext")."""
+        try:
+            data = json.loads(payload) if payload else None
+        except ValueError:
+            return
+        items = (data.get("nodes") if isinstance(data.get("nodes"), (dict, list)) else data.get("children")) \
+            if isinstance(data, dict) else data
+        if isinstance(items, dict):
+            items = [dict(v, ext=k) for k, v in items.items() if isinstance(v, dict)]
+        out = {}
+        for e in items if isinstance(items, list) else []:
+            if not isinstance(e, dict):
+                continue
+            ext, rloc = _num(e.get("ext")), _num(e.get("rloc16"))
+            if ext is None or rloc is None or not rloc & 0x3FF or e.get("role") == "router":
+                continue   # no address, or a router (not a child)
+            parent = _num(e.get("parent"))
+            when = e.get("read_at", e.get("t"))
+            when = when if isinstance(when, (int, float)) else parse_iso(when)
+            out[ext] = {"rloc16": rloc, "parent": parent if parent is not None else rloc & 0xFC00,
+                        "rssi": e.get("rssi") if isinstance(e.get("rssi"), (int, float)) else None,
+                        "lqi": e.get("lqi") if isinstance(e.get("lqi"), int) else None, "t": when}
+        with self.lock:
+            self.children = out
+
+    def child(self, ext, now=None):
+        """What Thread Anchor learned of this child (by extended address), when it is recent enough."""
+        if ext is None:
+            return None
+        now = self.clock() if now is None else now
+        with self.lock:
+            e = self.children.get(ext)
+            if e is None:   # the Matter Server may round 64-bit integers
+                e = next((v for k, v in self.children.items() if abs(k - ext) <= 4096), None)
+        if e is None or (e["t"] is not None and now - e["t"] > CHILDREN_KEEP_S):
+            return None
+        return e
 
     # ------------------------------------------------------------ Thread diagnostic of one node
     def diag_ready(self):

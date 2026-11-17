@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **Before / since the anchoring, in plain words** (panel of the border router of Home Assistant): "Before the anchoring (3 days): 16 detaches a day · 1.5 prefix changes a day" and "Since (9 h): 1 detach in 9 h · 0 prefix changes". Singular and plural by the language, readable roundings (whole numbers from 10 on, hours under one day). A small "i" says what the anchoring is, over which period "before" is measured, that a detach is a device that became unavailable (the same device can count several times), and that "since" is too short to compare in the first days.
 
+### Added
+
+- **Preferred border router of Home Assistant**: its card shows a phone-and-key icon with its "i", and its panel says "Preferred by Home Assistant": the border router whose Thread credentials Home Assistant gives to the Android and iOS apps. Read from the Thread integration (`thread/list_datasets`: preferred border agent id, else extended address), read only, every 10 min with the names of the border routers.
+- **Parent of a child of a border router, from Thread Anchor**: when nothing else gives the parent of a child (a child of a Google TV or another border router whose tables cannot be read), the children Thread Anchor learned in its own searches (`thread_anchor/children`, retained, version 1) give it: parent = its router, named by the tables of the mesh, the link marked as old when the reading is. No radio traffic of its own. Its signal comes from the child's own neighbor table only: the signal Thread Anchor measures toward its border router is never shown as the signal of that link (no signal: "—"). Entries older than 24 h are not used.
+
 ## [2.39.0] - 2026-11-17
 
 ### Changed

@@ -508,12 +508,17 @@ class Healer:
             if json.loads(ws.recv()).get("type") != "auth_ok":
                 return None
             out = []
-            for i, msg in enumerate(({"type": "config/device_registry/list"}, {"type": "config_entries/get", "domain": "otbr"}), 1):
+            msgs = ({"type": "config/device_registry/list"}, {"type": "config_entries/get", "domain": "otbr"},
+                    {"type": "thread/list_datasets"})   # the preferred border router (read only)
+            for i, msg in enumerate(msgs, 1):
                 ws.send(json.dumps({"id": i, **msg}))
                 res = json.loads(ws.recv())
                 while res.get("id") != i:   # an event in between (none subscribed, but to be safe)
                     res = json.loads(ws.recv())
-                out.append(res.get("result") if res.get("success") and isinstance(res.get("result"), list) else None)
+                result = res.get("result") if res.get("success") else None
+                out.append(result.get("datasets") if i == 3 and isinstance(result, dict) else
+                           result if isinstance(result, list) else None)
+            self.thread_datasets = out[2] if isinstance(out[2], list) else None
             return None if out[0] is None else (out[0], out[1] or [])
         finally:
             ws.close()

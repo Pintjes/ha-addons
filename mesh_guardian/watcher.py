@@ -64,7 +64,7 @@ i18n.set_language(OPTIONS.get("language", "en"))
 from i18n import t, tn  # noqa: E402
 
 from advice import Advisor  # noqa: E402
-from anchor import ANCHOR_AVAIL_TOPIC, ANCHOR_TOPIC, DIAG_RESULT_TOPIC, Anchor  # noqa: E402
+from anchor import ANCHOR_AVAIL_TOPIC, ANCHOR_TOPIC, CHILDREN_TOPIC, DIAG_RESULT_TOPIC, Anchor  # noqa: E402
 from healer import Healer  # noqa: E402
 from labels import LabelSync  # noqa: E402
 from matterlive import MatterLive  # noqa: E402
@@ -490,6 +490,31 @@ class Watch:
         except Exception as err:  # noqa: BLE001
             LOG.debug("border router names from the device registry: %s", err)
 
+    def set_preferred(self, datasets):
+        """The border router Home Assistant prefers (Thread integration: preferred dataset, its
+        preferred border agent id and extended address): the one whose Thread credentials Home
+        Assistant gives to the Android and iOS apps. None when unknown (read only)."""
+        pref = next((d for d in datasets or [] if isinstance(d, dict) and d.get("preferred")), None)
+        if pref is None:
+            self.preferred = None
+            return
+        xa = pref.get("preferred_extended_address")
+        try:
+            xa = int(xa, 16) if xa else None
+        except (TypeError, ValueError):
+            xa = None
+        self.preferred = {"agent_id": str(pref.get("preferred_border_agent_id") or "").lower() or None, "xa": xa,
+                          "network": pref.get("network_name")}
+
+    def is_preferred(self, b):
+        """True for the border router Home Assistant prefers (by border agent id, else extended address)."""
+        p = getattr(self, "preferred", None)
+        if not p:
+            return False
+        if p["agent_id"] and str(b.get("agent_id") or "").lower() == p["agent_id"]:
+            return True
+        return p["xa"] is not None and isinstance(b.get("xa"), int) and abs(b["xa"] - p["xa"]) <= 4096
+
     def refresh_user_names(self, devices=None, entries=None):
         """Names a user gave the border routers in Home Assistant, the same rule for every installation.
         An OpenThread border router integrated in Home Assistant (entry of the otbr integration) is tied
@@ -505,6 +530,7 @@ class Watch:
             if got is None:
                 return False
             devices, entries = got
+            self.set_preferred(getattr(self.healer, "thread_datasets", None))
         devs = [d for d in devices or [] if isinstance(d, dict)]
         entries = [e for e in entries or [] if isinstance(e, dict) and e.get("domain", "otbr") == "otbr"]
 
@@ -1906,6 +1932,7 @@ class Watch:
         client.subscribe(ANCHOR_TOPIC)     # Thread Anchor add-on: OMR prefix of the border router of HA
         client.subscribe(ANCHOR_AVAIL_TOPIC)
         client.subscribe(DIAG_RESULT_TOPIC + "+")   # answers of the Thread diagnostic (recovery attempt)
+        client.subscribe(CHILDREN_TOPIC)   # children Thread Anchor learned: parent of a child of a border router
         self.publish_discovery()
         self.dirty = True
 
@@ -1971,6 +1998,11 @@ class Watch:
         if msg.topic.startswith(DIAG_RESULT_TOPIC):
             if self.anchor:
                 self.anchor.on_diag(msg.topic, msg.payload)
+            return
+        if msg.topic == CHILDREN_TOPIC:
+            if self.anchor:
+                self.anchor.on_children(msg.payload)
+                self.dirty = True
             return
         if msg.topic == f"{BASE}/rename/set" and getattr(self, "labels", None) and msg.payload:
             threading.Thread(target=self.labels.rename, args=(t("the button in Home Assistant"),),
