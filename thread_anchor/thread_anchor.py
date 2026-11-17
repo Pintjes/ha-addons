@@ -34,7 +34,7 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
-VERSION = "0.1.7"
+VERSION = "0.1.8"
 LOG = logging.getLogger("thread_anchor")
 STATE_TOPIC = "thread_anchor/state"
 DISCOVERY = "homeassistant"
@@ -67,6 +67,7 @@ SEARCH_TEXTS = {           # one line of the log per step of the search for an R
     "too_soon": "scan done {d} s ago, ext not in it",
     "stopped": "stopped: {d}",
     "kids": "children of {n} routers read{d}",
+    "fallback": "{n} routers taken from the router table and the request, asked one by one",
     "no_list": "this router gave no list of its children",
     "asked": "{n} children asked, {d} answered, ext not among them{s}",
     "old_listed": "still listed under {d}",
@@ -117,6 +118,8 @@ TEXTS = {
         "scan done {d} s ago, ext not in it": "balayage fait il y a {d} s, ext absente",
         "stopped: {d}": "arrêtée : {d}",
         "children of {n} routers read{d}": "enfants de {n} routeurs lus{d}",
+        "{n} routers taken from the router table and the request, asked one by one":
+            "{n} routeurs pris dans la table des routeurs et la demande, interrogés un par un",
         "this router gave no list of its children": "ce routeur n'a pas donné la liste de ses enfants",
         "{n} children asked, {d} answered, ext not among them{s}":
             "{n} enfants interrogés, {d} ont répondu, ext absente{s}",
@@ -743,6 +746,7 @@ class Diag:
         # routers whose children are all known are not asked again, nor are the children that answered
         self.partial, self.done, self.tried = False, set(), set()
         self.silent = {}          # router rloc16 -> children asked that did not answer
+        self.router_rows = None   # {ext: rloc16} of the `router table` read by the current search
 
     def submit(self, raw):
         """A request from MQTT: answered at once when refused, else run in the background."""
@@ -837,6 +841,7 @@ class Diag:
                     self._step(res, "mleid", "found", f"0x{diag['rloc16']:04x}")
                     return diag["rloc16"], "mleid", diag, None
         if ext:
+            self.router_rows = None
             for name, cmd in (("child table", ("child", "table")), ("neighbor table", ("neighbor", "table")),
                               ("router table", ("router", "table"))):
                 try:
@@ -846,6 +851,8 @@ class Diag:
                         raise
                     self._step(res, name, "error", str(err))
                     continue
+                if name == "router table":
+                    self.router_rows = rows
                 found = rows.get(ext)
                 if found is not None:
                     self._step(res, name, "found", f"0x{found:04x}", rows=len(rows))
@@ -959,6 +966,19 @@ class Diag:
                    extra=t("; silent: {l}", l=", ".join(f"0x{r:04x}" for r in silent)) if silent else "")
         return None
 
+    def _routers_fallback(self, res, hints):
+        """Routers to ask one by one when `meshdiag topology` gave no list: those of the router table
+        read earlier in this search, then the routers of the request (RLOC16 only). [] when there are none."""
+        found = {}
+        for e, rl in (self.router_rows or {}).items():
+            found[rl & 0xFC00] = e
+        for h in hints:
+            found.setdefault(h & 0xFC00, None)
+        routers = [{"rloc16": rl, "ext": e, "me": False} for rl, e in sorted(found.items())]
+        if routers:
+            self._step(res, "routers from the router table", "fallback", rows=len(routers))
+        return routers
+
     def _scan_run(self, res, ext, hints, mlp):
         now = self.clock()
         deadline = now + DIAG_SCAN_TIMEOUT_S
@@ -990,12 +1010,23 @@ class Diag:
             routers = parse_topology(self._otctl(deadline, "meshdiag", "topology"))
         except RuntimeError as err:
             self._step(res, "meshdiag topology", "error", str(err))
-            return None
+            if "Busy" in str(err):     # another meshdiag is running: not worth insisting
+                return None
+            # `topology` timed out (it asks every router at once): the routers are those of the router
+            # table already read, and of the request; each is then asked on its own
+            routers = self._routers_fallback(res, hints)
+            if not routers:
+                return None
+            fallback = True
+        else:
+            fallback = False
         rhit = next((r for r in routers if r["ext"] == ext), None)
         for r in routers:
-            self.scan_map[r["ext"]] = (r["rloc16"], None)
-        self._step(res, "meshdiag topology", "found" if rhit else "not_found",
-                   f"0x{rhit['rloc16']:04x}" if rhit else None, rows=len(routers))
+            if r["ext"]:
+                self.scan_map[r["ext"]] = (r["rloc16"], None)
+        if not fallback:
+            self._step(res, "meshdiag topology", "found" if rhit else "not_found",
+                       f"0x{rhit['rloc16']:04x}" if rhit else None, rows=len(routers))
         if rhit:
             return rhit["rloc16"], None
         old = self.scan_map.get(ext)     # a child that answered in the scan this one carries on

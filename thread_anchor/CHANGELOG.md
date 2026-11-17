@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.8] - 2026-11-17
+
+### Fixed
+
+- The meshdiag step no longer gives up when `meshdiag topology` times out (`Error 28:
+  ResponseTimeout`: it asks every router at once). It used to end with `not found` and no
+  per-router step, although the node was on the network. It now carries on: the routers are taken
+  from the `router table` read earlier in the same search and from the request's `routers`
+  (`routers from the router table: N routers…` in `search`), then asked one by one with
+  `meshdiag childtable`, and `meshdiag topology children` / `networkdiagnostic get` for the ones that
+  do not answer, all inside the same 90 s budget. A `Busy` answer still stops the step. Without
+  a router table and without a hint, nothing is invented: the step says the error.
+
 ## [0.1.7] - 2026-11-17
 
 ### Fixed

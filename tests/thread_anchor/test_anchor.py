@@ -1126,6 +1126,57 @@ assert [c for c in otbr.calls if c[:2] == ["networkdiagnostic", "get"] and len(c
     [ND(CHILD_A), ND(CHILD_B), ND(CHILD_C), ND(CHILD_B), ND(CHILD_C)]       # rien n'a ete demande sous 0x5800
 assert r["silent_children"] == [{"rloc16": "0xb45c", "parent": "0xb400"}, {"rloc16": "0xb45d", "parent": "0xb400"}]
 
+# 0.1.8 : `meshdiag topology` expire (il interroge tous les routeurs d'un coup) : la recherche continue,
+# routeur par routeur, avec la table des routeurs deja lue et les routeurs de la demande
+RTAB = ("| ID | RLOC16 | Next Hop | Path Cost | LQ In | LQ Out | Age | Extended MAC     | Link |\r\n"
+        "+----+--------+----------+-----------+-------+--------+-----+------------------+------+\r\n"
+        "| 22 | 0x5800 |       63 |         0 |     0 |      0 |  10 | 1111111111111111 |    1 |\r\n"
+        "| 45 | 0xb400 |       63 |         0 |     0 |      0 |  10 | 2222222222222222 |    1 |\r\n"
+        "| 46 | 0xb800 |       63 |         0 |     0 |      0 |  10 | 3333333333333333 |    1 |\r\nDone\r\n")
+# table des routeurs lue : les routeurs sont pris dedans, childtable un par un, puis les enfants du muet
+clk, otbr, dg, out = kids_diag()
+otbr.topology_out = TIMEOUT
+otbr.tables["router"] = RTAB
+r = one(dg, out, ext=TARGET)
+assert r["rloc16"] == "0xb45c" and r["parent"] == "0xb400" and r["rloc16_from"] == "meshdiag" and r["alive"] is True
+assert steps(r) == [("child table", "not_found"), ("neighbor table", "not_found"), ("router table", "not_found"),
+                    ("meshdiag topology", "error"), ("routers from the router table", "fallback"),
+                    ("meshdiag childtable 0x5800", "not_found"), ("meshdiag childtable 0xb400", "error"),
+                    ("meshdiag childtable 0xb800", "not_found"), ("meshdiag topology children", "kids"),
+                    ("children of 0xb400", "found")], steps(r)
+assert r["search"][4]["rows"] == 3 and r["search"][3]["detail"] == "Error 28: ResponseTimeout"
+# routeurs de la demande seuls (table des routeurs vide) : le routeur nomme est lu tout de suite
+clk, otbr, dg, out = kids_diag()
+otbr.topology_out = TIMEOUT
+r = one(dg, out, ext=TARGET, routers=["0xb45d"])
+assert r["rloc16"] == "0xb45c" and r["parent"] == "0xb400"
+assert ("routers from the router table", "fallback") in steps(r) and r["search"][4]["rows"] == 1
+assert [c for c in otbr.calls if c[:2] == ["meshdiag", "childtable"]] == [CT("0xb400")]
+# ni table des routeurs ni indice : rien a interroger, on le dit sans inventer de routeur
+clk, otbr, dg, out = kids_diag()
+otbr.topology_out = TIMEOUT
+r = one(dg, out, ext=TARGET)
+assert r["error"] == "not found" and steps(r)[-1] == ("meshdiag topology", "error")
+assert not [c for c in otbr.calls if c[:2] == ["meshdiag", "childtable"]]
+# Busy sur `topology` : un autre meshdiag tourne, on n'insiste pas (pas de reprise par routeur)
+clk, otbr, dg, out = kids_diag()
+otbr.topology_out = "Error 5: Busy\r\n"
+otbr.tables["router"] = RTAB
+r = one(dg, out, ext=TARGET)
+assert r["error"] == "not found" and steps(r)[-1] == ("meshdiag topology", "error")
+assert not [c for c in otbr.calls if c[:2] == ["meshdiag", "childtable"]]
+# `topology` qui repond : pas de reprise par la table des routeurs
+clk, otbr, dg, out = kids_diag()
+otbr.tables["router"] = RTAB
+r = one(dg, out, ext=TARGET)
+assert ("routers from the router table", "fallback") not in steps(r) and r["rloc16"] == "0xb45c"
+# le budget de 90 s tient aussi dans la reprise
+clk, otbr, dg, out = kids_diag()
+otbr.topology_out, otbr.scan_takes = TIMEOUT, 40
+otbr.tables["router"] = RTAB
+r = one(dg, out, ext="4444444444444444")
+assert r["error"] == "not found" and ("meshdiag childtable 0xb800", "stopped") in steps(r), steps(r)
+
 
 def partial_diag():
     """Premier balayage arrete par le budget de 90 s sous 0xb400 : A et B ont repondu, C n'a pas ete demande."""

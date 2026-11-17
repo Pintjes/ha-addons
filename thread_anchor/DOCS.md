@@ -166,6 +166,13 @@ Reads only, but it is radio traffic: a request for every router.
 - `ot-ctl help` first (once for each start of the border router): without
   `meshdiag` the step says `not supported` in `search` and the answer is
   `not found`, no error;
+- when `meshdiag topology` itself times out (it asks every router at once; on a
+  large network it can), the step does not give up: the routers are taken from
+  the `router table` already read in the same search, plus the routers of the
+  request (`routers from the router table` in `search`, with their number), and
+  asked one by one as below, in the same 90 s. Without a router table and
+  without a `routers` hint there is nothing to ask: the step says the error. A
+  `Busy` answer still stops it;
 - the routers are asked in the order of the topology, the border router itself
   left out (its children are in `child table`), after the ones named in the
   request's `routers` (RLOC16 of routers, or of their children: `"0xB45C"`
