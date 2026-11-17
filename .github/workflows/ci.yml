@@ -22,7 +22,7 @@ jobs:
       - name: Tests (Mesh Guardian)
         run: python tests/mesh_guardian/run_all.py
       - name: Tests (USB/IP Link)
-        run: python tests/usbip_link/test_link.py usbip_link && python tests/usbip_link/test_omr.py usbip_link
+        run: python tests/usbip_link/test_link.py usbip_link
       - name: Tests (Thread Anchor)
         run: python tests/thread_anchor/test_anchor.py thread_anchor
       - name: Unit tests (Side Door)

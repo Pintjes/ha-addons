@@ -19,14 +19,14 @@ configuration:
     name: "Add-ons à redémarrer"
     description: "Redémarrés après un nouvel attachement, p. ex. core_openthread_border_router."
   omr_prefix:
-    name: "Préfixe OMR imposé"
-    description: "Préfixe /64 imposé au border router OpenThread (p. ex. le préfixe OMR actuel du réseau). Vide : pas d'action."
+    name: "Préfixe OMR (obsolète)"
+    description: "Ne sert plus : le préfixe OMR fixe est passé dans l'add-on Thread Anchor. Laisser vide."
   omr_preference:
-    name: "Préférence du préfixe OMR"
-    description: "high (par défaut) ou med : au-dessus des préfixes générés par les autres border routers (low)."
+    name: "Préférence OMR (obsolète)"
+    description: "Ne sert plus (voir Thread Anchor)."
   otbr_addon:
-    name: "Add-on border router"
-    description: "Laisser vide : core_openthread_border_router."
+    name: "Add-on border router (obsolète)"
+    description: "Ne sert plus (voir Thread Anchor)."
   debug:
     name: "Débogage"
     description: "Plus de détails dans le journal."

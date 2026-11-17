@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.0] - 2026-11-17
+
+### Added
+
+- Latency of the link: the time the server takes to answer (TCP connection to its USB/IP
+  port) at every check, published in `usbip_link/state` (`latency_ms`, `latency_avg_ms` over
+  5 min, `latency_max_ms`, and per device) and as a *Link latency* entity.
+
+### Removed
+
+- The fixed OMR prefix (`omr_prefix`, `omr_preference`, `otbr_addon`, the *OMR prefix* entity
+  and `omr` in the state): moved to its own add-on, Thread Anchor, which serves any OpenThread
+  border router. The options stay in the schema, unused, so that a saved configuration still
+  loads; a filled `omr_prefix` gives a warning in the log. `docker_api` removed.
+
 ## [0.2.3] - 2026-11-17
 
 ### Changed

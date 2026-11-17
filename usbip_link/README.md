@@ -19,10 +19,6 @@ and keeps them plugged in.** Made for Home Assistant in a virtual machine
 without USB (Hyper-V on Windows), with a radio such as the Home Assistant
 Connect ZBT-2 plugged into the host and shared with usbipd-win.
 
-**And it can stop your Thread network from changing its OMR prefix** — the
-reason Matter devices drop out every day in homes with Google or Apple border
-routers.
-
 ## Why this add-on
 
 **1. You don't wake up without a radio.**
@@ -37,40 +33,20 @@ router is restarted to open its radio again. No click in the morning.
 The device is looked up by its `VID:PID`: another USB port on the host, another
 bus id, nothing to change.
 
-**3. A Thread network that stops moving.**
-See below.
-
-## A stable OMR prefix for Thread
-
-Every Thread device has an address in the OMR prefix of the network, chosen
-among the prefixes the border routers publish. Some border routers (Google TV,
-Nest Hub…) replace theirs now and then: the whole network moves to another
-prefix, and Matter devices become unavailable until they are found again at
-their new address. On the network this add-on was made for, that was **7
-different OMR prefixes in 3 days**, with devices dropping out each time.
-
-With `omr_prefix`, USB/IP Link keeps the Home Assistant OpenThread border
-router on one prefix with a **high** preference. Every border router favors it
-over the low-preference prefixes they generate themselves, and withdraws its
-own:
-
-- **nothing to renumber:** take the prefix the network uses now (Mesh Guardian
-  shows it), the devices keep their addresses when it is set;
-- **kept in place:** OpenThread forgets this setting at each restart, so the
-  add-on reads it every 30 s and sets it again (`ot-ctl br omrconfig`);
-- **visible:** an *OMR prefix* entity says whether it is in place.
-
-It works with any radio of the OpenThread Border Router add-on, attached through
-USB/IP or not. The price: the add-on needs the Docker API to reach the border
-router, so **Protection mode** must be off. If the Home Assistant border router
-stops, the others publish their own prefixes again until it is back.
+**3. A link you can watch.**
+The time the host takes to answer is measured at every check and published as
+a *Link latency* entity: a slow or irregular link shows there before the radio
+suffers.
 
 ## Also
 
 - For Home Assistant the device is a local one: `/dev/serial/by-id/…`, usable
   by any add-on or integration.
 - One entity per device (attached or not, number of attachments, last error)
-  and one for the OMR prefix, on MQTT.
+  and one for the latency of the link, on MQTT.
+- A Thread network that keeps changing its OMR prefix (Matter devices dropping
+  out)? That is the job of [Thread Anchor](../thread_anchor/), which works with
+  any OpenThread border router, through USB/IP Link or not.
 - Read by [Mesh Guardian](../mesh_guardian/), which says when the radio of a
   border router is cut off.
 - A restart of the add-on detaches nothing.

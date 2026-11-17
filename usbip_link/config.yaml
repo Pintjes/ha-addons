@@ -1,12 +1,11 @@
 name: USB/IP Link
-version: "0.2.3"
+version: "0.3.0"
 slug: usbip_link
 url: https://github.com/Pintjes/ha-addons
 description: >-
   Uses the USB devices of another computer (USB/IP: usbipd-win on Windows) and keeps
   them attached: again by itself after a restart of that computer. For Home Assistant
-  in a virtual machine without USB (Hyper-V). Can keep the Thread network on a stable
-  OMR prefix. Beta.
+  in a virtual machine without USB (Hyper-V). Beta.
 arch:
   - amd64
   - aarch64
@@ -25,8 +24,6 @@ privileged:
   - SYS_RAWIO
 hassio_api: true
 hassio_role: manager
-# `ot-ctl br omrconfig` in the OpenThread border router container (option omr_prefix)
-docker_api: true
 services:
   - mqtt:want
 options:
@@ -49,6 +46,8 @@ schema:
   check_interval: int(3,300)
   restart_addons:
     - str
+  # options of 0.2.x, no longer used (the OMR prefix moved to Thread Anchor): kept so that a
+  # saved configuration still loads; a filled omr_prefix only gives a warning in the log
   omr_prefix: str?
   omr_preference: list(high|med|low)?
   otbr_addon: str?

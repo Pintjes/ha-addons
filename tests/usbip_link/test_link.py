@@ -105,4 +105,28 @@ link2.check()
 assert link2.public()["devices"][0]["attached"] and not any(c.startswith("attach") for c in f2.calls)
 assert ul.fmt_duration(42) == "42 s" and ul.fmt_duration(240) == "4 min" and ul.fmt_duration(7300) == "2 h 01"
 assert ul.slug_of("ZBT-2 (Thread)") == "zbt_2_thread"
+
+# latence : temps de reponse du serveur en ms ; moyenne et pire valeur sur les derniers passages
+f3 = Fake()
+f3.attached = True
+answers = [2.0, 4.0, 30.0, None, 3.0]
+link3 = ul.Link({"server": "192.168.1.10", "devices": [{"name": "ZBT-2", "hardware_id": "303a:831a"}]}, runner=f3.run,
+                probe=lambda host, port: answers.pop(0), clock=f3.clock)
+assert link3.check()                  # premier passage : appareil repris, change
+st = link3.public()
+assert st["latency_ms"] == 2.0 and st["latency_avg_ms"] == 2.0 and st["devices"][0]["latency_ms"] == 2.0
+assert not link3.check()              # seule la latence change : pas une raison de publier
+assert link3.public()["latency_avg_ms"] == 3.0
+link3.check()
+assert link3.public()["latency_max_ms"] == 30.0 and link3.public()["latency_avg_ms"] == 12.0
+link3.check()                         # serveur muet : latence inconnue, moyenne gardee
+assert link3.public()["latency_ms"] is None and link3.public()["server_ok"] is False
+assert link3.public()["latency_avg_ms"] == 12.0
+link3.check()
+assert link3.public()["latency_ms"] == 3.0 and link3.public()["server_ok"] is True
+assert len(link3.latencies) == 4
+# l'etat sans latence ne bouge pas avec elle (pour decider de publier)
+assert "latency_ms" not in link3.public(latency=False) and "latency_ms" not in link3.public(latency=False)["devices"][0]
+# vraie sonde : un port ferme ne repond pas
+assert ul.server_up("127.0.0.1", 9, timeout=0.5) is None
 print("OK")
