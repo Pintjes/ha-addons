@@ -104,7 +104,13 @@
   .br .brx { flex: 1; min-width: 0; display: grid; gap: 2px; }
   .br .brn { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .br .brn b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .br .brx > .st { justify-self: start; margin-top: 4px; }
+  /* the line of the fixed network prefix: the whole width of the card, under a thin rule */
+  .br { flex-wrap: wrap; }
+  .br .ancl { flex-basis: 100%; display: flex; align-items: center; gap: 2px; margin-top: 2px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12.5px; }
+  .br .ancv { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+  .br .ancv i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .br .ancv.ok { color: var(--ok); } .br .ancv.warn { color: var(--warn); }
+  .br .brp { color: var(--mut); display: inline-flex; }
   .br small { color: var(--mut); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* small "i" (the info icon of the page, muted): its text on hover */
   .tipi { display: inline-flex; vertical-align: -2px; margin-left: 4px; color: var(--mut); cursor: help; }
@@ -343,11 +349,14 @@ const T = {
     anc_prop:"Stable prefix to fix: {p}. It is the one the network uses now: no device changes its address.", anc_btn:"Fix this prefix",
     anc_confirm:"Write {p} into the options of Thread Anchor and restart it?", anc_done:"Prefix {p} fixed, Thread Anchor restarts",
     anc_fail:"The prefix could not be fixed", anc_changed:"The prefix of the network changed meanwhile: look again", anc_missing:"Thread Anchor not found among the add-ons",
-    anc_in:"OMR forced: On · {p}", anc_out:"OMR forced: Off · {p}", anc_fav:"Favored on the network: {p}", anc_since:"Anchored since {d}",
+    anc_in:"Fixed network prefix · Active · {p}", anc_out:"Fixed network prefix · Not in place · {p}",
+    anc_label:"Fixed network prefix", anc_st_on:"Active", anc_st_out:"Not in place", anc_st_none:"Not fixed",
+    anc_tip_on:"OMR prefix fixed by Thread Anchor: {p}.", anc_tip_since:"In place since {d}.",
+    anc_tip_out:"OMR prefix {p} asked of Thread Anchor, but not in place on the border router now.",
+    anc_tip_none:"No OMR prefix fixed by Thread Anchor: the border routers can change it.", anc_tip_prop:"Proposed: {p} (in the panel).", anc_fav:"Favored on the network: {p}", anc_since:"Anchored since {d}",
     anc_rate:"{o} prefix changes and {l} nodes lost per day", anc_before:"Before ({d} days)", anc_after:"Since ({d} days)",
     anc_before0:"Before", anc_after0:"Since", anc_raw:"{o}, {l} in {d}", anc_min:"{m} min", anc_hmin:"{h} h {m} min",
     anc_omr1:"{n} prefix change", anc_omrN:"{n} prefix changes", anc_lost1:"{n} node lost", anc_lostN:"{n} nodes lost",
-    anc_short_ok:"OMR forced: On", anc_short_out:"OMR forced: Off", anc_short_prop:"OMR prefix: one to fix is proposed",
     quality:"Network quality · last {n} min", q_lab:["poor", "to watch", "good", "excellent"], q_24h:"24h: {v} %", part_tip:"Now {v} % · 24h {v24} % · weight {n} %", q_scale:"≥ 95 excellent · 90–95 good · 80–90 to watch",
     q_capped:"capped: partitioned network", q_wait:"The score starts after a few minutes.", q_parts:{availability:"Availability", radio:"Radio", outages:"Outages", backbone:"Backbone", partition:"Partition"}, weight:"Weight {n} %",
     unk_host:"host {h}", unk_port:"port {p}", unk_addr:"addresses {a}", unk_seen:"seen from {f} to {l}",
@@ -442,11 +451,14 @@ const T = {
     anc_prop:"Préfixe stable à imposer : {p}. C'est celui que le réseau utilise maintenant : aucun appareil ne change d'adresse.", anc_btn:"Imposer ce préfixe",
     anc_confirm:"Écrire {p} dans les options de Thread Anchor et le redémarrer ?", anc_done:"Préfixe {p} imposé, Thread Anchor redémarre",
     anc_fail:"Le préfixe n'a pas pu être imposé", anc_changed:"Le préfixe du réseau a changé entre-temps : regarde à nouveau", anc_missing:"Thread Anchor introuvable parmi les add-ons",
-    anc_in:"OMR forcé : On · {p}", anc_out:"OMR forcé : Off · {p}", anc_fav:"Retenu sur le réseau : {p}", anc_since:"Ancré depuis le {d}",
+    anc_in:"Préfixe réseau imposé · Actif · {p}", anc_out:"Préfixe réseau imposé · Pas en place · {p}",
+    anc_label:"Préfixe réseau imposé", anc_st_on:"Actif", anc_st_out:"Pas en place", anc_st_none:"Non imposé",
+    anc_tip_on:"Préfixe OMR imposé par Thread Anchor : {p}.", anc_tip_since:"En place depuis le {d}.",
+    anc_tip_out:"Préfixe OMR {p} demandé à Thread Anchor, mais pas en place sur le border router en ce moment.",
+    anc_tip_none:"Aucun préfixe OMR imposé par Thread Anchor : les border routers peuvent le changer.", anc_tip_prop:"Proposé : {p} (dans la fiche).", anc_fav:"Retenu sur le réseau : {p}", anc_since:"Ancré depuis le {d}",
     anc_rate:"{o} changements de préfixe et {l} nodes perdues par jour", anc_before:"Avant ({d} jours)", anc_after:"Depuis ({d} jours)",
     anc_before0:"Avant", anc_after0:"Depuis", anc_raw:"{o}, {l} en {d}", anc_min:"{m} min", anc_hmin:"{h} h {m} min",
     anc_omr1:"{n} changement de préfixe", anc_omrN:"{n} changements de préfixe", anc_lost1:"{n} node perdue", anc_lostN:"{n} nodes perdues",
-    anc_short_ok:"OMR forcé : On", anc_short_out:"OMR forcé : Off", anc_short_prop:"Préfixe OMR : un préfixe à imposer est proposé",
     quality:"Qualité du réseau · dernières {n} min", q_lab:["mauvais", "à surveiller", "bon", "excellent"], q_24h:"24 h : {v} %", part_tip:"Actuel {v} % · 24 h {v24} % · poids {n} %", q_scale:"≥ 95 excellent · 90–95 bon · 80–90 à surveiller",
     q_capped:"plafonnée : réseau partitionné", q_wait:"La note démarre après quelques minutes.", q_parts:{availability:"Disponibilité", radio:"Radio", outages:"Coupures", backbone:"Ossature", partition:"Partition"}, weight:"Poids {n} %",
     unk_host:"hôte {h}", unk_port:"port {p}", unk_addr:"adresses {a}", unk_seen:"vue du {f} au {l}",
@@ -573,6 +585,7 @@ const IC = {
   bulb: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.3 1 2.1h5c0-.8.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>',
   bat: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="8" width="16" height="9" rx="2"/><path d="M22 11v3"/></svg>',
   crown: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 18h16l1-11-5 4-4-6-4 6-5-4z"/></svg>',
+  primary: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
 };
 const bars = n => '<svg class="i" viewBox="0 0 24 24" fill="currentColor">' + [0, 1, 2, 3].map(i =>
   `<rect x="${3 + i * 5}" y="${16 - i * 4}" width="3.5" height="${5 + i * 4}" rx="1" opacity="${i < n ? 1 : .22}"/>`).join("") + "</svg>";
@@ -854,7 +867,8 @@ function renderBrs() {
   // words (and "main"); state (seen when, radio link). Past detaches are a note in "Good to know"
   $("#brs").innerHTML = brs.map(b => {
     const k = brState(b);
-    const role = !b.online ? L("offline") : brRole(b.role) + (b.primary ? " · " + L("br_primary") : "");
+    // "primary": an icon beside the name (the crown is the leader's), explained by its "i"
+    const role = !b.online ? L("offline") : brRole(b.role);
     const seen = [b.online ? (b.last_contact ? F("br_seen", {t: ago(b.last_contact)}) : L("br_never"))
       : F("br_offline_since", {t: b.since ? dt(b.since) : "?"})];
     // radio carried by USB/IP Link: average latency of the link (5 min)
@@ -862,8 +876,9 @@ function renderBrs() {
     if (b.online && u && u.avg_ms != null) seen.push(F("br_usb", {v: u.avg_ms < 10 ? dec(u.avg_ms) : Math.round(u.avg_ms)}));
     if (b.same_subnet === false) seen.push(L("other_subnet"));
     return `<div class="card br" data-br="${esc(b.id)}" role="button" tabindex="0" title="${esc(L("br_open"))}"><span class="st ${k} ic">${k === "ok" ? IC.ok : k === "bad" ? IC.bad : IC.warn}</span>
-      <div class="brx"><span class="brn"><b>${esc(b.name)}</b>${b.role === "leader" && b.online ? `<span title="Leader">${IC.crown}</span>` : ""}</span>
-      <small>${esc(role)}</small><small>${esc(seen.join(" · "))}</small>${b.ha ? ancBadge(D.anchor) : ""}</div></div>`;
+      <div class="brx"><span class="brn"><b>${esc(b.name)}</b>${b.role === "leader" && b.online ? `<span title="Leader">${IC.crown}</span>` : ""}${b.primary && b.online
+        ? `<span class="brp" title="${esc(L("br_primary_l"))}">${IC.primary}</span>${tipI(L("br_primary_tip"))}` : ""}</span>
+      <small>${esc(role)}</small><small>${esc(seen.join(" · "))}</small></div>${b.ha ? ancLine(D.anchor) : ""}</div>`;
   }).join("");
 }
 // state of a border router: offline; detached or on another subnet; fine
@@ -871,11 +886,20 @@ const brState = b => !b.online ? "bad" : b.role === "detached" || b.same_subnet 
 // its Thread role: the words of the node list
 const brRole = role => (L("roles") || {})[role] || role || "—";
 // the anchoring of the OMR prefix (Thread Anchor), carried by the border router of Home Assistant:
-// a badge, the one of the states ("available"…)
-function ancBadge(a) {
-  if (!a || !(a.proposal || a.wanted)) return "";
-  const [k, txt] = a.proposal ? ["warn", "anc_short_prop"] : a.enforced ? ["ok", "anc_short_ok"] : ["warn", "anc_short_out"];
-  return `<span class="st ${k}" title="${esc(L("anc_tip"))}">${k === "ok" ? IC.ok : IC.warn}${esc(L(txt))}</span>`;
+// one line under a thin rule, "Fixed network prefix" and its "i" on the left, the state on the right
+// (Active in green; Not fixed, or Not in place, in orange: a fact, not a failure)
+function ancState(a) {
+  return !a || !a.wanted ? ["warn", "anc_st_none"] : a.enforced ? ["ok", "anc_st_on"] : ["warn", "anc_st_out"];
+}
+function ancTip(a) {
+  if (!a || !a.wanted) return L("anc_tip_none") + (a && a.proposal ? " " + F("anc_tip_prop", {p: a.proposal}) : "");
+  const since = a.report && a.report.anchored_since ? new Date(a.report.anchored_since).toLocaleString(LANG, {dateStyle: "short", timeStyle: "short"}) : null;
+  return F(a.enforced ? "anc_tip_on" : "anc_tip_out", {p: a.wanted}) + (a.enforced && since ? " " + F("anc_tip_since", {d: since}) : "");
+}
+function ancLine(a) {
+  if (!a) return "";
+  const [k, txt] = ancState(a);
+  return `<div class="ancl"><span class="mut">${esc(L("anc_label"))}</span>${tipI(ancTip(a))}<span class="ancv ${k}"><i></i>${esc(L(txt))}</span></div>`;
 }
 // a small "i" with its explanation on hover
 const tipI = text => `<span class="tipi" title="${esc(text)}" aria-label="${esc(text)}" role="img">${IC.info}</span>`;

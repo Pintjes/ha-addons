@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.39.0] - 2026-11-17
+
+### Changed
+
+- **Card of the border router of Home Assistant**: the "OMR forced: On" badge gives way to one line under a thin rule, "Fixed network prefix" with its "i" (the prefix fixed by Thread Anchor and since when) on the left and the state on the right: **Active** in green, **Not in place** (asked of Thread Anchor but not on the border router) or **Not fixed** in orange. The panel says the same ("Fixed network prefix · Active · <prefix>").
+- **Primary**: an icon beside the name of the primary border router, with its "i" (the crown stays the leader's); "primary" no longer in the role line.
+
 ## [2.38.0] - 2026-11-17
 
 ### Added
