@@ -15,6 +15,6 @@ LABEL \
     org.opencontainers.image.title="USB/IP Link" \
     org.opencontainers.image.authors="Pintjes" \
     org.opencontainers.image.source="https://github.com/Pintjes/ha-addons" \
-    org.opencontainers.image.licenses="MIT"
+    org.opencontainers.image.licenses="GPL-3.0-or-later"
 
 CMD [ "python3", "-u", "/usbip_link.py" ]

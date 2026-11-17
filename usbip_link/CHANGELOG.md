@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.1] - 2026-11-17
+
+### Changed
+
+- License: GPL-3.0-or-later, like the other add-ons of the repository (0.1.0 and 0.2.0 were
+  published under MIT). The add-on keeps the idea of rogerfar/ha-usbip-client but none of its
+  code (shell scripts there, Python written anew here).
+- Icon, logo and presentation page.
+
 ## [0.2.0] - 2026-11-17
 
 ### Added
