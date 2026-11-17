@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.40.0] - 2026-11-17
+
+### Changed
+
+- **Before / since the anchoring, in plain words** (panel of the border router of Home Assistant): "Before the anchoring (3 days): 16 detaches a day · 1.5 prefix changes a day" and "Since (9 h): 1 detach in 9 h · 0 prefix changes". Singular and plural by the language, readable roundings (whole numbers from 10 on, hours under one day). A small "i" says what the anchoring is, over which period "before" is measured, that a detach is a device that became unavailable (the same device can count several times), and that "since" is too short to compare in the first days.
+
 ## [2.39.0] - 2026-11-17
 
 ### Changed

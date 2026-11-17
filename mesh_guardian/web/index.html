@@ -354,9 +354,10 @@ const T = {
     anc_tip_on:"OMR prefix fixed by Thread Anchor: {p}.", anc_tip_since:"In place since {d}.",
     anc_tip_out:"OMR prefix {p} asked of Thread Anchor, but not in place on the border router now.",
     anc_tip_none:"No OMR prefix fixed by Thread Anchor: the border routers can change it.", anc_tip_prop:"Proposed: {p} (in the panel).", anc_fav:"Favored on the network: {p}", anc_since:"Anchored since {d}",
-    anc_rate:"{o} prefix changes and {l} nodes lost per day", anc_before:"Before ({d} days)", anc_after:"Since ({d} days)",
-    anc_before0:"Before", anc_after0:"Since", anc_raw:"{o}, {l} in {d}", anc_min:"{m} min", anc_hmin:"{h} h {m} min",
-    anc_omr1:"{n} prefix change", anc_omrN:"{n} prefix changes", anc_lost1:"{n} node lost", anc_lostN:"{n} nodes lost",
+    anc_b:"Before the anchoring ({d})", anc_a:"Since ({d})", anc_min:"{m} min", anc_h:"{h} h", anc_hmin:"{h} h {m} min", anc_day:"{d} day", anc_days:"{d} days",
+    anc_det1:"{n} detach", anc_detN:"{n} detaches", anc_det_in:"{n} in {d}", anc_det_day1:"{n} detach a day", anc_det_dayN:"{n} detaches a day",
+    anc_omr1:"{n} prefix change", anc_omrN:"{n} prefix changes", anc_omr_day1:"{n} prefix change a day", anc_omr_dayN:"{n} prefix changes a day",
+    anc_cmp_tip:"The anchoring: Thread Anchor fixes the address prefix of the network (OMR prefix) on the border router of Home Assistant, so the other border routers no longer change it. Before: measured over the history kept before the anchoring (up to 7 days). Since: from the anchoring until now. A detach = a device that became unavailable (the same device can count several times); prefix changes within 30 min count as one. Just after the anchoring, Since is too short to compare: give it a few days.",
     quality:"Network quality · last {n} min", q_lab:["poor", "to watch", "good", "excellent"], q_24h:"24h: {v} %", part_tip:"Now {v} % · 24h {v24} % · weight {n} %", q_scale:"≥ 95 excellent · 90–95 good · 80–90 to watch",
     q_capped:"capped: partitioned network", q_wait:"The score starts after a few minutes.", q_parts:{availability:"Availability", radio:"Radio", outages:"Outages", backbone:"Backbone", partition:"Partition"}, weight:"Weight {n} %",
     unk_host:"host {h}", unk_port:"port {p}", unk_addr:"addresses {a}", unk_seen:"seen from {f} to {l}",
@@ -456,9 +457,10 @@ const T = {
     anc_tip_on:"Préfixe OMR imposé par Thread Anchor : {p}.", anc_tip_since:"En place depuis le {d}.",
     anc_tip_out:"Préfixe OMR {p} demandé à Thread Anchor, mais pas en place sur le border router en ce moment.",
     anc_tip_none:"Aucun préfixe OMR imposé par Thread Anchor : les border routers peuvent le changer.", anc_tip_prop:"Proposé : {p} (dans la fiche).", anc_fav:"Retenu sur le réseau : {p}", anc_since:"Ancré depuis le {d}",
-    anc_rate:"{o} changements de préfixe et {l} nodes perdues par jour", anc_before:"Avant ({d} jours)", anc_after:"Depuis ({d} jours)",
-    anc_before0:"Avant", anc_after0:"Depuis", anc_raw:"{o}, {l} en {d}", anc_min:"{m} min", anc_hmin:"{h} h {m} min",
-    anc_omr1:"{n} changement de préfixe", anc_omrN:"{n} changements de préfixe", anc_lost1:"{n} node perdue", anc_lostN:"{n} nodes perdues",
+    anc_b:"Avant l'ancrage ({d})", anc_a:"Depuis ({d})", anc_min:"{m} min", anc_h:"{h} h", anc_hmin:"{h} h {m} min", anc_day:"{d} jour", anc_days:"{d} jours",
+    anc_det1:"{n} décrochage", anc_detN:"{n} décrochages", anc_det_in:"{n} en {d}", anc_det_day1:"{n} décrochage par jour", anc_det_dayN:"{n} décrochages par jour",
+    anc_omr1:"{n} changement de préfixe", anc_omrN:"{n} changements de préfixe", anc_omr_day1:"{n} changement de préfixe par jour", anc_omr_dayN:"{n} changements de préfixe par jour",
+    anc_cmp_tip:"L'ancrage : Thread Anchor impose le préfixe d'adresse du réseau (préfixe OMR) sur le border router de Home Assistant, pour que les autres border routers ne le changent plus. Avant : mesuré sur l'historique gardé avant l'ancrage (7 jours au plus). Depuis : de l'ancrage à maintenant. Un décrochage = un appareil devenu indisponible (le même appareil peut compter plusieurs fois) ; des changements de préfixe à moins de 30 min d'écart comptent pour un. Juste après l'ancrage, « Depuis » est trop court pour comparer : attendre quelques jours.",
     quality:"Qualité du réseau · dernières {n} min", q_lab:["mauvais", "à surveiller", "bon", "excellent"], q_24h:"24 h : {v} %", part_tip:"Actuel {v} % · 24 h {v24} % · poids {n} %", q_scale:"≥ 95 excellent · 90–95 bon · 80–90 à surveiller",
     q_capped:"plafonnée : réseau partitionné", q_wait:"La note démarre après quelques minutes.", q_parts:{availability:"Disponibilité", radio:"Radio", outages:"Coupures", backbone:"Ossature", partition:"Partition"}, weight:"Poids {n} %",
     unk_host:"hôte {h}", unk_port:"port {p}", unk_addr:"adresses {a}", unk_seen:"vue du {f} au {l}",
@@ -751,17 +753,33 @@ function anchorLines(a) {
   if (a.favored && a.favored !== a.wanted) lines.push(`<p class="mut">${esc(F("anc_fav", {p: a.favored}))}</p>`);
   const r = a.report;
   if (r) {
-    // under one day: the counts as they are ("1 node lost in 45 min"); a rate per day only from one day on
-    const dur = s => s < 3600 ? F("anc_min", {m: Math.max(1, Math.round(s / 60))}) : F("anc_hmin", {h: Math.floor(s / 3600), m: Math.round(s % 3600 / 60)});
-    const cnt = (n, one, many) => F(n === 1 ? one : many, {n});
-    // before the anchoring / since: label above, value below, like every other value of a panel
-    const row = (k, x) => !x ? null : (x.seconds ?? x.days * 86400) < 86400
-      ? [esc(L(k + "0")), `<span class="num">${esc(F("anc_raw", {o: cnt(x.omr, "anc_omr1", "anc_omrN"), l: cnt(x.lost, "anc_lost1", "anc_lostN"), d: dur(x.seconds ?? x.days * 86400)}))}</span>`]
-      : [esc(F(k, {d: dec(x.days)})), `<span class="num">${esc(F("anc_rate", {o: dec(x.omr_per_day), l: dec(x.lost_per_day)}))}</span>`];
-    const when = new Date(r.anchored_since).toLocaleString(LANG, {dateStyle: "short", timeStyle: "short"});
-    lines.push(`<p class="mut">${esc(F("anc_since", {d: when}))}</p>` + grid([row("anc_before", r.before), row("anc_after", r.after)].filter(Boolean)));
+    // In plain words: detaches (a device that became unavailable) and prefix changes, before the
+    // anchoring and since. Under one day the counts as they are ("1 detach in 9 h"), a rate per day
+    // from one day on; readable roundings; singular / plural by the language (fr: 0 and 1,5 singular)
+    lines.push(`<p class="mut">${esc(F("anc_since", {d: new Date(r.anchored_since).toLocaleString(LANG, {dateStyle: "short", timeStyle: "short"})}))}</p>`
+      + grid([ancCompare("anc_b", r.before), ancCompare("anc_a", r.after)].filter(Boolean)));
   }
   return lines;
+}
+// the words of the before / since report
+const ancPlural = n => String(LANG).startsWith("fr") ? n >= 2 : n !== 1;
+const ancNum = n => n >= 10 ? String(Math.round(n)) : dec(n);
+function ancSpan(s) {   // 45 min, 2 h 10 min, 9 h, 3 days
+  if (s < 3600) return F("anc_min", {m: Math.max(1, Math.round(s / 60))});
+  if (s < 3 * 3600) { const m = Math.round(s % 3600 / 60); return m ? F("anc_hmin", {h: Math.floor(s / 3600), m}) : F("anc_h", {h: Math.floor(s / 3600)}); }
+  if (s < 86400) return F("anc_h", {h: Math.round(s / 3600)});
+  const d = s / 86400, n = d >= 2 ? Math.round(d) : Number(d.toFixed(1));
+  return F(ancPlural(n) ? "anc_days" : "anc_day", {d: d >= 2 ? n : dec(d)});
+}
+function ancCompare(key, x) {
+  if (!x) return null;
+  const s = x.seconds ?? x.days * 86400;
+  const word = (n, k) => F(k + (ancPlural(n >= 10 ? Math.round(n) : n) ? "N" : "1"), {n: ancNum(n)});
+  const day = s >= 86400;
+  const lost = day ? word(x.lost_per_day, "anc_det_day") : F("anc_det_in", {n: word(x.lost, "anc_det"), d: ancSpan(s)});
+  const omr = day ? word(x.omr_per_day, "anc_omr_day") : word(x.omr, "anc_omr");
+  return [esc(F(key, {d: ancSpan(s)})) + (key === "anc_b" ? tipI(L("anc_cmp_tip")) : ""),
+    `<span class="num">${esc(lost)}</span><small class="mut" style="display:block">${esc(omr)}</small>`];
 }
 function renderAnchor() {
   const a = D.anchor, box = $("#anchor");
