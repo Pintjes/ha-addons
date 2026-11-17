@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.1.5] - 2026-11-17
+
+### Fixed
+
+- A false "Border router unreachable: unexpected answer: (empty)". The command
+  interpreter of OpenThread is unique: a command received while an asynchronous one
+  (`meshdiag`, `networkdiagnostic get`, `ping`) is waiting is ignored without a word,
+  and the check of the anchor, sent in the middle of a scan, got an empty output.
+  Every `ot-ctl` command of the add-on (anchor and diagnostic) now goes through one
+  entry point with a gate taken for ONE command (never for a whole scan): the anchor
+  waits only for the command in progress. An empty output with exit code 0 is a
+  command that was ignored: asked again, 3 tries 3 s apart, then the precise message
+  `ot-ctl: no answer (another command pending?)`, and what was read before stays as it
+  was (the border router is not declared unreachable). A write (`br omrconfig custom`)
+  that was ignored never passes for done. In the diagnostic, a ping with no output is
+  no longer `ping.ok: false`: the answer says `ot-ctl: no answer…`, `ping` and `alive`
+  stay `null`.
+
+### Added
+
+- The children of the routers that do not answer `meshdiag childtable` (a
+  `ResponseTimeout`, probably a firmware without the Diagnostic Query): in the
+  meshdiag step, their children are read with `meshdiag topology children` (RLOC16
+  only), then each child is asked for its extended address (`networkdiagnostic get
+  <RLOC address> 0`), one by one, the old RLOC16 of the request first. Same limits (90 s,
+  one scan every 5 minutes, `busy`); `search`, `parent` and `alive` as before. The
+  routers named in the request are dealt with first.
+- `search` says whether the old RLOC16 given in `routers` (`"0xB45C"`) is still listed
+  under its router (`old RLOC16 0xb45c`: `old_listed` / `old_gone`).
+- The role of the border router in the Thread network, shown only: `thread_role`
+  (`disabled`, `detached`, `child`, `router`, `leader`) and `thread_routers` (routers
+  in its router table) in `thread_anchor/state`, and an entity *Thread role*. Two small
+  reads per check (`state`, `router list`), no radio traffic. Thread Anchor never tries
+  to change that role. No existing field is renamed.
+
 ## [0.1.4] - 2026-11-17
 
 ### Added

@@ -42,6 +42,10 @@ class FakeDocker:
         self.start, self.google = "2026-11-17T10:57:34Z", ("fdc0:6359:d5be:1::/64", "low")
         self.rival = None      # prefixe qu'un autre border router fait retenir malgre le notre
         self.refuse = False    # le border router refuse `omrconfig custom`
+        self.role, self.router_ids = "child", "8 24 50"    # lectures du role (`state`, `router list`)
+        self.reads = []        # ces lectures ; `calls` ne note que les `br ...`
+        self.script = {}       # commande -> sorties a rendre d'abord (ex. "" : commande ignoree)
+        self.attempts = []     # commandes servies par `script`
 
     def _check(self, container):
         if container != self.name:
@@ -55,6 +59,16 @@ class FakeDocker:
 
     def exec(self, container, cmd):
         self._check(container)
+        queued = self.script.get(" ".join(cmd[1:]))
+        if queued:
+            self.attempts.append(" ".join(cmd[1:]))
+            return 0, queued.pop(0)
+        if cmd[1:] == ["state"]:
+            self.reads.append("state")
+            return 0, f"{self.role}\r\nDone\r\n"
+        if cmd[1:] == ["router", "list"]:
+            self.reads.append("router list")
+            return 0, f"{self.router_ids}\r\nDone\r\n"
         assert cmd[:2] == ["ot-ctl", "br"], cmd
         self.calls.append(" ".join(cmd[1:]))
         if self.old:
@@ -373,6 +387,11 @@ tp, payload, retain = c.sent[-1]
 state = json.loads(payload)
 assert tp == "thread_anchor/state" and retain and state["version"] == ta.VERSION and state["updated"]
 assert state["anchored_since"] == a5.public()["anchored_since"] and state["followed"] is True
+# le role Thread : une entite en lecture seule, le nombre de routeurs en attribut
+role_cfg = [json.loads(pl) for tp, pl, _ in c.sent if tp == "homeassistant/sensor/thread_anchor/thread_role/config"]
+assert len(role_cfg) == 1 and role_cfg[0]["name"] == "Thread role" and "thread_role" in role_cfg[0]["value_template"]
+assert role_cfg[0]["json_attributes_topic"] == "thread_anchor/state" and "command_topic" not in role_cfg[0]
+assert state["thread_role"] == "child" and state["thread_routers"] == 3
 # les champs lus par Mesh Guardian sont toujours la
 for key in ("wanted", "preference", "mode", "current", "current_preference", "enforced", "favored",
             "favored_preference", "local", "applied", "applied_at", "otbr_started_at", "error", "version", "updated"):
@@ -514,6 +533,10 @@ class FakeOtbr:
         self.ml_out = "Done\r\n"                  # reponse a `networkdiagnostic get <ML-EID> 0 1 8`
         self.help_out = HELP_OLD                  # reponse a `help` (sans meshdiag par defaut)
         self.topology_out, self.childtables, self.scan_takes = "Done\r\n", {}, 0   # meshdiag
+        self.topo_kids_out = "Done\r\n"           # `meshdiag topology children`
+        self.child_diag, self.child_takes = {}, 0  # `networkdiagnostic get <RLOC enfant> 0` : adresse -> sortie
+        self.script = {}                          # commande -> sorties a rendre d'abord (ex. "" : ignoree)
+        self.attempts = []
 
     def started_at(self, container):
         return "2026-11-17T10:57:34Z"
@@ -526,6 +549,16 @@ class FakeOtbr:
         assert cmd[0] == "ot-ctl", cmd
         self.calls.append(cmd[1:])
         self.timeouts.append(timeout)
+        queued = self.script.get(" ".join(cmd[1:]))
+        if queued:
+            self.attempts.append(" ".join(cmd[1:]))
+            return 0, queued.pop(0)
+        if cmd[1:] == ["meshdiag", "topology", "children"]:
+            self.clk.now += self.scan_takes
+            return 0, self.topo_kids_out
+        if cmd[1:3] == ["networkdiagnostic", "get"] and cmd[4:] == ["0"]:     # un enfant, TLV 0 seul
+            self.clk.now += self.child_takes
+            return 0, self.child_diag.get(cmd[3], "Error 28: ResponseTimeout\r\n")
         if cmd[1:3] == ["ipaddr", "rloc"]:
             return 0, "fdde:ad00:beef:0:0:ff:fe00:fc00\r\nDone\r\n"
         if cmd[1] == "ping":
@@ -553,6 +586,8 @@ def make_diag(**kw):
     otbr = FakeOtbr(clk)
     an = ta.Anchor({"omr_prefix": P}, docker=otbr, clock=clk)
     an.favored, an.favored_prf = P, "high"
+    an.sleeps = []
+    an.sleep = lambda s: (an.sleeps.append(s), setattr(clk, "now", clk.now + s))   # le temps passe sans attendre
     out = []
     dg = ta.Diag(an, lambda topic, res: out.append((topic, res)), clock=clk, spawn=kw.get("spawn", lambda fn: fn()))
     return clk, otbr, dg, out
@@ -813,7 +848,9 @@ r = one(dg, out, ext=TARGET, routers=["0xB45C", "0x9c00", "zz", None, 5000000]) 
 assert r["rloc16"] == "0xb45c" and r["rloc16_from"] == "meshdiag" and r["parent"] == "0xb400" and r["error"] is None
 assert otbr.calls == [OWN, *TABLES, ["help"], ["meshdiag", "topology"], CT("0xb400"), PING, DIAG], otbr.calls
 assert steps(r) == [("child table", "not_found"), ("neighbor table", "not_found"), ("router table", "not_found"),
-                    ("meshdiag topology", "not_found"), ("meshdiag childtable 0xb400", "found")], r["search"]
+                    ("meshdiag topology", "not_found"), ("meshdiag childtable 0xb400", "found"),
+                    ("old RLOC16 0xb45c", "old_listed")], r["search"]
+assert r["search"][5]["detail"] == "0xb400"       # l'ancien RLOC16 est encore liste sous son routeur
 assert r["search"][3]["rows"] == 4 and r["search"][4]["rows"] == 2 and r["search"][4]["detail"] == "0xb45c"
 # `alive` : la liste d'un parent ne prouve rien, c'est la reponse du ping ou du diagnostic qui compte
 assert r["alive"] is True and r["ping"]["ok"] and r["ext"] == TARGET
@@ -931,6 +968,339 @@ assert r["rloc16"] == "0xb45c" and r["error"] is None and r["alive"] is True and
 clk, otbr, dg, out = scan_diag()
 r = one(dg, out, mleid=ML)
 assert r["error"] == "not found" and [c for c in otbr.calls if c[0] == "meshdiag" or c == ["help"]] == []
+
+# ---- routeurs qui ne repondent pas a `meshdiag childtable` : leurs enfants par `meshdiag topology children`
+TIMEOUT = "Error 28: ResponseTimeout\r\n"
+KIDS_OUT = ("id:02 rloc16:0x0800 ext-addr:8aa57d2c603fe16c ver:4 - me - leader\r\n   children:\r\n"
+            "       rloc16:0x0803 lq:0, mode:rn\r\n"
+            "id:22 rloc16:0x5800 ext-addr:1111111111111111 ver:4\r\n   children:\r\n"
+            "       rloc16:0x5801 lq:3, mode:rn\r\n"
+            "id:45 rloc16:0xb400 ext-addr:2222222222222222 ver:4\r\n   children:\r\n"
+            "       rloc16:0xb401 lq:3, mode:rdn\r\n       rloc16:0xb45c lq:2, mode:rn\r\n"
+            "       rloc16:0xb45d lq:1, mode:rn\r\n"
+            "id:46 rloc16:0xb800 ext-addr:3333333333333333 ver:4\r\n   children:\r\nDone\r\n")
+assert ta.parse_topology_children(KIDS_OUT) == (
+    {0x0800: [0x0803], 0x5800: [0x5801], 0xB400: [0xB401, 0xB45C, 0xB45D], 0xB800: []}, None)
+assert ta.parse_topology_children("Done\r\n") == ({}, None)
+# partiel : ce qui est lu avant une erreur est garde ; sans routeur, les lignes d'enfants ne comptent pas
+part = ta.parse_topology_children(KIDS_OUT.replace("Done\r\n", "Error 28: ResponseTimeout\r\n"))
+assert part[0][0xB400] == [0xB401, 0xB45C, 0xB45D] and part[1] == "Error 28: ResponseTimeout"
+assert ta.parse_topology_children("       rloc16:0x0803 lq:0, mode:rn\r\nDone\r\n") == ({}, None)
+assert ta.parse_topology_children("Error 5: Busy\r\n") == ({}, "Error 5: Busy")
+CHILD_A = "fdde:ad00:beef::ff:fe00:b401"
+CHILD_B = "fdde:ad00:beef::ff:fe00:b45c"      # la node cherchee
+CHILD_C = "fdde:ad00:beef::ff:fe00:b45d"
+KID = lambda a, e: f"DIAG_GET.rsp/ans from {a}: 00\r\nExt Address: '{e}'\r\nDone\r\n"  # noqa: E731
+OTHER = "5555555555555555"
+
+
+def kids_diag(**kw):
+    """Le routeur 0xb400 ne repond pas a childtable ; ses enfants repondent (B401 : une autre node)."""
+    clk, otbr, dg, out = scan_diag(**kw)
+    otbr.childtables["0xb400"] = TIMEOUT
+    otbr.topo_kids_out = KIDS_OUT
+    otbr.child_diag = {CHILD_A: KID(CHILD_A, OTHER), CHILD_B: KID(CHILD_B, TARGET)}
+    return clk, otbr, dg, out
+
+
+TKIDS = ["meshdiag", "topology", "children"]
+ND = lambda a: ["networkdiagnostic", "get", a, "0"]  # noqa: E731
+# le routeur de la demande se tait : ses enfants d'abord, l'ancien RLOC16 en premier (une demande par enfant)
+clk, otbr, dg, out = kids_diag()
+r = one(dg, out, ext=TARGET, routers=["0xB45D"])
+assert r["rloc16"] == "0xb45c" and r["rloc16_from"] == "meshdiag" and r["parent"] == "0xb400" and r["error"] is None
+assert otbr.calls == [OWN, *TABLES, ["help"], ["meshdiag", "topology"], CT("0xb400"), TKIDS, ND(CHILD_C), ND(CHILD_A),
+                      ND(CHILD_B), PING, DIAG], otbr.calls
+assert steps(r) == [("child table", "not_found"), ("neighbor table", "not_found"), ("router table", "not_found"),
+                    ("meshdiag topology", "not_found"), ("meshdiag childtable 0xb400", "error"),
+                    ("meshdiag topology children", "kids"), ("children of 0xb400", "found"),
+                    ("old RLOC16 0xb45d", "old_listed")], steps(r)
+assert r["search"][5]["rows"] == 4 and r["search"][6]["detail"] == "0xb45c" and r["search"][6]["rows"] == 3
+assert r["alive"] is True and r["ext"] == TARGET
+# sans indice : les routeurs qui repondent d'abord, puis les enfants du routeur muet, par RLOC16 croissant
+clk, otbr, dg, out = kids_diag()
+r = one(dg, out, ext=TARGET)
+assert otbr.calls[4:] == [["help"], ["meshdiag", "topology"], CT("0x5800"), CT("0xb400"), CT("0xb800"), TKIDS,
+                          ND(CHILD_A), ND(CHILD_B), PING, DIAG], otbr.calls
+assert r["rloc16"] == "0xb45c" and r["parent"] == "0xb400" and r["alive"] is True
+# les enfants qui ont repondu sont retenus 5 minutes : une autre node de la liste est retrouvee sans trafic
+clk.now += 11
+n = len(otbr.calls)
+r = one(dg, out, ext=OTHER, ping=False)
+assert r["rloc16"] == "0xb401" and r["parent"] == "0xb400" and steps(r)[-1] == ("meshdiag", "found")
+assert [c for c in otbr.calls[n:] if c[0] == "meshdiag" or c == ["help"] or c[-1:] == ["0"]] == [], otbr.calls[n:]
+# introuvable : « 3 interroges, 2 ont repondu » ; l'ancien RLOC16 n'est plus liste
+clk, otbr, dg, out = kids_diag()
+r = one(dg, out, ext="4444444444444444", routers=["0xb45e"])
+assert r["error"] == "not found" and r["rloc16"] is None and r["alive"] is None
+assert steps(r)[5:7] == [("meshdiag topology children", "kids"), ("children of 0xb400", "asked")], steps(r)
+assert steps(r)[-1] == ("old RLOC16 0xb45e", "old_gone")
+assert r["search"][6]["rows"] == 3 and r["search"][6]["detail"] == 2 and r["search"][-1]["detail"] == "0xb400"
+# le routeur de la demande est traite tout de suite, les autres routeurs ensuite (leur childtable repond)
+assert steps(r)[7:9] == [("meshdiag childtable 0x5800", "not_found"), ("meshdiag childtable 0xb800", "not_found")]
+assert [c for c in otbr.calls if c[0] == "networkdiagnostic"] == [ND(CHILD_A), ND(CHILD_B), ND(CHILD_C)]
+# un enfant qui ne repond pas, ou dont la sortie est vide, ne casse rien
+clk, otbr, dg, out = kids_diag()
+otbr.child_diag[CHILD_A] = ""
+r = one(dg, out, ext=TARGET)
+assert r["rloc16"] == "0xb45c" and r["error"] is None
+# la liste des enfants manque (routeur absent de la sortie, ou commande en erreur) : dit, sans ancien RLOC16
+clk, otbr, dg, out = kids_diag()
+otbr.topo_kids_out = KIDS_OUT.replace("id:45 rloc16:0xb400", "id:99 rloc16:0xd000")
+r = one(dg, out, ext=TARGET, routers=["0xb45c"])
+assert r["error"] == "not found" and steps(r)[5:7] == [("meshdiag topology children", "kids"), ("children of 0xb400", "no_list")]
+assert not [s for s in steps(r) if s[0].startswith("old")]
+clk, otbr, dg, out = kids_diag()
+otbr.childtables["0x5800"] = TIMEOUT                    # deux routeurs muets : une seule `topology children`
+otbr.topo_kids_out = TIMEOUT
+r = one(dg, out, ext=TARGET)
+assert otbr.calls.count(TKIDS) == 1 and r["error"] == "not found"
+assert ("meshdiag topology children", "error") in steps(r) and ("children of 0xb400", "no_list") in steps(r)
+assert ("children of 0x5800", "no_list") in steps(r) and not [s for s in steps(r) if s[0].startswith("old")]
+# `topology children` partiel : ce qui est lu avant l'erreur sert
+clk, otbr, dg, out = kids_diag()
+otbr.topo_kids_out = KIDS_OUT.replace("Done\r\n", "Error 28: ResponseTimeout\r\n")
+r = one(dg, out, ext=TARGET)
+assert r["rloc16"] == "0xb45c"
+assert [s["detail"] for s in r["search"] if s["step"] == "meshdiag topology children"] == [" (Error 28: ResponseTimeout)"]
+# routeurs qui repondent tous a childtable : pas de `topology children`
+clk, otbr, dg, out = scan_diag()
+one(dg, out, ext="4444444444444444")
+assert TKIDS not in otbr.calls
+# budget de 90 s : l'interrogation des enfants s'arrete, sans erreur de delai
+clk, otbr, dg, out = kids_diag()
+otbr.child_takes = 50
+r = one(dg, out, ext="4444444444444444")
+assert r["error"] == "not found" and steps(r)[-1] == ("children of 0xb400", "stopped")
+assert [c for c in otbr.calls if c[0] == "networkdiagnostic"] == [ND(CHILD_A), ND(CHILD_B)]
+# Busy : on n'insiste pas, pas de `topology children`
+clk, otbr, dg, out = kids_diag()
+otbr.childtables["0x5800"] = "Error 5: Busy\r\n"
+r = one(dg, out, ext=TARGET)
+assert r["error"] == "not found" and TKIDS not in otbr.calls
+# la lecture seule reste vraie : que des lectures
+assert not [c for c in otbr.calls if c[0] not in ("ipaddr", "ping", "networkdiagnostic", "help", "child", "neighbor", "router", "meshdiag")]
+
+# ---- une sortie vide d'ot-ctl = commande ignoree (une autre est en attente) : redemandee, jamais un echec
+RETRY = ["ping", ADDR, "16", "1"]
+clk, otbr, dg, out = make_diag()
+otbr.script["ping " + ADDR + " 16 1"] = ["", ""]
+dg.submit(req())
+assert out[0][1]["ping"] == {"ok": True, "rtt_ms": 12.0} and out[0][1]["alive"] is True and out[0][1]["error"] is None
+assert dg.anchor.sleeps == [3, 3] and otbr.attempts == ["ping " + ADDR + " 16 1"] * 2 and otbr.calls.count(RETRY) == 3
+# vide a chaque fois : pas « ping ok:false », une erreur precise, `alive` inconnu
+clk, otbr, dg, out = make_diag()
+otbr.script["ping " + ADDR + " 16 1"] = ["", "", ""]
+dg.submit(req())
+r = out[0][1]
+assert r["ping"] is None and r["alive"] is None and r["error"] == "ot-ctl: no answer (another command pending?)", r
+assert dg.anchor.sleeps == [3, 3] and otbr.calls.count(RETRY) == 3 and not dg.running
+assert not [c for c in otbr.calls if c[0] == "networkdiagnostic"]
+# diagnostic vide : meme chose
+clk, otbr, dg, out = make_diag()
+otbr.script["networkdiagnostic get " + ADDR + " 0 8"] = ["", "", ""]
+dg.submit(req())
+assert out[0][1]["error"] == "ot-ctl: no answer (another command pending?)" and out[0][1]["ping"]["ok"] is True
+# une table vide a chaque fois : etape en erreur, la recherche continue
+r, calls, _ = ask(lambda o: (o.script.update({"child table": ["", "", ""]}), o.tables.update(router=router_table(("0xb45c", TARGET)))),
+                  ext=TARGET)
+assert r["rloc16_from"] == "router table" and r["search"][0]["result"] == "error" and "no answer" in r["search"][0]["detail"]
+# le delai de la demande compte aussi les attentes : 15 s de nouvelles tentatives = delai
+clk, otbr, dg, out = make_diag()
+dg.anchor.sleep = lambda s: setattr(clk, "now", clk.now + 20)
+otbr.script["ping " + ADDR + " 16 1"] = ["", "", ""]
+dg.submit(req())
+assert out[0][1]["error"] == "timeout (15 s)" and otbr.calls.count(RETRY) == 1, out[0][1]
+
+# ---- le verrou : une seule commande a la fois, pris par commande (pas pour tout un balayage)
+import threading  # noqa: E402
+import time  # noqa: E402
+
+
+class Slow(FakeDocker):
+    """Compte les commandes en cours en meme temps."""
+    def __init__(self):
+        super().__init__()
+        self.inflight = self.most = 0
+        self.mu = threading.Lock()
+
+    def exec(self, container, cmd):
+        with self.mu:
+            self.inflight += 1
+            self.most = max(self.most, self.inflight)
+        time.sleep(0.005)
+        try:
+            return super().exec(container, cmd)
+        finally:
+            with self.mu:
+                self.inflight -= 1
+
+
+ds = Slow()
+an_s = ta.Anchor({"omr_prefix": P}, docker=ds, clock=ds.clock)
+ds.now = time.time()
+
+
+def hammer(fn):
+    for _ in range(8):
+        fn()
+
+
+workers = [threading.Thread(target=hammer, args=(f,)) for f in (
+    lambda: an_s.otctl("br", "omrprefix"), lambda: an_s.otctl("br", "omrconfig"), an_s.check,
+    lambda: an_s.otctl("br", "omrprefix"))]
+for w in workers:
+    w.start()
+for w in workers:
+    w.join()
+assert ds.most == 1, ds.most        # sans verrou, les quatre se chevauchent
+# le verrou est rendu a chaque commande, meme en erreur : la suivante passe
+an_s.docker.running = False
+for _ in range(2):
+    try:
+        an_s.otctl("br", "omrconfig")
+        raise AssertionError("no error")
+    except ta.DockerError:
+        pass
+an_s.docker.running = True
+assert an_s.otctl("br", "omrconfig").endswith("Done\r\n")
+# la file : premier arrive, premier servi ; une attente trop longue rend la main sans bloquer les autres
+g = ta.Gate()
+assert g.acquire(1)
+t0 = time.monotonic()
+assert not g.acquire(0.05) and time.monotonic() - t0 >= 0.04 and g.queue == []
+g.release()
+assert g.acquire(1)
+g.release()
+order = []
+
+
+def waiter(name):
+    assert g.acquire(5)
+    order.append(name)
+    time.sleep(0.01)
+    g.release()
+
+
+assert g.acquire(1)
+ths = []
+for nm in ("a", "b", "c"):
+    th = threading.Thread(target=waiter, args=(nm,))
+    th.start()
+    ths.append(th)
+    time.sleep(0.05)       # arrivent dans cet ordre
+g.release()
+for th in ths:
+    th.join()
+assert order == ["a", "b", "c"], order
+
+# ---- ancrage : sortie vide = commande ignoree ; 3 essais, puis un message precis (pas « injoignable »)
+NOANS = "ot-ctl: no answer (another command pending?)"
+
+
+def anchor_with(**kw):
+    dd = FakeDocker()
+    aa = ta.Anchor({"omr_prefix": P}, docker=dd, clock=dd.clock)
+    aa.sleeps = []
+    aa.sleep = lambda s: (aa.sleeps.append(s), setattr(dd, "now", dd.now + s))
+    return dd, aa
+
+
+# la premiere sortie est vide (un meshdiag etait en attente), la suivante bonne : rien a signaler
+dd, aa = anchor_with()
+dd.script["br omrconfig"] = [""]
+aa.check()
+assert aa.public()["error"] is None and aa.public()["enforced"] and aa.sleeps == [3] and dd.attempts == ["br omrconfig"]
+assert "error" not in [k for k, _ in aa.events], aa.events
+# vide a chaque fois : message precis, ni « injoignable » ni « unexpected answer », ce qui etait lu reste
+dd.now += 30
+dd.script["br omrconfig"] = ["", "", ""]
+aa.events, aa.sleeps = [], []
+aa.check()
+assert aa.public()["error"] == NOANS and aa.sleeps == [3, 3]
+assert [k for k, _ in aa.events] == ["error"] and "injoignable" not in aa.public()["error"] and "unreachable" not in NOANS
+assert aa.public()["enforced"] and aa.public()["mode"] == "custom" and aa.public()["favored"] == P
+for _ in range(2):                                    # dit une fois
+    dd.now += 10
+    dd.script["br omrconfig"] = ["", "", ""]
+    aa.check()
+assert [k for k, _ in aa.events] == ["error"] and aa.public()["error"] == NOANS
+# ensuite : retour a la normale, et plus vite (10 s) tant qu'il y a une erreur
+dd.now += 10
+assert aa.due()
+aa.check()
+assert aa.public()["error"] is None
+# une ecriture ignoree ne passe jamais pour reussie
+dd, aa = anchor_with()
+dd.script[f"br omrconfig custom {P} high"] = ["", "", ""]
+aa.check()
+assert aa.public()["error"] == NOANS and aa.public()["applied"] == 0 and dd.config == "auto" and not aa.public()["enforced"]
+assert not [k for k, _ in aa.events if k == "anchor_set"]
+dd.now += 10
+aa.check()
+assert aa.public()["error"] is None and aa.public()["applied"] == 1 and aa.public()["enforced"]
+# une ecriture ignoree une fois, puis prise : appliquee une seule fois
+dd, aa = anchor_with()
+dd.script[f"br omrconfig custom {P} high"] = [""]
+aa.check()
+assert aa.public()["error"] is None and aa.public()["applied"] == 1 and aa.sleeps == [3]
+# une vraie erreur n'est pas redemandee : « Error … » sort tout de suite
+dd, aa = anchor_with()
+dd.old = True
+aa.check()
+assert "InvalidCommand" in aa.public()["error"] and aa.sleeps == []
+
+# ---- rôle Thread de l'OTBR : lu et affiche, jamais change
+dd = FakeDocker()
+aa = ta.Anchor({"omr_prefix": P}, docker=dd, clock=dd.clock)
+aa.check()
+st = aa.public()
+assert st["thread_role"] == "child" and st["thread_routers"] == 3 and dd.reads == ["state", "router list"], (st, dd.reads)
+assert not [c for c in dd.calls if "state" in c or "router" in c]            # rien d'ecrit : seulement `br ...`
+dd.role, dd.router_ids = "leader", "0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21"
+dd.now += 30
+assert aa.check() and aa.public()["thread_role"] == "leader" and aa.public()["thread_routers"] == 22
+dd.role, dd.router_ids, dd.reads = "detached", "", []                      # sans reseau : pas de nombre, pas de lecture
+dd.now += 30
+aa.check()
+assert aa.public()["thread_role"] == "detached" and aa.public()["thread_routers"] is None and dd.reads == ["state"]
+dd.role = "disabled"
+dd.now += 30
+aa.check()
+assert aa.public()["thread_role"] == "disabled" and aa.public()["thread_routers"] is None
+dd.role, dd.router_ids = "router", "8 24"
+dd.now += 30
+aa.check()
+assert aa.public()["thread_role"] == "router" and aa.public()["thread_routers"] == 2
+# role illisible : inconnu (None), l'ancrage n'en souffre pas
+dd.role = "bizarre"
+dd.now += 30
+aa.check()
+assert aa.public()["thread_role"] is None and aa.public()["thread_routers"] is None and aa.public()["error"] is None
+assert aa.public()["enforced"]
+# `state` ignore (sorties vides) : la derniere valeur reste, pas d'erreur
+dd.role = "child"
+dd.now += 30
+aa.check()
+aa.sleep = lambda s: None
+dd.script["state"] = ["", "", ""]
+dd.now += 30
+aa.check()
+assert aa.public()["thread_role"] == "child" and aa.public()["error"] is None
+# border router arrete : plus de role
+dd.running = False
+dd.now += 30
+aa.check()
+assert aa.public()["thread_role"] is None and aa.public()["thread_routers"] is None and aa.public()["error"]
+# anciens champs toujours la, memes noms
+for key in ("otbr_addon", "wanted", "preference", "mode", "current", "current_preference", "enforced", "favored",
+            "favored_preference", "local", "applied", "applied_at", "otbr_started_at", "error", "anchored_since", "followed"):
+    assert key in aa.public(), key
+# observation seule (sans omr_prefix) : le role est lu aussi
+d0b = FakeDocker()
+a0b = ta.Anchor({}, docker=d0b, clock=d0b.clock)
+a0b.check()
+assert a0b.public()["thread_role"] == "child" and d0b.calls == ["br omrconfig", "br omrprefix"]
 
 # par MQTT : demande sur thread_anchor/diag/request, reponse non retenue
 b2 = Broker()

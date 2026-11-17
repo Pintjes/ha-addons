@@ -44,8 +44,9 @@ moment it is set. The *Favored OMR prefix* entity (or Mesh Guardian) shows it.
   of the border router at once and sets it again, and reads it every 30 s.
 - It reads the prefix the whole network favors: you see the other border
   routers follow.
-- Entities on MQTT: *OMR prefix anchored* (on / off, with the reason) and
-  *Favored OMR prefix*. Read by [Mesh Guardian](../mesh_guardian/).
+- Entities on MQTT: *OMR prefix anchored* (on / off, with the reason),
+  *Favored OMR prefix* and *Thread role* (the role of the border router in the
+  network, shown only, never changed). Read by [Mesh Guardian](../mesh_guardian/).
 - Without a prefix set, it only watches: a safe way to look first.
 - Works with any radio of the OpenThread Border Router add-on (ZBT-1, ZBT-2,
   Yellow…), plugged in directly or through [USB/IP Link](../usbip_link/).

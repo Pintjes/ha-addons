@@ -16,8 +16,10 @@ ones and withdraws its own. OpenThread keeps this setting in memory only, so it 
 whole network favors (`br omrprefix`) is read too: it shows that the other border routers follow.
 
 The border router is reached through the Docker API (`docker exec` in its container): Protection
-mode off. The state is published on MQTT (`thread_anchor/state`, retained), with entities; Mesh
-Guardian reads it.
+mode off. Every `ot-ctl` command goes through `Anchor.otctl`, one at a time (OpenThread ignores a
+command received while an asynchronous one is pending). The state is published on MQTT
+(`thread_anchor/state`, retained), with entities; Mesh Guardian reads it. The Thread role of the
+border router is shown too, never changed.
 """
 import http.client
 import ipaddress
@@ -32,7 +34,7 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
-VERSION = "0.1.4"
+VERSION = "0.1.5"
 LOG = logging.getLogger("thread_anchor")
 STATE_TOPIC = "thread_anchor/state"
 DISCOVERY = "homeassistant"
@@ -50,6 +52,10 @@ DIAG_TIMEOUT_S = 15      # at most this long for one diagnostic
 DIAG_GAP_S = 10          # at most one diagnostic of the same node this often
 DIAG_SCAN_TIMEOUT_S = 90   # budget of the meshdiag step (routers asked one by one)
 DIAG_SCAN_GAP_S = 300      # at most one meshdiag scan of the network this often
+OTCTL_TRIES = 3            # an empty answer of ot-ctl is a command ignored (another one is pending): asked again
+OTCTL_RETRY_S = 3          # s between two tries
+OTCTL_LOCK_S = 60          # s a command waits for the one in progress
+ROLES = ("disabled", "detached", "child", "router", "leader")
 SEARCH_TEXTS = {           # one line of the log per step of the search for an RLOC16
     "found": "ext found, RLOC16 {d}",
     "not_found": "{n} rows, ext not in it",
@@ -59,6 +65,11 @@ SEARCH_TEXTS = {           # one line of the log per step of the search for an R
     "not_supported": "not supported by this border router",
     "too_soon": "scan done {d} s ago, ext not in it",
     "stopped": "stopped: {d}",
+    "kids": "children of {n} routers read{d}",
+    "no_list": "this router gave no list of its children",
+    "asked": "{n} children asked, {d} answered, ext not among them",
+    "old_listed": "still listed under {d}",
+    "old_gone": "not listed any more under {d}",
 }
 
 TEXTS = {
@@ -104,6 +115,13 @@ TEXTS = {
         "not supported by this border router": "non pris en charge par ce border router",
         "scan done {d} s ago, ext not in it": "balayage fait il y a {d} s, ext absente",
         "stopped: {d}": "arrêtée : {d}",
+        "children of {n} routers read{d}": "enfants de {n} routeurs lus{d}",
+        "this router gave no list of its children": "ce routeur n'a pas donné la liste de ses enfants",
+        "{n} children asked, {d} answered, ext not among them":
+            "{n} enfants interrogés, {d} ont répondu, ext absente",
+        "still listed under {d}": "toujours listé sous {d}",
+        "not listed any more under {d}": "n'est plus listé sous {d}",
+        "ot-ctl: no answer (another command pending?)": "ot-ctl : pas de réponse (autre commande en attente ?)",
         "time budget used": "budget de temps épuisé",
         "no answer to the network diagnostic": "pas de réponse au diagnostic réseau",
         "another node answers at this RLOC16: ext {got} instead of {want}":
@@ -186,6 +204,40 @@ class Docker:
         return info.get("ExitCode"), demux(raw)
 
 
+class OtctlNoAnswer(RuntimeError):
+    """ot-ctl printed nothing, every time: the command was ignored (another one is pending)."""
+
+
+class Gate:
+    """One `ot-ctl` command at a time, first come first served. The interpreter of OpenThread is
+    unique: a command received while an asynchronous one (meshdiag, networkdiagnostic, ping) is
+    pending is ignored without a word. The gate is taken for ONE command, never for a whole scan."""
+
+    def __init__(self):
+        self.cv, self.busy, self.queue = threading.Condition(), False, []
+
+    def acquire(self, timeout):
+        """True when the gate is ours; False after `timeout` s of waiting (real time)."""
+        ticket, end = object(), time.monotonic() + timeout
+        with self.cv:
+            self.queue.append(ticket)
+            while self.busy or self.queue[0] is not ticket:
+                left = end - time.monotonic()
+                if left <= 0:
+                    self.queue.remove(ticket)
+                    self.cv.notify_all()
+                    return False
+                self.cv.wait(left)
+            self.queue.pop(0)
+            self.busy = True
+            return True
+
+    def release(self):
+        with self.cv:
+            self.busy = False
+            self.cv.notify_all()
+
+
 # ---------------------------------------------------------------- ot-ctl answers
 CUSTOM_RE = re.compile(r"custom\s*\(\s*([0-9a-fA-F:.]+/\d+)\s*,\s*prf:\s*(\w+)\s*\)")
 PREFIX_RE = re.compile(r"([0-9a-fA-F:.]+/\d+)(?:\s+prf:\s*(\w+))?")
@@ -213,6 +265,24 @@ def parse_omrconfig(text):
         if ln in ("auto", "disabled"):
             return ln, None, None
     raise RuntimeError(f"unexpected answer: {lines[-1] if lines else '(empty)'}")
+
+
+def parse_state(text):
+    """`state` -> disabled, detached, child, router or leader."""
+    for ln in _lines(text):
+        if ln.lower() in ROLES:
+            return ln.lower()
+    raise RuntimeError(f"unexpected answer: {(_lines(text) or ['(empty)'])[0]}")
+
+
+def parse_router_list(text):
+    """`router list` -> router ids (`8 24 50` then `Done`). Read from the router table of the border
+    router: no radio traffic."""
+    ids = []
+    for ln in _lines(text):
+        if ln != "Done":
+            ids += [int(n) for n in re.findall(r"\b\d+\b", ln)]
+    return ids
 
 
 def parse_omrprefix(text):
@@ -262,6 +332,8 @@ class Anchor:
         self.container = self.containers[0]
         self.interval = max(10, int(options.get("check_interval") or 30))
         self.docker, self.clock = docker or Docker(), clock
+        self.gate, self.sleep = Gate(), time.sleep   # every ot-ctl of the add-on goes through `otctl`
+        self.role = self.routers = None              # Thread role of the border router, routers it sees
         self.mode = self.current = self.current_prf = self.error = self.applied_at = None
         self.favored = self.favored_prf = self.local = None
         self.started_at = None
@@ -333,11 +405,37 @@ class Anchor:
             self.container = other
             return res
 
-    def _otctl(self, *args):
-        code, out = self._call(self.docker.exec, ["ot-ctl", *args])
-        if code not in (0, None) and "Done" not in out:
-            raise RuntimeError((out.strip().splitlines() or [f"exit {code}"])[-1])
-        return out
+    def otctl(self, *args, deadline=None, limit=None):
+        """One `ot-ctl` command: the only way the add-on runs one (anchor and diagnostic alike).
+        The gate is taken for this command only, so that nothing is sent while another is pending.
+        An empty answer with exit code 0 (no `Done`) is a command OpenThread ignored because another
+        one was pending (another client of ot-ctl, for instance): asked again OTCTL_TRIES times,
+        OTCTL_RETRY_S apart, then OtctlNoAnswer. With `deadline` (clock time), `limit` is the budget
+        named in the message of the timeout."""
+        for attempt in range(1, OTCTL_TRIES + 1):
+            if deadline is not None and deadline - self.clock() < 1:
+                raise RuntimeError(f"timeout ({limit} s)")
+            if not self.gate.acquire(OTCTL_LOCK_S):
+                raise OtctlNoAnswer(t("ot-ctl: no answer (another command pending?)"))
+            try:
+                extra = []
+                if deadline is not None:
+                    extra = [deadline - self.clock()]   # the wait for the gate counts
+                    if extra[0] < 1:
+                        raise RuntimeError(f"timeout ({limit} s)")
+                code, out = self._call(self.docker.exec, ["ot-ctl", *args], *extra)
+            finally:
+                self.gate.release()
+            if code not in (0, None) and "Done" not in out:
+                raise RuntimeError((out.strip().splitlines() or [f"exit {code}"])[-1])
+            if out.strip():
+                return out
+            LOG.debug("ot-ctl %s: empty answer (try %d/%d)", " ".join(args), attempt, OTCTL_TRIES)
+            if attempt < OTCTL_TRIES:
+                self.sleep(OTCTL_RETRY_S)
+        raise OtctlNoAnswer(t("ot-ctl: no answer (another command pending?)"))
+
+    _otctl = otctl
 
     def restarted(self):
         """True when the border router container started again since the last look."""
@@ -393,6 +491,7 @@ class Anchor:
             except Exception as err:  # noqa: BLE001 - the anchor itself still works
                 LOG.debug("omrprefix: %s", err)
                 self.favored = self.favored_prf = self.local = None
+            self._read_role()
             if self.favored and (self.favored, self.favored_prf) != was_favored:
                 self.emit("favored", t("The network favors {p} ({prf})", p=self.favored, prf=self.favored_prf or "?"))
             if self.followed():
@@ -412,6 +511,9 @@ class Anchor:
                 self._fail(t("No access to the Docker API ({err}); turn Protection mode off", err=err))
             else:
                 self._fail(t("Border router unreachable: {err}", err=err))
+        except OtctlNoAnswer as err:
+            # the border router is there, another command kept it busy: what was read stays as it was
+            self._fail(str(err), keep=True)
         except Exception as err:  # noqa: BLE001
             if "InvalidCommand" in str(err):
                 self._fail(t("This border router does not know `br omrconfig` (OpenThread too old): {err}", err=err))
@@ -419,9 +521,25 @@ class Anchor:
                 self._fail(t("Border router unreachable: {err}", err=err))
         return json.dumps(self.public(), sort_keys=True) != before
 
-    def _fail(self, txt):
-        self.mode = self.current = self.current_prf = None
-        self.favored = self.favored_prf = self.local = None
+    def _read_role(self):
+        """Thread role of the border router and number of routers it sees: two reads, no radio
+        traffic. Read only, shown and nothing more: the role is never changed by this add-on."""
+        try:
+            self.role = parse_state(self.otctl("state"))
+            self.routers = None
+            if self.role in ("child", "router", "leader"):
+                self.routers = len(parse_router_list(self.otctl("router", "list")))
+        except OtctlNoAnswer:
+            LOG.debug("role: no answer, the last one is kept")
+        except Exception as err:  # noqa: BLE001 - the anchor itself still works
+            LOG.debug("role: %s", err)
+            self.role = self.routers = None
+
+    def _fail(self, txt, keep=False):
+        if not keep:
+            self.mode = self.current = self.current_prf = None
+            self.favored = self.favored_prf = self.local = None
+            self.role = self.routers = None
         if txt != self.error:
             self.emit("error", txt, logging.WARNING)
         self.error = txt
@@ -431,10 +549,12 @@ class Anchor:
                 "current": self.current, "current_preference": self.current_prf, "enforced": self.enforced(),
                 "favored": self.favored, "favored_preference": self.favored_prf, "local": self.local,
                 "applied": self.applied, "applied_at": self.applied_at, "otbr_started_at": self.started_at,
-                "error": self.error, "anchored_since": self.anchored_since, "followed": self.followed()}
+                "error": self.error, "anchored_since": self.anchored_since, "followed": self.followed(),
+                "thread_role": self.role, "thread_routers": self.routers}
 
 
 # ---------------------------------------------------------------- diagnostic of one node (read only)
+_STOP = object()    # the time budget of the meshdiag step is used
 LINK_LOCAL = ipaddress.IPv6Network("fe80::/10")
 GLOBAL = ipaddress.IPv6Network("2000::/3")
 EXT_RE = re.compile(r"Ext Address:\s*'?([0-9a-fA-F]{16})'?")
@@ -514,6 +634,31 @@ def parse_childtable(text):
     return out
 
 
+KID_RE = re.compile(r"rloc16:(0x[0-9a-fA-F]{1,4})\s+lq:")
+
+
+def parse_topology_children(text):
+    """`meshdiag topology children` -> ({router rloc16: [rloc16 of its children]}, error line or None).
+    Under each router line (`id:02 rloc16:0x0800 ext-addr:… `) come `children:` and one line per child,
+    `rloc16:0x0803 lq:0, mode:rn`: the children have no extended address here. Tolerant: what was
+    read before an `Error …` line is kept (the error comes back beside it)."""
+    out, router, error = {}, None, None
+    for ln in (text or "").splitlines():
+        ln = ln.strip()
+        if ln.startswith("Error"):
+            error = ln
+            continue
+        m = MESHDIAG_RE.search(ln) if ln.startswith("id:") else None
+        if m:
+            router = int(m.group(1), 16)
+            out.setdefault(router, [])
+            continue
+        m = KID_RE.match(ln)
+        if m and router is not None:
+            out[router].append(int(m.group(1), 16))
+    return out, error
+
+
 def rloc_address(mesh_local, rloc16):
     """RLOC address of a node: <mesh-local prefix>:0:ff:fe00:<rloc16>."""
     net = ipaddress.IPv6Network(mesh_local, strict=False)
@@ -591,6 +736,7 @@ class Diag:
         self.limit = DIAG_TIMEOUT_S              # budget in force, for the message of a timeout
         self.meshdiag, self.meshdiag_for = None, None   # `help` knows meshdiag (for this start of the OTBR)
         self.scan_at, self.scan_map = None, {}   # last scan: when, and {ext: (rloc16, parent rloc16)}
+        self.scan_kids, self.scan_topo = {}, None   # last scan: children known per router, `topology children`
 
     def submit(self, raw):
         """A request from MQTT: answered at once when refused, else run in the background."""
@@ -629,11 +775,12 @@ class Diag:
             if last is not None and self.clock() - last < DIAG_GAP_S:
                 return self._done(base, "too soon")
             self.running, self.last[key] = True, self.clock()
-        # routers to ask first in the meshdiag step: any RLOC16 (of a router or of one of its children)
+        # RLOC16s of the request's `routers`: a router or a child (its old RLOC16). The routers they
+        # belong to are asked first in the meshdiag step; a child RLOC16 is looked for in their lists.
         hints = []
         for v in req.get("routers") if isinstance(req.get("routers"), list) else []:
             try:
-                hints.append(parse_rloc16(v) & 0xFC00)
+                hints.append(parse_rloc16(v))
             except (ValueError, TypeError):
                 LOG.debug("routers: ignored %r", v)
         self.spawn(lambda: self.run(base, rloc16, ext, ml, req.get("ping", True) is not False, hints,
@@ -650,13 +797,8 @@ class Diag:
         self._done(res, res.get("error"))
 
     def _otctl(self, deadline, *args):
-        left = deadline - self.clock()
-        if left < 1:
-            raise RuntimeError(f"timeout ({self.limit} s)")
-        code, out = self.anchor._call(self.anchor.docker.exec, ["ot-ctl", *args], left)
-        if code not in (0, None) and "Done" not in out:
-            raise RuntimeError((out.strip().splitlines() or [f"exit {code}"])[-1])
-        return out
+        """Through the single entry point of the anchor (one command at a time, empty answers asked again)."""
+        return self.anchor.otctl(*args, deadline=deadline, limit=self.limit)
 
     def _step(self, res, step, result, detail=None, rows=None):
         """One step of the search for an RLOC16: kept in the answer (`search`) and said in the log."""
@@ -703,23 +845,83 @@ class Diag:
                     return found, name, None, None
                 self._step(res, name, "not_found", rows=len(rows))
             if scan:
-                hit = self._scan(res, ext, hints)
+                hit = self._scan(res, ext, hints, mlp)
                 if hit:
                     return hit[0], "meshdiag", None, hit[1]
         return None, None, None, None
 
-    def _scan(self, res, ext, hints):
+    def _scan(self, res, ext, hints, mlp):
         """The meshdiag step: (rloc16, parent rloc16 or None) or None. The routers are asked one by
         one for their children, in DIAG_SCAN_TIMEOUT_S at most, at most one scan every DIAG_SCAN_GAP_S
-        (in between, the last scan is read again, no traffic). Listing a child proves nothing about
+        (in between, the last scan is read again, no traffic). A router that does not answer
+        `meshdiag childtable` is asked for its children by `meshdiag topology children` (RLOC16 only),
+        and each child is then asked for its extended address. Listing a child proves nothing about
         its being alive: only a ping or a diagnostic answer does."""
         self.limit = DIAG_SCAN_TIMEOUT_S
         try:
-            return self._scan_run(res, ext, hints)
+            hit = self._scan_run(res, ext, hints, mlp)
+            self._old_rloc16(res, hints)
+            return hit
         finally:
             self.limit = DIAG_TIMEOUT_S
 
-    def _scan_run(self, res, ext, hints):
+    def _old_rloc16(self, res, hints):
+        """Says whether a child RLOC16 of the request (the old one of the node) is still listed under
+        its router, when that router gave the list of its children in the last scan."""
+        for h in dict.fromkeys(hints):
+            router = h & 0xFC00
+            if h != router and router in self.scan_kids:
+                self._step(res, f"old RLOC16 0x{h:04x}", "old_listed" if h in self.scan_kids[router] else "old_gone",
+                           f"0x{router:04x}")
+
+    def _children(self, res, deadline, ext, router, hints, mlp):
+        """Children of a router that did not answer `meshdiag childtable`: their RLOC16 come from
+        `meshdiag topology children` (one per scan, same Diagnostic Get as `topology`, which these
+        routers do answer), then each child is asked for its extended address (`networkdiagnostic
+        get <RLOC address> 0`), the old RLOC16 of the request first. A child asleep answers late,
+        when its parent gets to hand it the question: many do not answer. (rloc16, router),
+        None, or _STOP when the time budget is used."""
+        if self.scan_topo is None:
+            self.scan_topo = {}
+            name = "meshdiag topology children"
+            try:
+                kids, err = parse_topology_children(self._otctl(deadline, "meshdiag", "topology", "children"))
+            except RuntimeError as err:
+                self._step(res, name, "error", str(err))
+            else:
+                self.scan_topo = kids
+                if err and not kids:
+                    self._step(res, name, "error", err)
+                else:
+                    self._step(res, name, "kids", f" ({err})" if err else "", rows=len(kids))
+        name = f"children of 0x{router:04x}"
+        rlocs = self.scan_topo.get(router)
+        if rlocs is None:
+            self._step(res, name, "no_list")
+            return None
+        self.scan_kids[router] = set(rlocs)
+        asked = answered = 0
+        for rl in sorted(rlocs, key=lambda r: (r not in hints, r)):
+            if deadline - self.clock() < 1:
+                self._step(res, name, "stopped", t("time budget used"))
+                return _STOP
+            asked += 1
+            try:
+                diag = parse_diag(self._otctl(deadline, "networkdiagnostic", "get", rloc_address(mlp, rl), "0"))
+            except RuntimeError as err:
+                LOG.debug("child 0x%04x: %s", rl, err)
+                continue
+            if not diag["answered"] or not diag["ext"]:
+                continue
+            answered += 1
+            self.scan_map[diag["ext"]] = (rl, router)
+            if diag["ext"] == ext:
+                self._step(res, name, "found", f"0x{rl:04x}", rows=len(rlocs))
+                return rl, router
+        self._step(res, name, "asked", answered, rows=asked)
+        return None
+
+    def _scan_run(self, res, ext, hints, mlp):
         now = self.clock()
         deadline = now + DIAG_SCAN_TIMEOUT_S
         started = self.anchor.started_at
@@ -741,6 +943,7 @@ class Diag:
             self._step(res, "meshdiag", "too_soon", int(now - self.scan_at))
             return None
         self.scan_at, self.scan_map = now, {}   # a scan counts as done even when it fails
+        self.scan_kids, self.scan_topo = {}, None   # routers whose children are known: {router: {rloc16}}
         try:
             routers = parse_topology(self._otctl(deadline, "meshdiag", "topology"))
         except RuntimeError as err:
@@ -755,24 +958,41 @@ class Diag:
             return hit
         # the border router's own children are in `child table` already
         others = [r["rloc16"] for r in routers if not r["me"]]
-        for router in [h for h in dict.fromkeys(hints) if h in others] + [o for o in others if o not in hints]:
+        first = list(dict.fromkeys(h & 0xFC00 for h in hints))    # routers of the request
+        failed = []     # routers that did not answer `meshdiag childtable`, in the order they were asked
+        for router in [h for h in first if h in others] + [o for o in others if o not in first]:
             name = f"meshdiag childtable 0x{router:04x}"
             if deadline - self.clock() < 1:
                 self._step(res, name, "stopped", t("time budget used"))
-                break
+                return None
             try:
                 kids = parse_childtable(self._otctl(deadline, "meshdiag", "childtable", f"0x{router:04x}"))
             except RuntimeError as err:
                 self._step(res, name, "error", str(err))
                 if "Busy" in str(err):     # another meshdiag is running: not worth insisting
-                    break
+                    return None
+                failed.append(router)
+                if router in first:        # a router the request names: its children at once
+                    hit = self._children(res, deadline, ext, router, hints, mlp)
+                    failed.remove(router)
+                    if hit is _STOP:
+                        return None
+                    if hit:
+                        return hit
                 continue
+            self.scan_kids[router] = set(kids.values())
             for e, rl in kids.items():
                 self.scan_map[e] = (rl, router)
             if ext in kids:
                 self._step(res, name, "found", f"0x{kids[ext]:04x}", rows=len(kids))
                 return kids[ext], router
             self._step(res, name, "not_found", rows=len(kids))
+        for router in failed:      # the other routers that kept silent
+            hit = self._children(res, deadline, ext, router, hints, mlp)
+            if hit is _STOP:
+                return None
+            if hit:
+                return hit
         return None
 
     def _run(self, res, rloc16, ext, ml, ping, hints=(), scan=True):
@@ -798,6 +1018,9 @@ class Diag:
         if ping:
             try:
                 res["ping"] = parse_ping(self._otctl(deadline, "ping", addr, "16", "1"))
+            except OtctlNoAnswer:
+                res["alive"] = None    # the ping was never sent: it says nothing, and is not "lost"
+                raise
             except RuntimeError as err:
                 if "timeout" in str(err):
                     raise
@@ -927,6 +1150,11 @@ class Mqtt:
         client.publish(f"{DISCOVERY}/sensor/thread_anchor/favored/config", json.dumps(dict(
             common, name="Favored OMR prefix", unique_id="thread_anchor_favored", icon="mdi:ip-network",
             value_template="{{ value_json.favored or 'unknown' }}")), retain=True)
+        # read only: the role of the border router in the Thread network (the number of routers is
+        # in the attributes, `thread_routers`); Thread Anchor never tries to change it
+        client.publish(f"{DISCOVERY}/sensor/thread_anchor/thread_role/config", json.dumps(dict(
+            common, name="Thread role", unique_id="thread_anchor_thread_role", icon="mdi:router-network",
+            value_template="{{ value_json.thread_role or 'unknown' }}")), retain=True)
         self.publish()
 
     def publish(self):

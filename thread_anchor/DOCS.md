@@ -77,6 +77,10 @@ With MQTT (state on `thread_anchor/state`, retained):
   prefix of the options; attributes: mode, current prefix and preference,
   prefix favored by the network, number of times it was set, last error.
 - **sensor** *Favored OMR prefix*: the prefix the whole network uses.
+- **sensor** *Thread role*: the role of the border router of Home Assistant in
+  the Thread network (`disabled`, `detached`, `child`, `router` or `leader`),
+  with the number of routers it sees in the attribute `thread_routers`. Shown
+  only: Thread Anchor never tries to change the role of the border router.
 
 Without a broker at start, the add-on works all the same and looks for it again
 every 60 s. `thread_anchor/state/available` says `online` / `offline`: `offline`
@@ -93,6 +97,7 @@ Fields of `thread_anchor/state` (JSON):
 | `favored`, `favored_preference`, `local` | prefix the network favors, and the border router's own |
 | `followed` | `enforced`, and the network favors that prefix with that preference. When it is false while `enforced` is true, another border router wins: a warning is in the log |
 | `applied`, `applied_at` | times the prefix was set since the add-on started, and the last time (Unix time) |
+| `thread_role`, `thread_routers` | role of the border router in the Thread network (`ot-ctl state`) and number of routers its router table lists (`ot-ctl router list`); two small reads at every check, no radio traffic. `thread_routers` is `null` without a network (`disabled`, `detached`), both are `null` when unreadable |
 | `otbr_started_at`, `error` | start of the border router container, last error |
 | `version`, `updated` | version of the add-on, time of this state |
 
@@ -166,7 +171,22 @@ Reads only, but it is radio traffic: a request for every router.
   request's `routers` (RLOC16 of routers, or of their children: `"0xB45C"`
   stands for the router `0xB400`); it stops as soon as the extended address
   is found, or after 90 s (`stopped`), or when a router answers `Busy`;
-- a router that does not answer is skipped;
+- a router that does not answer `meshdiag childtable` (`ResponseTimeout`; some
+  firmwares do not know the Diagnostic Query it needs) is not skipped: its
+  children are read with `ot-ctl meshdiag topology children` (one per scan; the
+  routers do answer the Diagnostic Get it uses; the children come as RLOC16
+  only), then each child is asked for its extended address with `ot-ctl
+  networkdiagnostic get <RLOC address of the child> 0`, one request per child,
+  the old RLOC16 of the request first. A router named in the request is dealt
+  with at once, the other silent ones after all the routers that answer. A child
+  that sleeps answers late (its parent hands it the question when it wakes up),
+  many do not answer in time: the step says how many were asked and how many
+  answered (`children of 0xb400: 12 children asked, 7 answered, ext not among
+  them`). The children that answered are kept with the scan;
+- when a request names an old RLOC16 of a child in `routers` (`"0xB45C"`) and
+  the list of children of its router (`0xB400`) was read, `search` says whether
+  that RLOC16 is still listed there (`old RLOC16 0xb45c`: `old_listed` or
+  `old_gone`, `detail`: the router);
 - at most one scan every 5 minutes; in between, the answer of the last scan is
   read again without any traffic (`too soon` in `search` when the node was not
   in it). `"scan": false` in the request skips this step;
@@ -185,15 +205,25 @@ Answer, on `thread_anchor/diag/result/<id>` (not retained, JSON):
 | `rloc16_from` | how it is known: `request`, `mleid`, `child table`, `neighbor table`, `router table` or `meshdiag`; `null` when not found or the request was refused |
 | `parent` | with `meshdiag`: RLOC16 of the router whose child table lists the node (`null` when the node is a router itself, or not found by `meshdiag`) |
 | `alive` | `true` only if the ping or the network diagnostic answered (and the node that answers has the `ext` asked); `false` when the RLOC16 is known (even from a table) but nobody answered, or another node answers there; `null` when there is no RLOC16 (not found, request refused) |
-| `search` | the steps of the search for the RLOC16, in order: `[{"step": "child table", "result": "found", "rows": 4, "detail": "0xb45c"}, …]`; `step` is `mleid`, `child table`, `neighbor table`, `router table`, `meshdiag help`, `meshdiag`, `meshdiag topology` or `meshdiag childtable 0x…`; `result` is `found`, `not_found`, `no_answer`, `ext_differs`, `error`, `not_supported`, `too_soon` or `stopped`; `rows`: lines read (tables, topology: routers); `detail`: RLOC16, extended address received, error or reason. Empty when `rloc16` was given |
+| `search` | the steps of the search for the RLOC16, in order: `[{"step": "child table", "result": "found", "rows": 4, "detail": "0xb45c"}, …]`; `step` is `mleid`, `child table`, `neighbor table`, `router table`, `meshdiag help`, `meshdiag`, `meshdiag topology`, `meshdiag childtable 0x…`, `meshdiag topology children`, `children of 0x…` or `old RLOC16 0x…`; `result` is `found`, `not_found`, `no_answer`, `ext_differs`, `error`, `not_supported`, `too_soon`, `stopped`, `kids`, `no_list`, `asked`, `old_listed` or `old_gone`; `rows`: lines read (tables, topology: routers; `children of`: children asked); `detail`: RLOC16, extended address received, error or reason. Empty when `rloc16` was given |
 | `rloc_address` | the RLOC address that was asked (`null` if it could not be built) |
 | `ext` | extended address the node answered with, lowercase (`null`: no answer) |
 | `ping` | `{"ok": bool, "rtt_ms": float or null}`; `null` when no ping was asked |
 | `addresses` | every IPv6 address of the node |
 | `omr_addresses` | those in the anchored prefix (`wanted`) or in the prefix the network favors (`favored`) |
 | `other_prefix_addresses` | global or local (ULA) addresses that are neither mesh-local, nor link-local, nor in the current prefixes: an old OMR prefix the node kept |
-| `error` | `null`, or why it failed: `busy`, `too soon`, `not found`, `invalid rloc16: …` / `invalid ext: …` / `invalid mleid: …`, `rloc16, ext or mleid needed`, `mleid is not in the mesh-local prefix`, `timeout (15 s)`, `no answer to the network diagnostic`, a different `ext` than asked, an `ot-ctl` or Docker error |
+| `error` | `null`, or why it failed: `busy`, `too soon`, `not found`, `invalid rloc16: …` / `invalid ext: …` / `invalid mleid: …`, `rloc16, ext or mleid needed`, `mleid is not in the mesh-local prefix`, `timeout (15 s)`, `no answer to the network diagnostic`, `ot-ctl: no answer (another command pending?)`, a different `ext` than asked, an `ot-ctl` or Docker error |
 | `at` | time of the answer (ISO 8601 with the time zone) |
+
+**One `ot-ctl` command at a time.** The command interpreter of OpenThread is
+unique: a command received while an asynchronous one (`meshdiag`,
+`networkdiagnostic get`, `ping`) is waiting is ignored without a word (empty
+output). Every `ot-ctl` command of the add-on, the anchor's and the diagnostic's,
+goes through one gate taken for ONE command (never for a whole scan), so the
+check of the anchor waits only for the command in progress. An empty output is
+asked again (3 tries, 3 s apart), then reported as `ot-ctl: no answer (another
+command pending?)`: a ping with no output is not a lost ping (`ping` stays
+`null`, `alive` too), and the border router is not declared unreachable.
 
 Limits: one diagnostic at a time (`busy`, also while a meshdiag scan runs), at
 most one per node every 10 s (`too soon`; the node is its `rloc16`, else its
