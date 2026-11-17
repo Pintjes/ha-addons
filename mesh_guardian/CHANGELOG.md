@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - **Panel of a border router put in order**, in the sections of the panel of a node (they fold, kept in the browser): on top its state, Thread network and role; then **OMR prefix** (shown once: the fixed prefix, anchored since, before / since side by side; another border router: the prefix it announces), **Stability** (detaches of the last day and the list of the last 7 days together), **Network** (same subnet, primary, last contact, radio over USB/IP), the nodes that go through it or are attached to it (only when there are some), technical details. A small "i" says what "End device" and "Primary" mean for a border router. "Remove" says what it does ("Remove from the list"), sits at the bottom and only shows for an offline border router (it is confirmed, as before).
-- **Border router cards**: one grid, same width, the same lines in every card (name; role; seen when and radio link), the fixed OMR prefix as a badge under them on the card of Home Assistant. Same words, colors and text sizes as before.
+- **Border router cards**: one grid, same width, the same lines in every card (name; role; seen when and radio link), the fixed OMR prefix as a badge under them on the card of Home Assistant: "OMR forced: On" (or "Off" when it is not in place), the same words in the panel beside the prefix. Same colors and text sizes as before.
 
 ## [2.35.2] - 2026-11-17
 
