@@ -40,7 +40,10 @@ ANCHOR_TOPIC = "thread_anchor/state"
 ANCHOR_AVAIL_TOPIC = "thread_anchor/state/available"
 DIAG_REQUEST_TOPIC = "thread_anchor/diag/request"    # Thread diagnostic of one node, run by Thread Anchor (ot-ctl)
 DIAG_RESULT_TOPIC = "thread_anchor/diag/result/"    # + request id
-DIAG_WAIT_S = 25         # Thread Anchor answers within 15 s
+DIAG_WAIT_S = 130        # one answer: 15 s for a known RLOC16, but a search by ext / ML-EID runs the
+                         # meshdiag scan of Thread Anchor (90 s budget) plus its other steps: 90 + 15 + margin
+DIAG_BUSY_WAIT_S = 120   # "busy" (another diagnostic runs): asked again for this long
+DIAG_BUSY_RETRY_S = 10   # every this often
 ANCHOR_FILE = "/data/anchor.json"
 ANCHOR_SUFFIX = "_thread_anchor"   # slug of the add-on in the Supervisor: <repository hash>_thread_anchor
 CATCHUP_SETTLE_S = 60   # after the return of radio and prefix: time left to the nodes to follow
@@ -146,12 +149,26 @@ class Anchor:
         """Thread Anchor publishes and is not stopped: it can run a diagnostic."""
         return isinstance(self.state, dict) and self.available is not False
 
-    def diag(self, rloc16, ext=None, ping=True, timeout=DIAG_WAIT_S, mleid=None):
+    def diag(self, rloc16, ext=None, ping=True, timeout=DIAG_WAIT_S, mleid=None,
+             busy_wait=DIAG_BUSY_WAIT_S, busy_retry=DIAG_BUSY_RETRY_S):
         """Asks Thread Anchor for the Thread diagnostic of a node, reached through the mesh by its
         RLOC16 and/or its mesh-local EID (whatever its OMR prefix; the ML-EID stays when the RLOC16
         changes), ext to check it is the right node: ping and current addresses. Returns its answer
         ({"ping": {"ok", "rtt_ms"}, "addresses", "omr_addresses", "other_prefix_addresses", "error"…}),
-        or None when nothing came back in time."""
+        or None when nothing came back in time. Waits for the whole search of Thread Anchor (up to
+        `timeout`); a "busy" answer (it runs another diagnostic) is asked again every `busy_retry`
+        seconds for `busy_wait` seconds, then returned as it is."""
+        end = time.monotonic() + busy_wait
+        while True:
+            res = self._diag_once(rloc16, ext, ping, timeout, mleid)
+            if not (isinstance(res, dict) and str(res.get("error") or "") == "busy") \
+                    or time.monotonic() + busy_retry > end:
+                return res
+            stop = getattr(self.w, "stop", None)
+            if stop.wait(busy_retry) if stop is not None else time.sleep(busy_retry):
+                return res
+
+    def _diag_once(self, rloc16, ext, ping, timeout, mleid):
         mq = getattr(self.w, "mqtt", None)
         if mq is None or not self.diag_ready():
             return None

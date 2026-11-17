@@ -710,6 +710,12 @@ class Reattach:
                 d = self._thread_diag(nid, name, ext)
                 if d is None:
                     return nid
+                if d.get("busy"):
+                    # Thread Anchor stayed busy with other diagnostics: not an attempt, asked again
+                    # at the next pass instead of after AUTO_NODE_S
+                    last.pop(nid, None)
+                    done.pop()
+                    return nid
                 self.w.emit("auto_diag", t("{node}: automatic Thread diagnostic: {diag}", node=name, diag=d["text"]),
                             node=name, result=d["result"])
                 if d["omr"] and self.announce_current(nid, name, d["omr"]):
@@ -771,7 +777,7 @@ class Reattach:
                 return {"text": text, "omr": [], "result": "frozen", "outcome": t(
                     "{node}: heard by {who} but no answer through the mesh: its network stack is stuck. No remote way "
                     "is left: cutting its power for 10 s is the last resort, your call", node=name, who=hb["by"])}
-            return {"text": text, "omr": [], "result": "unknown", "outcome": ""}
+            return {"text": text, "omr": [], "result": "unknown", "outcome": "", "busy": err == "busy"}
         # the diagnostic answered (the ping may not: some nodes answer one and not the other)
         omr = [str(x) for x in res.get("omr_addresses") or []]
         old = [str(x) for x in res.get("other_prefix_addresses") or []]

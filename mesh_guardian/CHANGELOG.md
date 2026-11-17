@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.35.2] - 2026-11-17
+
+### Fixed
+
+- **The Thread diagnostic waits for the whole search of Thread Anchor**: a node looked for by its extended address or its mesh-local EID can take the meshdiag scan of Thread Anchor (90 s) and its other steps. Mesh Guardian gave up after 25 s and said "no answer from Thread Anchor" while the answer was still on its way; it now waits up to 130 s.
+- **"busy" asked again**: when Thread Anchor runs another diagnostic, the request is sent again every 10 s for up to 2 min, then the answer is given as it is. In the automatic pass, a diagnostic that stayed "busy" does not count as an attempt: the node is asked again at the next pass, not 30 min or 2 h later.
+
 ## [2.35.1] - 2026-11-17
 
 ### Fixed
