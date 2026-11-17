@@ -1517,8 +1517,9 @@ assert [(n["rloc16"], n["role"], n["rssi_avg"], n["rssi_last"], n["age"]) for n 
     (0x3400, "R", -62, -64, 17), (0x5800, "R", -48, -47, 3), (0x9C00, "R", -71, -70, 9),
     (0xB800, "R", -55, -58, 20), (0x6C0A, "C", -40, -41, 30)]
 assert ta.parse_neighbors("Done\r\n") == [] and ta.parse_neighbors("| a | b |\r\n| x | y |\r\n") == []
-assert ta.parse_router_rows(LINK_OUT["router table"]) == {0x3400: {"lq_in": 3, "lq_out": 2, "path_cost": 0},
-                                                          0x5800: {"lq_in": 3, "lq_out": 3, "path_cost": 0}}
+assert ta.parse_router_rows(LINK_OUT["router table"]) == {
+    0x3400: {"lq_in": 3, "lq_out": 2, "path_cost": 0, "ext": "5a6b7c8d9e0f1a2b"},
+    0x5800: {"lq_in": 3, "lq_out": 3, "path_cost": 0, "ext": "1111111111111111"}}
 assert ta.parse_counters(LINK_OUT["counters mle"], ta.MLE_KEYS) == {
     "role_detached": 4, "role_child": 5, "role_router": 0, "role_leader": 0, "attach_attempts": 6,
     "partition_id_changes": 1, "better_partition_attach_attempts": 0, "parent_changes": 3}
@@ -1682,6 +1683,159 @@ assert aa3.parent_log == [] and aa3.last_parent is None
 assert ta.Anchor({"omr_prefix": P}, docker=dd, history=os.path.join(tempfile.mkdtemp(), "none.json")).parent_log == []
 # sans fichier (tests, observation) : en memoire seulement
 assert ta.Anchor({}, docker=dd).history is None
+
+# ---- 0.1.11 : ce que l'add-on apprend des nodes, garde et publie (thread_anchor/children), sans lecture en plus
+clk = Clk()
+cpath = os.path.join(tempfile.mkdtemp(), "children.json")
+ch = ta.Children(cpath, clock=clk)
+assert not ch.due() and ch.public()["nodes"] == {} and ch.public()["count"] == 0     # rien appris : rien a publier
+ch.note("zz", 0x6C05, 0x6C00, "child", "diagnostic")                                  # ext invalide : ignoree
+ch.note(None, 0x6C05, 0x6C00, "child", "diagnostic")
+assert ch.nodes == {} and not ch.changed
+ch.note(TARGET.upper(), 0x6C05, 0x6C00, "child", "childtable")                         # l'ext est mise en minuscules
+ch.note("2b3c4d5e6f708192", 0x5800, None, "router", "topology", {"rssi_avg": -55, "lq_in": 3})
+pub = ch.public()
+assert pub["version"] == 1 and pub["count"] == 2 and list(pub["nodes"]) == sorted(pub["nodes"])
+assert datetime.fromisoformat(pub["updated"]).tzinfo
+assert pub["nodes"][TARGET] == {"rloc16": "0x6c05", "parent": "0x6c00", "role": "child", "source": "childtable",
+                                "read_at": pub["updated"]}, pub["nodes"][TARGET]
+assert pub["nodes"]["2b3c4d5e6f708192"]["parent"] is None and pub["nodes"]["2b3c4d5e6f708192"]["role"] == "router"
+assert pub["nodes"]["2b3c4d5e6f708192"]["signal"] == {"rssi_avg": -55, "lq_in": 3, "toward": "otbr"}   # signal vers l'OTBR
+assert "signal" not in pub["nodes"][TARGET]                                           # pas de signal inventé
+assert ch.due()
+ch.published()
+assert not ch.due() and os.path.exists(cpath)
+# la meme chose revue plus tard : read_at rafraichi, rien a publier ; un autre parent : a publier
+clk.now += 100
+ch.note(TARGET, 0x6C05, 0x6C00, "child", "diagnostic")
+assert not ch.due() and ch.nodes[TARGET]["source"] == "diagnostic" and ch.nodes[TARGET]["read_at"] != pub["updated"]
+ch.note(TARGET, 0x5801, 0x5800, "child", "childtable")
+assert ch.due()
+ch.published()
+# battement : republiee apres CHILDREN_S meme sans changement
+clk.now += ta.CHILDREN_S - 1
+assert not ch.due()
+clk.now += 2
+assert ch.due()
+ch.published()
+# gardee d'un redemarrage a l'autre ; fichier abime : vide ; entree trop ancienne : retiree
+ch2 = ta.Children(cpath, clock=clk)
+assert ch2.nodes == ch.nodes and ch2.seen == ch.seen
+clk.now += ta.CHILDREN_KEEP_S + 1
+ch2.note("3c4d5e6f70819203", 0x5801, 0x5800, "child", "diagnostic")           # celle-ci est fraiche
+assert sorted(ch2.public()["nodes"]) == ["3c4d5e6f70819203"] and ch2.due()
+with open(cpath, "w", encoding="utf-8") as f:
+    f.write("{pas du json")
+assert ta.Children(cpath, clock=clk).nodes == {} and ta.Children(None).nodes == {}
+
+# alimentation par la recherche meshdiag : routeurs (topology), enfants (childtable), enfant qui repond (diagnostic)
+clk, otbr, dg, out = scan_diag()
+one(dg, out, ext=TARGET)
+kn = dg.anchor.children.nodes
+assert kn["1111111111111111"]["role"] == "router" and kn["1111111111111111"]["source"] == "topology"
+assert kn["1111111111111111"]["rloc16"] == "0x5800" and kn["1111111111111111"]["parent"] is None
+assert kn["aaaaaaaaaaaaaaaa"] == {**kn["aaaaaaaaaaaaaaaa"], "rloc16": "0x5801", "parent": "0x5800", "role": "child",
+                                  "source": "childtable"}
+assert kn["2b3c4d5e6f708192"]["parent"] == "0x6c00" and kn["2b3c4d5e6f708192"]["source"] == "childtable"
+assert kn[TARGET] == {**kn[TARGET], "rloc16": "0x6c05", "parent": "0x6c00", "role": "child", "source": "diagnostic"}
+assert dg.anchor.children.due() and not [c for c in otbr.calls if c[0] not in (
+    "ipaddr", "ping", "networkdiagnostic", "help", "child", "neighbor", "router", "meshdiag")]      # rien en plus
+# enfant d'un routeur muet : retrouve par `networkdiagnostic get`, parent = son routeur
+clk, otbr, dg, out = kids_diag()
+one(dg, out, ext=TARGET)
+assert dg.anchor.children.nodes[OTHER]["parent"] == "0x6c00" and dg.anchor.children.nodes[OTHER]["rloc16"] == "0x6c01"
+assert dg.anchor.children.nodes[TARGET]["parent"] == "0x6c00" and dg.anchor.children.nodes[TARGET]["source"] == "diagnostic"
+# les tables de l'OTBR : routeurs de `router table` ; enfants de `child table` seulement si l'OTBR est routeur
+clk, otbr, dg, out = make_diag()
+otbr.tables["router"] = router_table(("0x6c00", "7777777777777777"))
+otbr.tables["child"] = child_table(("0x0803", "8888888888888888"))
+one(dg, out, ext="9999999999999999", scan=False)
+kn = dg.anchor.children.nodes
+assert kn["7777777777777777"] == {**kn["7777777777777777"], "rloc16": "0x6c00", "parent": None, "role": "router",
+                                  "source": "router table"}
+assert "8888888888888888" not in kn                            # l'OTBR (enfant ou inconnu) n'a pas d'enfant : pas de parent a dire
+clk, otbr, dg, out = make_diag()
+otbr.tables["child"] = child_table(("0x0803", "8888888888888888"))
+dg.anchor.own_rloc16 = 0x0800                                  # l'OTBR est routeur : il est le parent de ses enfants
+clk.now += 20
+one(dg, out, ext="9999999999999999", scan=False)
+assert dg.anchor.children.nodes["8888888888888888"] == {**dg.anchor.children.nodes["8888888888888888"],
+    "rloc16": "0x0803", "parent": "0x0800", "role": "child", "source": "child table"}
+# une node qui repond au diagnostic : RLOC16 d'enfant -> parent = RLOC16 & 0xFC00 ; RLOC16 de routeur -> pas de parent
+clk, otbr, dg, out = make_diag()
+one(dg, out, rloc16="0x6C05")
+assert dg.anchor.children.nodes[TARGET] == {**dg.anchor.children.nodes[TARGET], "rloc16": "0x6c05", "parent": "0x6c00",
+                                            "role": "child", "source": "diagnostic"}
+clk, otbr, dg, out = make_diag()
+one(dg, out, rloc16="0x5800")
+assert dg.anchor.children.nodes[TARGET] == {**dg.anchor.children.nodes[TARGET], "rloc16": "0x5800", "parent": None, "role": "router"}
+# sans reponse du diagnostic : rien n'est appris
+clk, otbr, dg, out = make_diag()
+otbr.diag_out = "Done\r\n"
+one(dg, out, rloc16="0x6C05")
+assert dg.anchor.children.nodes == {}
+
+# alimentation par la lecture periodique du lien (tables deja lues : pas de commande en plus)
+dd = FakeDocker()
+aa = ta.Anchor({"omr_prefix": P}, docker=dd, clock=dd.clock)
+aa.check()
+assert dd.link_reads == LINK_CMDS                               # les memes 6 lectures qu'avant la 0.1.11
+kn = aa.children.nodes
+assert kn["5a6b7c8d9e0f1a2b"] == {"rloc16": "0x3400", "parent": None, "role": "router", "source": "neighbor table",
+                                  "read_at": kn["5a6b7c8d9e0f1a2b"]["read_at"],
+                                  "signal": {"rssi_avg": -62, "rssi_last": -64, "lq_in": 3, "lq_out": 2, "toward": "otbr"}}
+assert kn["1111111111111111"]["signal"] == {"rssi_avg": -48, "rssi_last": -47, "lq_in": 3, "lq_out": 3, "toward": "otbr"}
+assert kn["2222222222222222"]["signal"] == {"rssi_avg": -71, "rssi_last": -70, "toward": "otbr"}   # pas dans la table des routeurs
+assert "4444444444444444" not in kn and sorted(kn) == ["1111111111111111", "2222222222222222", "3333333333333333", "5a6b7c8d9e0f1a2b"]
+# l'OTBR est routeur : ses enfants ont l'OTBR pour parent ; un routeur de la table des routeurs non entendu est note aussi
+dd = FakeDocker()
+aa = ta.Anchor({"omr_prefix": P}, docker=dd, clock=dd.clock)
+dd.role = "router"
+dd.link_out["rloc16"] = "6c00\r\nDone\r\n"
+dd.link_out["router table"] = dd.link_out["router table"].replace(
+    "Done\r\n", "| 31 | 0x7800 |       63 |         0 |     2 |      1 |   4 | 6666666666666666 |    1 |\r\nDone\r\n")
+aa.check()
+kn = aa.children.nodes
+assert kn["4444444444444444"] == {**kn["4444444444444444"], "rloc16": "0x6c0a", "parent": "0x6c00", "role": "child"}
+assert kn["6666666666666666"] == {**kn["6666666666666666"], "rloc16": "0x7800", "parent": None, "source": "router table",
+                                  "signal": {"lq_in": 2, "lq_out": 1, "toward": "otbr"}}
+# border router arrete : ce qui est appris reste (c'est un registre, pas un etat)
+n_known = len(aa.children.nodes)
+dd.running = False
+dd.now += 61
+aa.check()
+assert len(aa.children.nodes) == n_known and aa.public()["thread_link"] is None
+
+# publication retenue sur thread_anchor/children : quand ca change, au battement, jamais sans broker
+bc = Broker()
+bc.up = True
+dd = FakeDocker()
+aa = ta.Anchor({"omr_prefix": P}, docker=dd, clock=bc.clock, children=os.path.join(tempfile.mkdtemp(), "c.json"))
+mqc = ta.Mqtt(aa, service=bc.service, factory=bc.factory, clock=bc.clock)
+mqc.publish_children()                                          # sans client : rien, pas d'erreur
+assert aa.children.due() is False
+aa.children.note(TARGET, 0x6C05, 0x6C00, "child", "diagnostic")
+mqc.publish_children()                                          # a publier mais pas de client : reste a publier
+assert aa.children.due()
+assert mqc.start()
+cc = mqc.client
+cc.sent = []
+mqc.publish_children()
+sent = [(tp, json.loads(pl), rt) for tp, pl, rt in cc.sent]
+assert [(tp, rt) for tp, _, rt in sent] == [("thread_anchor/children", True)]
+assert sent[0][1]["count"] == 1 and sent[0][1]["version"] == 1 and sent[0][1]["add_on_version"] == ta.VERSION
+assert sent[0][1]["nodes"][TARGET]["parent"] == "0x6c00" and not aa.children.due()
+cc.sent = []
+mqc.publish_children()
+assert cc.sent == []                                            # rien de neuf : rien d'envoye
+bc.now += ta.CHILDREN_S + 1
+mqc.publish_children()
+assert len(cc.sent) == 1                                        # battement
+cc.sent = []
+aa.children.note(TARGET, 0x5801, 0x5800, "child", "childtable")
+mqc.publish_children()
+assert len(cc.sent) == 1 and json.loads(cc.sent[0][1])["nodes"][TARGET]["parent"] == "0x5800"
+assert "thread_anchor/children" not in json.dumps(aa.public())      # l'etat MQTT n'en est pas alourdi
 
 # par MQTT : demande sur thread_anchor/diag/request, reponse non retenue
 b2 = Broker()

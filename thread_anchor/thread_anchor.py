@@ -34,7 +34,7 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
-VERSION = "0.1.10"
+VERSION = "0.1.11"
 LOG = logging.getLogger("thread_anchor")
 STATE_TOPIC = "thread_anchor/state"
 DISCOVERY = "homeassistant"
@@ -45,6 +45,10 @@ DOCKER_SOCK = "/run/docker.sock"
 MEMORY_FILE = "/data/anchor.json"         # since when the prefix is anchored: kept over a restart
 PARENT_FILE = "/data/parent_history.json"  # the last parent changes of the border router: kept over a restart
 PARENT_HISTORY = 10                        # how many changes of parent are kept
+CHILDREN_FILE = "/data/children.json"      # what is learned about the nodes: kept over a restart
+CHILDREN_TOPIC = "thread_anchor/children"  # the same, published (retained)
+CHILDREN_S = 900                           # published again this often, even unchanged
+CHILDREN_KEEP_S = 7 * 86400                # a node not learned again for this long is dropped
 TICK_S = 5               # s between two looks at the border router container (restart detection)
 HEARTBEAT_S = 300        # the state is published again this often, even unchanged
 MQTT_RETRY_S = 60        # s before the MQTT broker is looked for again when it was not found
@@ -361,15 +365,23 @@ def parse_neighbors(text):
 
 
 def parse_router_rows(text):
-    """`router table` -> {router rloc16: {"lq_in", "lq_out", "path_cost"}}."""
+    """`router table` -> {router rloc16: {"lq_in", "lq_out", "path_cost", "ext"}}."""
     out = {}
     for row in parse_rows(text):
         try:
             out[parse_rloc16(row["RLOC16"])] = {"lq_in": _int(row.get("LQ In")), "lq_out": _int(row.get("LQ Out")),
-                                                "path_cost": _int(row.get("Path Cost"))}
+                                                "path_cost": _int(row.get("Path Cost")),
+                                                "ext": _ext_or_none(row.get("Extended MAC"))}
         except (KeyError, ValueError):
             continue
     return out
+
+
+def _ext_or_none(value):
+    try:
+        return parse_ext(value)
+    except ValueError:
+        return None
 
 
 def parse_counters(text, keys):
@@ -409,9 +421,93 @@ def parse_omrprefix(text):
     return out
 
 
+# ---------------------------------------------------------------- what is learned about the nodes
+class Children:
+    """What the add-on already learns about the nodes of the network, kept and published as it comes
+    (`thread_anchor/children`, retained): extended address -> RLOC16 and parent, with the way it was
+    learned (`source`) and when (`read_at`). No reading of its own: it only keeps what the searches
+    (meshdiag scans, tables of the border router) and the periodic reading of the link give. The parent
+    of a child is its RLOC16 & 0xFC00; a router has none. A `signal` is given only when it was read
+    (`toward: otbr`: measured between that node and the border router, NOT toward its own parent).
+    Kept over a restart in `path`, entries not seen for CHILDREN_KEEP_S dropped."""
+
+    def __init__(self, path=None, clock=time.time):
+        self.path, self.clock = path, clock
+        self.lock = threading.Lock()
+        self.nodes, self.seen = {}, {}      # ext -> entry, ext -> time it was last learned (Unix)
+        self.changed, self.published_at = False, None
+        self._load()
+
+    def _iso(self, ts=None):
+        return datetime.fromtimestamp(self.clock() if ts is None else ts, timezone.utc).astimezone().isoformat(timespec="seconds")
+
+    def _load(self):
+        if not self.path:
+            return
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                kept = json.load(f)
+            for ext, entry in kept["nodes"].items():
+                parse_ext(ext)
+                self.nodes[ext] = {k: entry[k] for k in ("rloc16", "parent", "role", "source", "read_at")}
+                if isinstance(entry.get("signal"), dict):
+                    self.nodes[ext]["signal"] = entry["signal"]
+                self.seen[ext] = float(kept["seen"][ext])
+        except (OSError, ValueError, TypeError, KeyError, AttributeError) as err:
+            LOG.debug("children: %s", err)
+            self.nodes, self.seen = {}, {}
+
+    def note(self, ext, rloc16, parent, role, source, signal=None):
+        """One node learned: `parent` is None for a router. A change of RLOC16, parent or role is a
+        change to publish; a node seen again unchanged only refreshes `read_at`."""
+        try:
+            ext = parse_ext(ext)
+        except ValueError:
+            return
+        entry = {"rloc16": f"0x{rloc16:04x}", "parent": f"0x{parent:04x}" if parent is not None else None,
+                 "role": role, "source": source, "read_at": self._iso()}
+        if signal:
+            entry["signal"] = dict(signal, toward="otbr")
+        with self.lock:
+            old = self.nodes.get(ext)
+            if old is None or (old["rloc16"], old["parent"], old["role"]) != (entry["rloc16"], entry["parent"], role):
+                self.changed = True
+            self.nodes[ext], self.seen[ext] = entry, self.clock()
+
+    def due(self):
+        """To publish: something changed, or CHILDREN_S went by since the last publication."""
+        with self.lock:
+            return bool(self.nodes) and (self.changed or self.published_at is None
+                                         or self.clock() - self.published_at >= CHILDREN_S)
+
+    def public(self):
+        with self.lock:
+            now = self.clock()
+            for ext in [e for e, ts in self.seen.items() if now - ts > CHILDREN_KEEP_S]:
+                self.nodes.pop(ext, None)
+                self.seen.pop(ext, None)
+                self.changed = True
+            nodes = {e: self.nodes[e] for e in sorted(self.nodes)}
+        return {"version": 1, "updated": self._iso(), "count": len(nodes), "nodes": nodes}
+
+    def published(self):
+        """Called once the payload went out: nothing is due until the next change or heartbeat."""
+        with self.lock:
+            self.changed, self.published_at = False, self.clock()
+            if not self.path:
+                return
+            try:
+                tmp = self.path + ".tmp"
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump({"nodes": self.nodes, "seen": self.seen}, f)
+                os.replace(tmp, self.path)
+            except OSError as err:
+                LOG.debug("children: %s", err)
+
+
 # ---------------------------------------------------------------- the anchor
 class Anchor:
-    def __init__(self, options, docker=None, clock=time.time, memory=None, history=None):
+    def __init__(self, options, docker=None, clock=time.time, memory=None, history=None, children=None):
         self.prefix, self.config_error = None, None
         raw = str(options.get("omr_prefix") or "").strip()
         self.preference = str(options.get("omr_preference") or "high").strip().lower()
@@ -450,6 +546,8 @@ class Anchor:
         self.anchored_since = self._remember()
         self.history = history       # file that keeps the changes of parent over a restart of the add-on
         self.last_parent, self.parent_log = self._load_history()
+        self.children = Children(children, clock)     # what is learned about the nodes (published)
+        self.own_rloc16 = None                        # RLOC16 of the border router, when read
 
     def _load_history(self):
         """(last parent seen, [{"at", "from", "to"}] of the last changes) of the earlier runs."""
@@ -704,6 +802,7 @@ class Anchor:
         try:
             own = read(("rloc16",), lambda text: parse_rloc16(_lines(text)[0]))
             link["rloc16"] = f"0x{own:04x}" if own is not None else None
+            self.own_rloc16 = own
             parent = read(("parent",), parse_parent) if self.role == "child" else None
             raw_nb, neighbors = read(("neighbor", "table"), lambda text: (text, parse_neighbors(text))) or (None, None)
             routers = read(("router", "table"), parse_router_rows)
@@ -712,6 +811,7 @@ class Anchor:
         except OtctlNoAnswer:
             LOG.debug("link: no answer, the last reading is kept")
             return
+        self._learn(neighbors, routers, own)
         by_rloc = {n["rloc16"]: n for n in neighbors or []}
         if parent:
             # the parent is looked for by its RLOC16, then by its extended address
@@ -751,6 +851,26 @@ class Anchor:
             self._save_history()
         link["parent_history"] = list(self.parent_log)
         self.link, self.link_at, self.link_role = link, now, self.role
+
+    def _learn(self, neighbors, routers, own):
+        """Keeps what the tables just read say about the nodes (no new reading): the routers the border
+        router hears (with the signal it measures: RSSI of the neighbor table, link quality of the router
+        table, both toward the border router), the routers of its router table, and its own children when
+        it is itself a router (then their parent is it)."""
+        heard = set()
+        for n in neighbors or []:
+            row = (routers or {}).get(n["rloc16"], {})
+            signal = {k: v for k, v in (("rssi_avg", n["rssi_avg"]), ("rssi_last", n["rssi_last"]),
+                                        ("lq_in", row.get("lq_in")), ("lq_out", row.get("lq_out"))) if v is not None}
+            if n["role"] == "R":
+                self.children.note(n["ext"], n["rloc16"], None, "router", "neighbor table", signal)
+                heard.add(n["rloc16"])
+            elif n["role"] == "C" and own is not None and own & 0x3FF == 0:
+                self.children.note(n["ext"], n["rloc16"], own, "child", "neighbor table", signal)
+        for rloc16, row in (routers or {}).items():
+            if rloc16 not in heard and row.get("ext"):
+                signal = {k: row[k] for k in ("lq_in", "lq_out") if row.get(k) is not None}
+                self.children.note(row["ext"], rloc16, None, "router", "router table", signal)
 
     def _fail(self, txt, keep=False):
         if not keep:
@@ -1065,6 +1185,7 @@ class Diag:
                     continue
                 if name == "router table":
                     self.router_rows = rows
+                self._learn_table(name, rows)
                 found = rows.get(ext)
                 if found is not None:
                     self._step(res, name, "found", f"0x{found:04x}", rows=len(rows))
@@ -1075,6 +1196,16 @@ class Diag:
                 if hit:
                     return hit[0], "meshdiag", None, hit[1]
         return None, None, None, None
+
+    def _learn_table(self, name, rows):
+        """Keeps what a table of the border router says ({ext: rloc16}): the routers of the router
+        table; the children of the border router when it is a router (it is then their parent)."""
+        own = self.anchor.own_rloc16
+        for e, rl in rows.items():
+            if name == "router table":
+                self.anchor.children.note(e, rl, None, "router", "router table")
+            elif name == "child table" and own is not None and own & 0x3FF == 0:
+                self.anchor.children.note(e, rl, own, "child", "child table")
 
     def _scan(self, res, ext, hints, mlp):
         """The meshdiag step: (rloc16, parent rloc16 or None) or None. The routers are asked one by
@@ -1165,6 +1296,7 @@ class Diag:
                 continue
             answered += 1
             self.scan_map[diag["ext"]] = (rl, router)
+            self.anchor.children.note(diag["ext"], rl, router, "child", "diagnostic")
             if diag["ext"] == ext:
                 self._mark(router, silent)
                 self._step(res, name, "found", f"0x{rl:04x}", rows=len(rlocs))
@@ -1236,6 +1368,8 @@ class Diag:
         for r in routers:
             if r["ext"]:
                 self.scan_map[r["ext"]] = (r["rloc16"], None)
+                if not fallback:
+                    self.anchor.children.note(r["ext"], r["rloc16"], None, "router", "topology")
         if not fallback:
             self._step(res, "meshdiag topology", "found" if rhit else "not_found",
                        f"0x{rhit['rloc16']:04x}" if rhit else None, rows=len(routers))
@@ -1278,6 +1412,7 @@ class Diag:
             self.done.add(router)
             for e, rl in kids.items():
                 self.scan_map[e] = (rl, router)
+                self.anchor.children.note(e, rl, router, "child", "childtable")
             if ext in kids:
                 self._step(res, name, "found", f"0x{kids[ext]:04x}", rows=len(kids))
                 return kids[ext], router
@@ -1338,6 +1473,9 @@ class Diag:
             return
         res["alive"] = True
         res["ext"], res["addresses"] = diag["ext"], diag["addresses"]
+        if diag["ext"]:       # that node answered at that RLOC16: a child's parent is its RLOC16 & 0xFC00
+            self.anchor.children.note(diag["ext"], rloc16, rloc16 & 0xFC00 if rloc16 & 0x3FF else None,
+                                      "child" if rloc16 & 0x3FF else "router", "diagnostic")
         a = self.anchor
         res["omr_addresses"], res["other_prefix_addresses"] = classify(diag["addresses"], mlp, (a.prefix, a.favored))
         if ext and diag["ext"] and diag["ext"] != ext:
@@ -1467,6 +1605,14 @@ class Mqtt:
                          updated=datetime.now().astimezone().isoformat(timespec="seconds"))
             self.client.publish(STATE_TOPIC, json.dumps(state), retain=True)
 
+    def publish_children(self):
+        """What the add-on has learned about the nodes (`thread_anchor/children`, retained), when it
+        changed or every CHILDREN_S. Nothing is read for it: no radio traffic."""
+        if self.client is not None and self.anchor.children.due():
+            payload = dict(self.anchor.children.public(), add_on_version=VERSION)
+            self.client.publish(CHILDREN_TOPIC, json.dumps(payload), retain=True)
+            self.anchor.children.published()
+
 
 def main():
     global LANG
@@ -1480,7 +1626,7 @@ def main():
     if options.get("debug"):
         logging.getLogger().setLevel(logging.DEBUG)
     LOG.info(t("Thread Anchor {v} starting", v=VERSION))
-    anchor = Anchor(options, memory=MEMORY_FILE, history=PARENT_FILE)
+    anchor = Anchor(options, memory=MEMORY_FILE, history=PARENT_FILE, children=CHILDREN_FILE)
     if anchor.config_error:
         LOG.error(anchor.config_error)
     elif not anchor.enabled:
@@ -1503,6 +1649,10 @@ def main():
             anchor.events = []
             mq.publish()
             last_pub = time.time()
+        try:
+            mq.publish_children()
+        except Exception as err:  # noqa: BLE001 - the state does not depend on it
+            LOG.warning("children: %s", err)
         stop.wait(TICK_S)
     mq.stop()
 

@@ -102,6 +102,37 @@ Fields of `thread_anchor/state` (JSON):
 | `otbr_started_at`, `error` | start of the border router container, last error |
 | `version`, `updated` | version of the add-on, time of this state |
 
+### What the add-on knows about the nodes: `thread_anchor/children`
+
+Published retained, JSON, **no reading of its own and no radio traffic**: it is only what the add-on already
+learns, kept and published as it comes. Nothing new is asked of the network for it.
+
+```json
+{"version": 1, "updated": "2026-11-17T22:10:00+01:00", "count": 3, "add_on_version": "0.1.11",
+ "nodes": {
+   "1a2b3c4d5e6f7081": {"rloc16": "0x6c05", "parent": "0x6c00", "role": "child",
+                        "source": "diagnostic", "read_at": "2026-11-17T22:07:11+01:00"},
+   "5a6b7c8d9e0f1a2b": {"rloc16": "0x3400", "parent": null, "role": "router", "source": "neighbor table",
+                        "read_at": "2026-11-17T22:09:31+01:00",
+                        "signal": {"rssi_avg": -62, "rssi_last": -64, "lq_in": 3, "lq_out": 2, "toward": "otbr"}}}}
+```
+
+- The key is the extended address (lower case), as Mesh Guardian knows the node (`hw_address`).
+- `rloc16`: the RLOC16 when it was learned. A node that attaches again to another parent changes it: use
+  `read_at` to judge how fresh it is. `role`: `child` or `router`. `parent`: the RLOC16 of the router of a
+  child (its RLOC16 & 0xFC00); `null` for a router.
+- `source`, how it was learned: `childtable` (the router listed it in `meshdiag childtable`), `diagnostic`
+  (the node answered a network diagnostic at that RLOC16, or a child of a silent router answered), `topology`
+  (`meshdiag topology`), `router table`, `neighbor table`, `child table` (the tables of the border router).
+- `signal` is only there when it was read, and says `"toward": "otbr"`: it is measured between that node and
+  the **border router** (RSSI of its neighbor table, link quality of its router table), **not** toward the
+  node's own parent. A child learned by a scan has none: show nothing rather than a guess.
+- Published when a node appears or its RLOC16, parent or role changes, and every 15 minutes anyway. Kept over
+  a restart in `/data/children.json`; a node not learned again for 7 days is dropped.
+- Not in it: the children of a router that does not answer `meshdiag childtable` and did not answer a
+  diagnostic; a node never searched for, never seen in a scan and not in the tables. The list grows with the
+  searches (those asked by Mesh Guardian, or any scan of the network: at most one every 5 minutes).
+
 **Mesh Guardian** reads this state: it says in *To do* when the anchor is no
 longer in place, and in its log when it is lost and back.
 

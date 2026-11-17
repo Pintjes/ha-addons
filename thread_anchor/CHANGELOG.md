@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.11] - 2026-11-17
+
+### Added
+
+- `thread_anchor/children` (retained JSON): what the add-on already learns about the nodes, published as it
+  comes, to fill the attachment of the nodes in Mesh Guardian. For each extended address: RLOC16, parent
+  (RLOC16 & 0xFC00 for a child, `null` for a router), role, how it was learned (`source`) and when (`read_at`);
+  a `signal` only when it was read, marked `"toward": "otbr"` (measured toward the border router, not the
+  parent). It comes from the meshdiag scans, the tables of the border router read by the searches, the
+  answers of the diagnostics, and the periodic reading of the link of 0.1.9 (neighbor table, router table).
+  **No scan and no reading more: no extra radio traffic.** Published when it changes and every 15 minutes,
+  kept over a restart (`/data/children.json`), a node not learned again for 7 days dropped.
+- `ext` is now read from the `router table` too (internal: `parse_router_rows`).
+
 ## [0.1.10] - 2026-11-17
 
 ### Fixed
