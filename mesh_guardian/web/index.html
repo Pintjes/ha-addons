@@ -344,6 +344,7 @@ const T = {
     all_ok:"All good", all_ok_sub:"All nodes are available.", n_down:"{n} node unavailable", n_down_pl:"{n} nodes unavailable", n_act:"{n} action advised", n_act_pl:"{n} actions advised",
     down_sub:"{name}, since {t}.", down_sub_pl:"{names}.", act_sub:"See the advice below.",
     f_avail:"Available nodes", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Automatic recovery", on:"on", off:"off",
+    f_cmd:"Matter commands · 1h", f_cmd_tip:"Sent by Mesh Guardian to the nodes, through the Matter Server (cache reads left out)", f_cmd_day:"24h: {n}", f_cmd_since:"Since {t}: {n}",
     f_omr:"Prefix changes · 24h", f_omr_tip:"Times the border routers changed the address prefix of the Thread network: each time every node must take a new address, the ones that do not follow drop",
     anc_title:"OMR prefix", anc_tip:"Address prefix of the Thread network, kept on the border router of Home Assistant by the Thread Anchor add-on",
     anc_prop:"Stable prefix to fix: {p}. It is the one the network uses now: no device changes its address.", anc_btn:"Fix this prefix",
@@ -448,6 +449,7 @@ const T = {
     all_ok:"Tout va bien", all_ok_sub:"Toutes les nodes sont disponibles.", n_down:"{n} node indisponible", n_down_pl:"{n} nodes indisponibles", n_act:"{n} action conseillée", n_act_pl:"{n} actions conseillées",
     down_sub:"{name}, depuis {t}.", down_sub_pl:"{names}.", act_sub:"Voir les conseils ci-dessous.",
     f_avail:"Nodes disponibles", f_brs:"Border routers", f_part:"Partitions", f_leader:"Leader", f_recov:"Récupération auto.", on:"activée", off:"désactivée",
+    f_cmd:"Commandes Matter · 1 h", f_cmd_tip:"Envoyées aux nodes par Mesh Guardian, via le Matter Server (lectures du cache exclues)", f_cmd_day:"24 h : {n}", f_cmd_since:"Depuis {t} : {n}",
     f_omr:"Changements de préfixe · 24 h", f_omr_tip:"Nombre de fois où les border routers ont changé le préfixe d'adresse du réseau Thread : à chaque fois, toutes les nodes doivent prendre une nouvelle adresse, celles qui ne suivent pas décrochent",
     anc_title:"Préfixe OMR", anc_tip:"Préfixe d'adresse du réseau Thread, maintenu sur le border router de Home Assistant par l'add-on Thread Anchor",
     anc_prop:"Préfixe stable à imposer : {p}. C'est celui que le réseau utilise maintenant : aucun appareil ne change d'adresse.", anc_btn:"Imposer ce préfixe",
@@ -701,6 +703,13 @@ function bar(v, v24) {
   const lo = c(Math.min(v, v24)), hi = c(Math.max(v, v24)), up = v >= v24;
   return `<i style="width:${lo}%"></i>${hi - lo >= .1 ? `<b class="${up ? "gain" : "loss"}" style="left:${lo}%;width:${hi - lo}%"></b>` : ""}<u style="left:${c(v24)}%"></u>`;
 }
+// commands sent to the nodes: what they are (last hour, by type), then the 24 h total (or since the start)
+function cmdTip(mc) {
+  const by = Object.entries(mc.hour.by || {}).filter(([c]) => !["get_nodes", "get_node"].includes(c)).map(([c, k]) => `${c} ${k}`);
+  const d = mc.day || {};
+  const tot = d.seconds < 86400 - 60 ? F("f_cmd_since", {t: hm(mc.since), n: d.radio}) : F("f_cmd_day", {n: d.radio});
+  return [L("f_cmd_tip"), by.join(" · "), tot].filter(Boolean).join("\n");
+}
 function renderHero() {
   const n = D.network || {}, rows = D.rows || [], q = D.quality;
   const down = rows.filter(r => !r.available), act = rows.filter(r => r.available && r.advice);
@@ -724,6 +733,8 @@ function renderHero() {
     [`<span title="${esc(L("f_omr_tip"))}">${L("f_omr")}</span>`, n.omr_changes_24h == null ? "—"
       : n.omr_changes_24h >= 2 ? `<span class="st warn">${IC.warn}${n.omr_changes_24h}</span>` : n.omr_changes_24h],
     [L("f_recov"), n.auto_recovery ? L("on") : L("off")]];
+  const mc = D.matter_commands;
+  if (mc && mc.hour) facts.push([`<span title="${esc(cmdTip(mc))}">${L("f_cmd")}</span>`, mc.hour.radio]);
   let score = `<span class="mut" style="font-size:12px">${L("q_wait")}</span>`;
   if (q && q.score != null) {
     const lab = L("q_lab")[q.score >= 95 ? 3 : q.score >= 90 ? 2 : q.score >= 80 ? 1 : 0];

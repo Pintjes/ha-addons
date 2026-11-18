@@ -19,6 +19,7 @@ This module:
 - keeps per-node statistics and publishes everything to MQTT.
 """
 
+import collections
 import ipaddress
 import json
 import logging
@@ -39,6 +40,9 @@ from store import load_json, save_json
 LOG = logging.getLogger("mg.healer")
 SHORT_LIST_S = 600   # s: a list of nodes far shorter than before is taken as the real one after this time
 PING_BUDGET_S = 100  # s: pings of one recovery cycle (a new ping is not started after this time)
+CMD_KEEP_S = 24 * 3600   # commands sent to the Matter Server: counted over this window (in memory only)
+# commands answered from the Matter Server cache: no radio exchange with a node
+CMD_NO_RADIO = frozenset({"get_nodes", "get_node"})
 
 NODES_TEMPLATE = (
     "{% set ns = namespace(out=[]) %}"
@@ -99,6 +103,9 @@ class Healer:
         self.last_result = t("none")
         self.ha_ok = False
         self.matter_ok = None
+        self.cmd_lock = threading.Lock()
+        self.cmd_log = collections.deque()   # (time, command) of every command sent, CMD_KEEP_S
+        self.cmd_since = time.time()         # counting starts with the add-on (memory only)
         self.state_file = "/data/healer_state.json"
         self.rebuild_history = bool(options.get("rebuild_history", True))
         self.ping_all_interval = int(options.get("ping_all_interval", 60)) * 60
@@ -560,6 +567,7 @@ class Healer:
                 mid = uuid.uuid4().hex[:8]
                 ws.send(json.dumps({"message_id": mid, "command": command, "args": args or {}}))
                 sent = time.monotonic()
+                self._count_command(command)
                 deadline = time.time() + timeout
                 while time.time() < deadline:
                     msg = json.loads(ws.recv())
@@ -581,6 +589,43 @@ class Healer:
                     pass
         self.matter_ok = False
         raise ConnectionError(t("Matter Server unreachable ({err})", err=last_err))
+
+    def _count_command(self, command, now=None):
+        """One command sent to the Matter Server (answered or not). Counting only: no traffic."""
+        now = time.time() if now is None else now
+        with self.cmd_lock:
+            self.cmd_log.append((now, str(command)))
+            while self.cmd_log and self.cmd_log[0][0] <= now - CMD_KEEP_S:
+                self.cmd_log.popleft()
+
+    def command_counts(self, now=None):
+        """Commands sent by this add-on to the Matter Server, by type: last hour (rolling), last
+        24 h, and each of the last 24 clock hours. "radio" leaves out the commands answered from
+        the cache of the Matter Server (get_nodes…). Since the start of the add-on at most."""
+        now = time.time() if now is None else now
+        with self.cmd_lock:
+            log = [(ts, c) for ts, c in self.cmd_log if ts > now - CMD_KEEP_S]
+            since = self.cmd_since
+
+        def count(items):
+            out = {}
+            for _, c in items:
+                out[c] = out.get(c, 0) + 1
+            return dict(sorted(out.items(), key=lambda kv: (-kv[1], kv[0])))
+
+        def radio(by):
+            return sum(n for c, n in by.items() if c not in CMD_NO_RADIO)
+
+        hour = count([x for x in log if x[0] > now - 3600])
+        day = count(log)
+        buckets = {}
+        for ts, c in log:
+            buckets.setdefault(int(ts // 3600 * 3600), []).append((ts, c))
+        hours = [{"t": h, "total": len(v), "radio": radio(count(v)), "by": count(v)} for h, v in sorted(buckets.items())]
+        return {"since": since, "hour": {"total": sum(hour.values()), "radio": radio(hour), "by": hour},
+                "day": {"total": sum(day.values()), "radio": radio(day), "by": day,
+                        "seconds": round(min(CMD_KEEP_S, now - since))},
+                "hours": hours}
 
     def ping(self, node_hex):
         with self.lock:

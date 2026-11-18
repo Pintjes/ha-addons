@@ -1066,7 +1066,9 @@ class NodeTable:
                     "live": self.live.connected, "live_since": self.live.since,
                     # announced on the fabric but unknown to the Matter Server: what their announcement says
                     "unknown_nodes": self.w.unknown_nodes() if hasattr(self.w, "unknown_nodes") else [],
-                    "reading": self.quality.reading() if getattr(self, "quality", None) else None})
+                    "reading": self.quality.reading() if getattr(self, "quality", None) else None,
+                    # commands this add-on sent to the Matter Server, by type (counted, nothing sent for it)
+                    "matter_commands": self.h.command_counts() if hasattr(self.h, "command_counts") else None})
         return out
 
     def _ping_silent(self, rows):

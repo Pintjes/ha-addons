@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.40.2] - 2026-11-19
+
+### Added
+
+- Count of the commands Mesh Guardian sends to the Matter Server, by type: last hour, last 24 h and hour by hour, in `/api/table` (`matter_commands`) and on the page ("Matter commands · 1h", details in its tooltip). Counting only, no traffic added; kept in memory, from the start of the add-on. Reads from the cache of the Matter Server (`get_nodes`, `get_node`) are counted apart from the commands that reach a node.
+
 ## [2.40.1] - 2026-11-17
 
 ### Fixed
