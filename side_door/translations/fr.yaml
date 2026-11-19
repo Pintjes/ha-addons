@@ -9,6 +9,9 @@ configuration:
   rewrite_prefixes:
     name: "Autres textes à réécrire"
     description: "Avancé. Texte placé juste avant un chemin commençant par / que l'add-on ne réécrit pas de lui-même, par exemple data-url=\"."
+  auto_settings:
+    name: "Détection automatique"
+    description: "À chaque démarrage, l'add-on regarde chaque application (quelques requêtes GET simples, sans cookie ni connexion) et trouve la page de départ quand la racine de l'application y redirige. apply (par défaut) : la page trouvée est utilisée, sauf si « start » est renseigné. report : seulement indiquée dans l'onglet Journal. off : aucune requête. hide_proxy, headers et verify_tls ne sont jamais réglés automatiquement, seulement suggérés dans l'onglet Journal."
   max_body_mb:
     name: "Envoi maximal (Mo)"
     description: "Taille maximale d'un fichier envoyé à l'application."

@@ -52,6 +52,7 @@ computer that runs the app, and the rules between your networks (VLANs).
 | `target_url` | empty | For a single app: the address Home Assistant uses to reach it, for example `http://192.168.1.10:8000`. A path is accepted (`http://192.168.1.10/app/`). |
 | `apps` | empty | A list of apps, each with a `name`, a `url` and its own settings (see below). When filled, `target_url` is ignored. |
 | `rewrite_prefixes` | empty | Advanced: more texts after which a path is rewritten. |
+| `auto_settings` | `apply` | Automatic detection of the start page (see below): `apply`, `report` (only said in the Log tab) or `off` (no request). |
 | `max_body_mb` | `100` | Largest upload, in MB. |
 | `timeout` | `120` | Seconds to wait for an answer of the app. A WebSocket with no traffic for that long is closed. |
 
@@ -89,6 +90,45 @@ Each entry can also have, only when the app needs it:
 | `verify_tls` | `auto` | The certificate of an `https://` app (see *Security*). |
 | `headers` | empty | Headers sent with every request (see below). |
 | `hidden` | off | The app is put aside (see below). |
+
+### Automatic detection
+
+At each start (and each restart), the add-on looks at every app with a few
+plain `GET` requests: no cookie, no login, none of your `headers`. It sends at
+most 4 requests per app, waits 5 seconds at most, and writes what it learnt in
+`/data/detected.json` (inside the add-on).
+
+- **`start`** is found, and used, when the root of the app redirects to a page
+  of the app. It is only applied when every redirection stays on the app and
+  sets no cookie, the page answers normally, its address has nothing of a login
+  (`login`, `signin`, `auth`, `sso`, `oauth`, `session`, `account`) and the
+  page has no password field. Otherwise nothing is applied and the Log tab says
+  why. A `start` you write is never replaced. If the app does not answer at
+  start, the page found last time is kept. In the log, `(detected)` marks it.
+- **`hide_proxy`**, **`headers`** and **`verify_tls`** are never set
+  automatically; the Log tab only suggests them: when the app answers
+  differently to a request that looks relayed (`hide_proxy`: it would open the
+  app without login to every Home Assistant administrator), when it answers 401
+  or 403 to a plain request (`headers`), or when its certificate does not pass
+  (`verify_tls`).
+- With `auto_settings: report` the Log tab says what was found and nothing is
+  applied; with `off` no request is sent.
+- The very first time the detection runs (no `/data/detected.json` yet, for
+  example right after updating to this version), `apply` only says what it
+  found and applies nothing: read the Log tab, then restart the add-on to
+  apply it.
+
+What detection cannot do:
+
+- An app that shows its login without redirecting, and without a password
+  field in the first 256 KB of the page (an app that draws everything in
+  JavaScript), is not seen as a login: a `start` could then be wrong. Write
+  `start` yourself, or set `auto_settings: off`.
+- A redirection made in JavaScript, not by the server, is not followed.
+- Why Plex needs `start: web/index.html` is not established: detection finds
+  it only if the root of Plex redirects to it. If the Log tab does not say so,
+  keep writing it.
+- An app that counts every request sees 1 to 4 more at each start.
 
 A target set with `target_url` takes the default settings. Up to version
 1.10, `rewrite_paths`, `inject_script` and `hide_proxy` were options of the

@@ -12,18 +12,23 @@ tabs, each app under its own path (/app/<id>/).
 nginx relays the requests; njs/side_door.js changes the answers (addresses of
 the app moved under the ingress path, cookies in plain HTTP).
 """
+import concurrent.futures
 import hashlib
 import html
+import http.client
 import ipaddress
 import json
 import os
 import re
 import signal
+import ssl
 import subprocess
 import sys
-from urllib.parse import urlsplit
+import time
+from urllib.parse import urljoin, urlsplit
 
 OPTIONS = "/data/options.json"
+DETECTED = "/data/detected.json"
 CONF = "/tmp/side_door.conf"
 SHELL_DIR = "/tmp/side_door_web"
 NJS_SOURCE = "/njs/side_door.js"
@@ -550,6 +555,12 @@ def flag(entry, key, default):
     return default if value is None else bool(value)
 
 
+def valid_start(start):
+    """A start page the add-on accepts: only letters, digits and ._~/#?=&%!-,
+    and no way out of the app."""
+    return bool(re.fullmatch(r"[A-Za-z0-9._~/#?=&%!-]*", start)) and ".." not in start
+
+
 def read_apps(options):
     """Valid apps of the options: a list of dicts name, id, target, origin,
     host, base, and the settings of the app. 'apps' wins over the single
@@ -579,7 +590,7 @@ def read_apps(options):
             continue
         name = name[:40] or host
         start = start.lstrip("/")
-        if not re.fullmatch(r"[A-Za-z0-9._~/#?=&%!-]*", start) or ".." in start:
+        if not valid_start(start):
             log(f"app {label!r}: start page {start!r} ignored (only letters, digits and ._~/#?=&%!- are accepted)")
             start = ""
         verify_tls = str(entry.get("verify_tls") or "auto").lower()
@@ -595,13 +606,28 @@ def read_apps(options):
                      "rewrite": flag(entry, "rewrite", True), "inject": flag(entry, "inject_script", True),
                      "hide_proxy": flag(entry, "hide_proxy", False), "verify_tls": verify_tls,
                      # What the user wrote: the others are the add-on's own choice
-                     "set": [key for key in ("start", "headers", "rewrite", "inject_script", "hide_proxy",
+                     # (or, for the ones in "detected", what it found out: see detect)
+                     "detected": [],
+                     "set":[key for key in ("start", "headers", "rewrite", "inject_script", "hide_proxy",
                                              "verify_tls") if entry.get(key) not in (None, "")]})
     return apps
 
 
 # The certificates of the public authorities (package ca-certificates)
 AUTHORITIES = "/etc/ssl/certs/ca-certificates.crt"
+
+
+def tls_verified(app):
+    """True when the certificate of an https app is checked ("auto": when the
+    app is given by a name, not by an IP address)."""
+    mode = app["verify_tls"]
+    if mode == "auto":
+        try:
+            ipaddress.ip_address(urlsplit(app["origin"]).hostname)
+            mode = "off"
+        except ValueError:
+            mode = "on"
+    return mode == "on"
 
 
 def tls_rules(app):
@@ -611,14 +637,7 @@ def tls_rules(app):
     the local network, most often with a certificate it signed itself)."""
     if not app["origin"].startswith("https://"):
         return ""
-    mode = app["verify_tls"]
-    if mode == "auto":
-        try:
-            ipaddress.ip_address(urlsplit(app["origin"]).hostname)
-            mode = "off"
-        except ValueError:
-            mode = "on"
-    if mode == "off":
+    if not tls_verified(app):
         return "            proxy_ssl_verify off;\n"
     return ("            proxy_ssl_verify on;\n"
             f"            proxy_ssl_trusted_certificate {AUTHORITIES};\n"
@@ -691,10 +710,12 @@ def by_name(origin):
         return True
 
 
-def build(options, mark="sd0", dns=None):
+def build(options, mark="sd0", dns=None, probe=None):
     """Returns (nginx configuration, apps for njs/side_door.js, tabs page or
     None, message for the log). 'dns': the DNS servers (read from the system
-    when not given)."""
+    when not given). 'probe': what looks at the apps to find out their start
+    page (see detect); it gets the apps and returns ({address: start page},
+    lines for the log)."""
     if dns is None:
         dns = name_servers()
     apps = read_apps(options)
@@ -703,6 +724,11 @@ def build(options, mark="sd0", dns=None):
         head = HEAD % {"port": PORT, "web": WEB, "njs": NJS, "mark": mark, "maps": ""}
         why = "every app is hidden" if apps else "no valid app"
         return head + NOT_SET, {}, None, f"{why}: set one in the add-on configuration"
+    found, notes = probe(shown) if probe else ({}, [])
+    for app in shown:
+        if found.get(app["target"]) and not app["start"]:
+            app["start"] = found[app["target"]]
+            app["detected"].append("start")
     # Tabs as soon as the list has two apps, hidden ones included: hiding an
     # app does not move the others (they would ask for a new login)
     several = len(apps) > 1
@@ -759,6 +785,8 @@ def build(options, mark="sd0", dns=None):
     message = f"{len(shown)} app(s): {listed}"
     for app in shown:
         message += f"\n[side_door] {app['name']}: {in_effect(app)}"
+    for note in notes:
+        message += f"\n[side_door] {note}"
     return conf, script_apps, shell_page(shown) if several else None, message
 
 
@@ -781,7 +809,9 @@ def in_effect(app):
     (written in the configuration) or "default" (the add-on's own choice).
     The values of 'headers' are secrets: only their names are said."""
     def origin(key):
-        return "set" if key in app["set"] else "default"
+        if key in app["set"]:
+            return "set"
+        return "detected" if key in app["detected"] else "default"
 
     def onoff(value):
         return "on" if value else "off"
@@ -791,12 +821,210 @@ def in_effect(app):
              f"inject_script {onoff(app['inject'])} ({origin('inject_script')})",
              f"hide_proxy {onoff(app['hide_proxy'])} ({origin('hide_proxy')})"]
     if app["origin"].startswith("https://"):
-        checked = "proxy_ssl_verify on;" in tls_rules(app)
-        parts.append(f"verify_tls {app['verify_tls']} -> certificate {'checked' if checked else 'not checked'} "
+        parts.append(f"verify_tls {app['verify_tls']} -> certificate {'checked' if tls_verified(app) else 'not checked'} "
                      f"({origin('verify_tls')})")
     names = ", ".join(name for name, _ in app["headers"])
     parts.append(f"headers {names or '-'} ({origin('headers')})")
     return "; ".join(parts)
+
+
+# Detection of the settings of an app (DOCS.md, "Automatic detection"). Each
+# app is looked at once, at the start, with a few plain GET requests: no cookie,
+# no identification, no header of the configuration.
+MODES = ("off", "report", "apply")
+PROBE_SECONDS = 5
+PROBE_BYTES = 256 * 1024
+REDIRECTIONS = 3
+REDIRECTION_CODES = (301, 302, 303, 307, 308)
+# What a login looks like: in the address of the page, or as a password field
+LOGIN_ADDRESS = re.compile(r"log-?in|log-?on|sign-?in|auth|sso|oauth|session|account", re.I)
+PASSWORD_FIELD = re.compile(rb"""type\s*=\s*["']?password""", re.I)
+# The address of Home Assistant for the app, as when it relays a request
+RELAYED = {"X-Forwarded-For": "172.30.32.2"}
+
+
+class Failed(Exception):
+    """An app could not be looked at (off, too slow, error): nothing is learnt."""
+
+
+def auto_mode(options):
+    """off, report or apply (the default)."""
+    mode = str(options.get("auto_settings") or "apply").lower()
+    if mode not in MODES:
+        log(f"auto_settings {mode!r} ignored (off, report or apply)")
+        return "apply"
+    return mode
+
+
+def fetch(app, path, deadline, headers=None):
+    """One GET of an app. Returns (status, Location, sets a cookie, start of
+    the body) or raises Failed."""
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise Failed("no answer in time")
+    parts = urlsplit(app["origin"])
+    sent = {"Host": parts.netloc, "Accept": "text/html,*/*;q=0.8", "Accept-Encoding": "identity",
+            "User-Agent": "Side-Door"}
+    sent.update(headers or {})
+    try:
+        if parts.scheme == "https":
+            cafile = AUTHORITIES if os.path.exists(AUTHORITIES) else None
+            context = ssl.create_default_context(cafile=cafile)
+            if not tls_verified(app):
+                context.check_hostname = False
+                context.verify_mode = ssl.CERT_NONE
+            conn = http.client.HTTPSConnection(parts.hostname, parts.port, timeout=left, context=context)
+        else:
+            conn = http.client.HTTPConnection(parts.hostname, parts.port, timeout=left)
+        try:
+            conn.request("GET", path, headers=sent)
+            reply = conn.getresponse()
+            body = reply.read(PROBE_BYTES)
+            return reply.status, reply.getheader("Location") or "", bool(reply.getheader("Set-Cookie")), body
+        finally:
+            conn.close()
+    except ssl.SSLCertVerificationError as error:
+        raise Failed("certificate verify failed") from error
+    except (OSError, http.client.HTTPException) as error:
+        raise Failed(type(error).__name__) from error
+
+
+def probe_app(app, get=fetch):
+    """What one app tells about its start page. Returns {"start": page or "",
+    "why": why none was kept, "hints": [what the user may set]}; raises Failed.
+    A start page is kept only when the root of the app leads to it by
+    redirections that stay on the app and set no cookie, and when it is not a
+    login (unknown to the add-on when the app shows it without redirecting)."""
+    deadline = time.monotonic() + PROBE_SECONDS
+    base, origin = app["base"], app["origin"]
+    path, hops, first = base, 0, None
+    result = {"start": "", "why": "", "hints": []}
+    while True:
+        status, location, cookie, body = get(app, path, deadline)
+        first = first or (status, location)
+        if status >= 500:
+            raise Failed(f"answers {status}")
+        if status not in REDIRECTION_CODES or not location:
+            break
+        if cookie:
+            result["why"] = "a redirection sets a cookie"
+            break
+        if hops == REDIRECTIONS:
+            result["why"] = f"more than {REDIRECTIONS} redirections"
+            break
+        target = urlsplit(urljoin(origin + path, location))
+        if f"{target.scheme}://{target.netloc}".lower() != origin.lower():
+            result["why"] = "the address leads to another site"
+            break
+        path = (target.path or "/") + (f"?{target.query}" if target.query else "")
+        hops += 1
+    if first[0] in (401, 403) and "headers" not in app["set"]:
+        result["hints"].append(f"answers {first[0]} to a plain request: if a gateway guards it, "
+                               "'headers' can carry the token it lets in (never set automatically)")
+    if not result["why"]:
+        result["why"] = leads_to(result, base, path, status, body)
+    if "hide_proxy" not in app["set"] and not app["hide_proxy"]:
+        try:
+            again = get(app, base, deadline, RELAYED)
+            if again[:2] != first:
+                result["hints"].append(f"answers differently (status {first[0]}, then {again[0]}) when the request "
+                                       "looks relayed: if it asks for a login only through Side Door, set "
+                                       "hide_proxy (never set automatically: it opens the app without login to "
+                                       "every Home Assistant administrator)")
+        except Failed:
+            pass
+    return result
+
+
+def leads_to(result, base, path, status, body):
+    """Sets result["start"] when the page reached from the root is a start
+    page; returns what stopped it ("" when nothing has to be said)."""
+    if status in (401, 403):
+        return f"answers {status}"
+    if not 200 <= status < 300:
+        return f"answers {status}"
+    plain = path.split("?")[0]
+    if plain == base:
+        return ""
+    if not plain.startswith(base):
+        return "the page is outside the app address"
+    start = path[len(base):]
+    if LOGIN_ADDRESS.search(plain):
+        return "the page looks like a login (its address)"
+    if PASSWORD_FIELD.search(body):
+        return "the page has a password field"
+    if not valid_start(start):
+        return "the address has a character that is not accepted"
+    result["start"] = start
+    return ""
+
+
+def load_detected(path):
+    """What the last start found, {address of the app: start page}."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {key: value for key, value in data.items() if isinstance(key, str) and isinstance(value, str)}
+
+
+def save_detected(path, data):
+    try:
+        with open(path + ".tmp", "w", encoding="utf-8") as handle:
+            json.dump(data, handle, sort_keys=True)
+        os.replace(path + ".tmp", path)
+    except OSError as error:
+        log(f"detection: {path} not written ({error})")
+
+
+def detect(apps, mode, get=fetch, path=DETECTED):
+    """Looks at the apps whose start page is not written in the configuration.
+    Returns ({address of the app: start page to apply}, lines for the log).
+    Only the start page is ever applied, and only in mode "apply". An app that
+    cannot be looked at keeps the page found last time; a value written in the
+    configuration is never replaced."""
+    if mode == "off" or not apps:
+        return {}, []
+    # The very first time (no file of what was found yet), nothing is applied:
+    # the user sees in the log what would be, and the next start applies it
+    first = mode == "apply" and not os.path.exists(path)
+    applying = mode == "apply" and not first
+    not_applied = "first start of the detection: restart to apply it" if first else "auto_settings: report"
+    saved = load_detected(path)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(apps)) as pool:
+        jobs = [(app, pool.submit(probe_app, app, get)) for app in apps]
+    keep, notes = {}, []
+    for app, job in jobs:
+        key, name, written = app["target"], app["name"], "start" in app["set"]
+        try:
+            result = job.result()
+        except Exception as error:  # an app that cannot be looked at must not stop the add-on
+            old = saved.get(key, "")
+            if str(error) == "certificate verify failed" and "verify_tls" not in app["set"]:
+                notes.append(f"{name}: certificate verify failed: verify_tls off lets it in if you trust the network "
+                             "(never set automatically)")
+            if not written:
+                keep[key] = old
+                notes.append(f"{name}: not looked at ({error})" + (f", start page kept as last time: {old}" if old else ""))
+            continue
+        notes += [f"{name}: {hint}" for hint in result["hints"]]
+        if written:
+            continue
+        keep[key] = result["start"]
+        if result["start"] and applying:
+            notes.append(f"{name}: start page {result['start']} found (the address redirects there) and applied")
+        elif result["start"]:
+            notes.append(f"{name}: start page {result['start']} found, not applied ({not_applied})")
+        elif result["why"]:
+            notes.append(f"{name}: no start page applied ({result['why']})")
+    save_detected(path, keep)
+    if first:
+        notes.insert(0, "detection: first start, nothing is applied, only said below; the next start applies it")
+    found = {key: start for key, start in keep.items() if start and valid_start(start)} if applying else {}
+    return found, notes
 
 
 def script(source, script_apps, mark="sd0"):
@@ -816,7 +1044,15 @@ def make_mark(options, source):
     return "sd" + hashlib.sha1(seed).hexdigest()[:10]
 
 
+def leave(signum, frame):
+    os._exit(0)
+
+
 def main():
+    # Looking at the apps may take a few seconds: a stop asked meanwhile must
+    # not be ignored (run_nginx takes over once nginx runs)
+    for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGQUIT):
+        signal.signal(signum, leave)
     try:
         with open(OPTIONS, encoding="utf-8") as handle:
             options = json.load(handle)
@@ -826,7 +1062,8 @@ def main():
     with open(NJS_SOURCE, encoding="utf-8") as handle:
         source = handle.read()
     mark = make_mark(options, source)
-    conf, script_apps, shell, message = build(options, mark)
+    mode = auto_mode(options)
+    conf, script_apps, shell, message = build(options, mark, probe=lambda apps: detect(apps, mode))
     with open(CONF, "w", encoding="utf-8") as handle:
         handle.write(conf)
     with open(NJS, "w", encoding="utf-8") as handle:

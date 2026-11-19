@@ -4,9 +4,14 @@
 Run from the repository: python -m unittest discover -s side_door/tests -p "test_build.py"
 """
 import contextlib
+import http.server
 import importlib.util
 import io
+import json
+import os
 import pathlib
+import tempfile
+import threading
 import unittest
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -233,6 +238,208 @@ class Build(unittest.TestCase):
         self.assertIn('var APPS = {"1"', out)
         self.assertIn("var MARK = 'sdtest';", out)
         self.assertNotEqual(run.make_mark({"a": 1}, source), run.make_mark({"a": 2}, source))
+
+
+class Site:
+    """A small web server of the tests. 'routes': path -> (status, headers, body), or a function of
+    the request returning that. 'seen': (path, X-Forwarded-For) of each request."""
+
+    def __init__(self, routes):
+        site = self
+        self.seen = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                path = self.path.split("?")[0]
+                site.seen.append((path, self.headers.get("X-Forwarded-For")))
+                route = routes.get(path, (404, [], b""))
+                status, headers, body = route(self) if callable(route) else route
+                self.send_response(status)
+                for name, value in headers:
+                    self.send_header(name, value)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
+        threading.Thread(target=self.server.serve_forever, args=(0.01,), daemon=True).start()
+
+    def close(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+
+def to(place):
+    return (302, [("Location", place)], b"")
+
+
+PAGE = (200, [("Content-Type", "text/html")], b"<html><body>hello</body></html>")
+
+
+class Detect(unittest.TestCase):
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.file = os.path.join(folder.name, "detected.json")
+        # Not the first start of the detection (see test_the_first_start_only_tells)
+        with open(self.file, "w", encoding="utf-8") as handle:
+            handle.write("{}")
+
+    def site(self, routes):
+        site = Site(routes)
+        self.addCleanup(site.close)
+        return site
+
+    def build(self, options, mode="apply"):
+        said = io.StringIO()
+        with contextlib.redirect_stdout(said):
+            conf, apps, shell, message = run.build(
+                options, "sdtest", [], probe=lambda found: run.detect(found, mode, path=self.file))
+        return conf, shell, message
+
+    def test_a_root_that_leads_to_a_page_gives_the_start_page(self):
+        site = self.site({"/": to("/web/index.html"), "/web/index.html": PAGE})
+        conf, _, message = self.build({"apps": [{"name": "P", "url": site.url}]})
+        self.assertIn("return 302 $http_x_ingress_path/web/index.html;", conf)
+        self.assertIn("start web/index.html (detected)", message)
+        self.assertIn("P: start page web/index.html found (the address redirects there) and applied", message)
+
+    def test_with_several_apps_the_tab_opens_on_the_start_page(self):
+        site = self.site({"/": to("/web/index.html"), "/web/index.html": PAGE})
+        other = self.site({"/": PAGE})
+        _, shell, _ = self.build({"apps": [{"name": "P", "url": site.url}, {"name": "Q", "url": other.url}]})
+        self.assertIn('data-start="web/index.html"', shell)
+
+    def test_a_start_page_is_kept_only_when_it_is_not_a_login_or_a_leak(self):
+        cases = {
+            "login address": ({"/": to("/accounts/login/"), "/accounts/login/": PAGE}, "looks like a login"),
+            "another site": ({"/": to("http://other.example/x")}, "another site"),
+            "cookie": ({"/": (302, [("Location", "/home"), ("Set-Cookie", "s=1")], b""), "/home": PAGE}, "cookie"),
+            "password field": ({"/": to("/home"), "/home": (200, [], b'<input type="password">')}, "password field"),
+            "refused": ({"/": (401, [], b"")}, "answers 401"),
+            "loop": ({"/": to("/a"), "/a": to("/b"), "/b": to("/c"), "/c": to("/d"), "/d": PAGE}, "redirections"),
+            "no redirection": ({"/": PAGE}, ""),
+        }
+        for label, (routes, why) in cases.items():
+            with self.subTest(label):
+                site = self.site(routes)
+                conf, _, message = self.build({"apps": [{"name": "P", "url": site.url}]})
+                self.assertNotIn("return 302 $http_x_ingress_path/", conf)
+                self.assertIn("start - (default)", message)
+                self.assertIn(why, message)
+
+    def test_an_app_that_does_not_answer_keeps_what_was_found(self):
+        routes = {"/": to("/web/index.html"), "/web/index.html": PAGE}
+        site = self.site(routes)
+        entry = {"name": "P", "url": site.url}
+        self.build({"apps": [entry]})
+        site.close()
+        conf, _, message = self.build({"apps": [entry]})
+        self.assertIn("return 302 $http_x_ingress_path/web/index.html;", conf)
+        self.assertIn("not looked at", message)
+        self.assertIn("kept as last time: web/index.html", message)
+
+    def test_an_app_that_never_answered_gets_nothing(self):
+        conf, _, message = self.build({"apps": [{"name": "P", "url": "http://127.0.0.1:9"}]})
+        self.assertNotIn("return 302 $http_x_ingress_path/", conf)
+        self.assertIn("P: not looked at", message)
+
+    def test_a_server_error_learns_nothing(self):
+        site = self.site({"/": (503, [], b"")})
+        self.build({"apps": [{"name": "P", "url": site.url}]})
+        with open(self.file, encoding="utf-8") as handle:
+            self.assertEqual(json.load(handle), {site.url + "/": ""})
+        self.assertIn("answers 503", self.build({"apps": [{"name": "P", "url": site.url}]})[2])
+
+    def test_a_start_page_written_by_hand_is_never_replaced(self):
+        site = self.site({"/": to("/other"), "/other": PAGE})
+        conf, _, message = self.build({"apps": [{"name": "P", "url": site.url, "start": "mine.html"}]})
+        self.assertIn("return 302 $http_x_ingress_path/mine.html;", conf)
+        self.assertNotIn("/other", conf)
+        self.assertIn("start mine.html (set)", message)
+
+    def test_apps_with_every_setting_written_keep_the_same_configuration(self):
+        site = self.site({"/": to("/web/index.html"), "/web/index.html": PAGE})
+        # An app behind a login: its root leads to the login page
+        gate = self.site({"/": to("/login/"), "/login/": PAGE})
+        options = {"apps": [
+            {"name": "Plex", "url": site.url, "start": "web/index.html", "hide_proxy": True,
+             "rewrite": True, "inject_script": True, "verify_tls": "auto"},
+            {"name": "Immo", "url": gate.url}]}
+        off = build(dict(options, auto_settings="off"))[0]
+        self.assertEqual(self.build(options)[0], off)
+
+    def test_the_first_start_only_tells(self):
+        site = self.site({"/": to("/web/index.html"), "/web/index.html": PAGE})
+        options = {"apps": [{"name": "P", "url": site.url}]}
+        os.remove(self.file)
+        conf, _, message = self.build(options)
+        self.assertNotIn("return 302 $http_x_ingress_path/", conf)
+        self.assertIn("detection: first start, nothing is applied", message)
+        self.assertIn("start page web/index.html found, not applied (first start of the detection", message)
+        self.assertIn("start - (default)", message)
+        # What was found is kept: the next start applies it
+        conf, _, message = self.build(options)
+        self.assertIn("return 302 $http_x_ingress_path/web/index.html;", conf)
+        self.assertNotIn("first start", message)
+
+    def test_a_start_in_report_mode_is_not_a_first_start_for_the_next_apply(self):
+        site = self.site({"/": to("/web/index.html"), "/web/index.html": PAGE})
+        os.remove(self.file)
+        self.build({"apps": [{"name": "P", "url": site.url}]}, "report")
+        conf, _, _ = self.build({"apps": [{"name": "P", "url": site.url}]})
+        self.assertIn("return 302 $http_x_ingress_path/web/index.html;", conf)
+
+    def test_report_mode_only_tells(self):
+        site = self.site({"/": to("/web/index.html"), "/web/index.html": PAGE})
+        conf, _, message = self.build({"apps": [{"name": "P", "url": site.url}]}, "report")
+        self.assertNotIn("return 302 $http_x_ingress_path/", conf)
+        self.assertIn("found, not applied (auto_settings: report)", message)
+
+    def test_off_mode_sends_no_request(self):
+        site = self.site({"/": to("/web/index.html")})
+        os.remove(self.file)
+        said = io.StringIO()
+        with contextlib.redirect_stdout(said):
+            found, notes = run.detect(run.read_apps({"apps": [{"name": "P", "url": site.url}]}), "off", path=self.file)
+        self.assertEqual((found, notes, site.seen), ({}, [], []))
+        self.assertFalse(os.path.exists(self.file))
+
+    def test_requests_are_plain_gets_without_the_headers_of_the_configuration(self):
+        site = self.site({"/": PAGE})
+        self.build({"apps": [{"name": "P", "url": site.url, "headers": "X-Token: abc", "hide_proxy": True}]})
+        self.assertEqual(site.seen, [("/", None)])
+
+    def test_a_different_answer_to_a_relayed_request_is_suggested_not_applied(self):
+        def root(request):
+            return (401, [], b"") if request.headers.get("X-Forwarded-For") else PAGE
+        site = self.site({"/": root})
+        conf, _, message = self.build({"apps": [{"name": "P", "url": site.url}]})
+        self.assertIn("answers differently (status 200, then 401)", message)
+        self.assertIn("hide_proxy", message)
+        self.assertNotIn('proxy_set_header X-Forwarded-For "";', conf)
+        self.assertIn("hide_proxy off (default)", message)
+        # Said once it is set
+        _, _, message = self.build({"apps": [{"name": "P", "url": site.url, "hide_proxy": False}]})
+        self.assertNotIn("answers differently", message)
+
+    def test_a_gateway_answer_suggests_headers_and_changes_nothing(self):
+        site = self.site({"/": (403, [], b"")})
+        conf, _, message = self.build({"apps": [{"name": "P", "url": site.url}]})
+        self.assertIn("answers 403 to a plain request", message)
+        self.assertIn("headers - (default)", message)
+        self.assertEqual(conf, build({"apps": [{"name": "P", "url": site.url}]})[0])
+
+    def test_the_mode_of_auto_settings(self):
+        self.assertEqual(run.auto_mode({}), "apply")
+        self.assertEqual(run.auto_mode({"auto_settings": "report"}), "report")
+        self.assertEqual(run.auto_mode({"auto_settings": "off"}), "off")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(run.auto_mode({"auto_settings": "x"}), "apply")
 
 
 if __name__ == "__main__":

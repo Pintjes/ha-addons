@@ -9,6 +9,9 @@ configuration:
   rewrite_prefixes:
     name: More texts to rewrite
     description: "Advanced. Text found right before a path starting with / that the add-on does not rewrite by itself, for example data-url=\"."
+  auto_settings:
+    name: Automatic detection
+    description: "At each start, the add-on looks at each app (a few plain GET requests, no cookie, no login) and finds the start page when the root of the app redirects to it. apply (default): the start page found is used, unless 'start' is set. report: only said in the Log tab. off: no request. hide_proxy, headers and verify_tls are never set automatically, only suggested in the Log tab."
   max_body_mb:
     name: Largest upload (MB)
     description: Largest file that can be sent to the app.

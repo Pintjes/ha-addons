@@ -4,6 +4,29 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.6.0] - 2026-11-19
+
+### Added
+
+- Automatic detection (option `auto_settings`: `apply` by default, `report`,
+  `off`). At each start the add-on looks at each app with a few plain GET
+  requests (no cookie, no login, no `headers`) and finds its start page when
+  the root of the app redirects to one. It is applied only when every
+  redirection stays on the app and sets no cookie, the page is not a login
+  (address, password field) and answers normally; a `start` you write is
+  never replaced; an app that does not answer keeps the page found last time
+  (`/data/detected.json`). The log says what was found (`(detected)`) and why
+  nothing was applied.
+- The first time the detection runs (no `/data/detected.json` yet), `apply`
+  only says what it found and applies nothing; the next start applies it.
+- `hide_proxy`, `headers` and `verify_tls` are never set automatically: the
+  log suggests them (different answer to a relayed request, 401/403 to a plain
+  request, certificate that does not pass).
+
+### Fixed
+
+- A stop asked while the add-on is starting is no longer ignored.
+
 ## [2.5.0] - 2026-11-19
 
 ### Added
