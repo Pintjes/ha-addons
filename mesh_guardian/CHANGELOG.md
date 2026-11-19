@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.40.5] - 2026-11-19
+
+### Fixed
+
+- Thread leader shown as its node id ("0x13") after a start, then a false "Thread leader: 0x13 → <name>" change: the leader found before Home Assistant gave the names kept that text. The leader is now kept by its node id and named when shown, with the names known at that moment; a name that arrives later is not a change. A change of node is still reported.
+
 ## [2.40.4] - 2026-11-19
 
 ### Changed

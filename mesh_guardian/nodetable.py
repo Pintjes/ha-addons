@@ -579,7 +579,7 @@ class NodeTable:
             return when is None or now - when > OLD_S
         q = getattr(self, "quality", None)
         leader = None
-        if self.radio and self.radio.leader_name and time.time() - self.radio.leader_t < 2400:
+        if self.radio and self.radio.leader_key and time.time() - self.radio.leader_t < 2400:
             leader = self.radio.leader_name   # Home Assistant names loaded: parent history can start
         ref_snap = (self.radio.reference(now, min_age=3600) or {}) if self.radio else {}
         ref, ref_t = ref_snap.get("nodes", {}), ref_snap.get("t")
@@ -614,7 +614,7 @@ class NodeTable:
                     role = role if role in (2, 3, 4) else 4
             # the leader found by asking the mesh (cached roles are not updated by the Matter Server)
             if leader is not None:
-                if v["name"] == leader:
+                if self.radio.leader_key == f"node:{nid}" or v["name"] == leader:
                     role = 6
                 elif role == 6:
                     role = 5

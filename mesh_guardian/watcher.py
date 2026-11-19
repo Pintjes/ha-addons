@@ -79,7 +79,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.40.4"
+VERSION = "2.40.5"
 OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
 OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
@@ -1387,9 +1387,11 @@ class Watch:
             leader_txt = ", ".join(leaders) if leaders else t("none")
             if not leaders and partitions:
                 # the leader can be any router of the mesh, e.g. a bulb: not announced in mDNS
-                mesh = self.radio.mesh_leader() if self.radio else []
-                leader_txt = ", ".join(mesh) if mesh else t("unknown")
-                leader_keys = [f"node:{m}" for m in mesh]
+                # keyed by node id, named with the names known now: a name that arrives later
+                # (Home Assistant read after the leader) is not a leader change
+                mesh = self.radio.mesh_leaders() if self.radio else []
+                leader_txt = ", ".join(name for _, name in mesh) if mesh else t("unknown")
+                leader_keys = [key for key, _ in mesh]
             st = self._settle({"parts": partitions, "leader_keys": leader_keys, "leader": leader_txt,
                                "leaders_count": len(leaders)}, mine)
             partitions, leader_keys, leader_txt = st["parts"], st["leader_keys"], st["leader"]
@@ -1442,6 +1444,9 @@ class Watch:
             self._settled, self._unsettled = raw, None
             return raw
         st, u = self._settled, self._unsettled
+        if raw != st and {k: v for k, v in raw.items() if k != "leader"} == {k: v for k, v in st.items() if k != "leader"}:
+            # same leaders, only their names (a name known later): shown at once, nothing to settle
+            st = self._settled = dict(st, leader=raw["leader"])
         if raw == st:
             if u:
                 self._unsettled = None

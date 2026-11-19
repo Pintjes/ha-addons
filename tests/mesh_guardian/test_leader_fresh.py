@@ -43,7 +43,7 @@ assert live.leaders(now=NOW) == []
 r = R.Radio.__new__(R.Radio)
 r.live = types.SimpleNamespace(connected=True, leaders=lambda: [])
 r.h = types.SimpleNamespace(lock=threading.RLock(), nodes={})
-r.leader_name, r.leader_t, r.last = None, 0, None
+r.leader_key, r.leader_t, r.last = None, 0, None
 assert r.mesh_leader() == []                          # unknown upstream (watcher: t("unknown"))
 r.live = types.SimpleNamespace(connected=True, leaders=lambda: ["00000000000000A2"])
 r.h.nodes = {"00000000000000A2": {"name": "Lampe demo"}}

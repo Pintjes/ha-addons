@@ -413,7 +413,8 @@ class MatterLive:
         """Find the Thread leader by asking a router: Leader Router ID (0/53/13), then its
         extended address in the router's route table (0/53/8). The Matter Server does not
         forward role changes, so the cached roles cannot tell it. Two small reads.
-        names: extended address -> name (Matter nodes and border routers)."""
+        names: extended address -> what to return for it (radio.py: a stable key of the Matter
+        node or border router); a router that is none of them: "router N (0x....)"."""
         with self.lock:
             routers = [k for k, n in self.nodes.items()
                        if n.get("available") is not False and n["attributes"].get("0/53/1") in (5, 6)

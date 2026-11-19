@@ -77,7 +77,9 @@ class Radio:
         self.last = None          # last survey
         self.advisor = None       # radio advice (advice.py), plugged in by watcher
         self.live = None          # live copy of the Matter Server cache (matterlive.py)
-        self.leader_name, self.leader_t, self.leader_partitions = None, 0, None
+        # leader found by asking a router: a stable key ("node:<hex>", "br:<key>" or the text of a
+        # router that is not a Matter node), never its name (named when shown, see leader_label)
+        self.leader_key, self.leader_t, self.leader_partitions = None, 0, None
         self._survey_lock = threading.Lock()
         self.history = []         # counter snapshots: [{"t": ts, "nodes": {hex: {counters, uptime}}}]
         self.ok = None
@@ -342,41 +344,62 @@ class Radio:
                     weak=len(weak), links=len(links), unstable=len(unstable))
         self.w.dirty = True
 
-    def mesh_leader(self):
-        """Names of the Matter nodes that are Thread leader: the leader found by asking a router
-        (check_leader), else a leader role read by this add-on less than 2 h ago, never a role of
-        the Matter Server cache. Nothing fresh: "unknown" upstream, and no leader change is
-        reported from "unknown"."""
-        if self.leader_name and time.time() - self.leader_t < 2400:
-            return [self.leader_name]
-        if self.live and self.live.connected:
+    def leader_label(self, key):
+        """Name of a leader key, with the names known now: a leader found before Home Assistant
+        gave the names is named once they are there, and its key (what a change is measured on)
+        stays the same."""
+        if key.startswith("node:"):
+            nid = key[5:]
             with self.h.lock:
-                return sorted((self.h.nodes.get(k) or {}).get("name") or f"0x{k.lstrip('0')}"
-                              for k in self.live.leaders())
-        return sorted((self.last or {}).get("leaders", []))
+                return (self.h.nodes.get(nid) or {}).get("name") or f"0x{nid.lstrip('0') or '0'}"
+        if key.startswith("br:"):
+            with self.w.lock:
+                b = self.w.br.get(key[3:])
+                return self.w.br_label(b) if b else key[3:]
+        return key[5:] if key.startswith("name:") else key
+
+    @property
+    def leader_name(self):
+        """Name of the leader found by asking a router, or None (named now, from its key)."""
+        return self.leader_label(self.leader_key) if self.leader_key else None
+
+    def mesh_leaders(self):
+        """(key, name) of the Thread leader when no border router is: the leader found by asking a
+        router (check_leader), else a leader role read by this add-on less than 2 h ago, never a
+        role of the Matter Server cache, else the last survey. The key is stable (node id), the
+        name is the one known now. Nothing fresh: "unknown" upstream, and no leader change is
+        reported from "unknown"."""
+        if self.leader_key and time.time() - self.leader_t < 2400:
+            return [(self.leader_key, self.leader_label(self.leader_key))]
+        if self.live and self.live.connected:
+            return sorted(((f"node:{k}", self.leader_label(f"node:{k}")) for k in self.live.leaders()),
+                          key=lambda x: x[1])
+        return [(f"name:{n}", n) for n in sorted((self.last or {}).get("leaders", []))]
+
+    def mesh_leader(self):
+        """Names of the Thread leader (see mesh_leaders)."""
+        return [name for _, name in self.mesh_leaders()]
 
     def check_leader(self):
         """When no border router is leader, ask the mesh who is (after a partition change,
         and every 30 minutes)."""
         s = self.w.summary()
         if not s["partitions"] or s["leaders_count"]:
-            self.leader_name = None   # no network, or a border router is leader (known from mDNS)
+            self.leader_key = None   # no network, or a border router is leader (known from mDNS)
             return
         parts = tuple(s["partition_ids"])
-        if self.leader_name and parts == self.leader_partitions and time.time() - self.leader_t < 1800:
+        if self.leader_key and parts == self.leader_partitions and time.time() - self.leader_t < 1800:
             return
+        # extended address -> stable key (named when shown: the names of Home Assistant can come later)
         with self.w.lock:
-            names = {b["xa"]: self.w.br_label(b) for b in self.w.br.values() if b.get("xa") is not None}
-        with self.h.lock:
-            meta = {k: n.get("name") for k, n in self.h.nodes.items()}
+            keys = {b["xa"]: f"br:{k}" for k, b in self.w.br.items() if b.get("xa") is not None}
         for n in self.live.snapshot():
             ext = ext_of(n["attributes"])
             if ext is not None:
-                nid = f"{n['node_id']:016X}"
-                names[ext] = meta.get(nid) or f"0x{nid.lstrip('0')}"
-        name = self.live.resolve_leader(names)
-        if name:
-            self.leader_name, self.leader_t, self.leader_partitions = name, time.time(), parts
+                keys[ext] = f"node:{n['node_id']:016X}"
+        key = self.live.resolve_leader(keys)
+        if key:
+            self.leader_key, self.leader_t, self.leader_partitions = key, time.time(), parts
             self.w.dirty = True
 
     def run_leader(self):
