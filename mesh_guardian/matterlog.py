@@ -14,6 +14,7 @@ per node and per hour, and the last address the Matter Server used for the node.
 
 The lines only exist when the Matter Server logs at level "info" (its default) or lower.
 """
+import collections
 import json
 import logging
 import os
@@ -31,7 +32,8 @@ LOG = logging.getLogger("mg")
 MATTER_SLUG = "core_matter_server"
 STATE_FILE = "/data/matter_log.json"
 KEEP_H = 25            # hours kept
-READ_TIMEOUT = 900     # s without a line: the stream is opened again
+READ_TIMEOUT = 900     # s without a line: the stream is opened again (a quiet log, nothing lost)
+SEEN_KEEP = 200        # last lines kept, against counting twice the lines sent again when the stream reopens
 SAVE_S = 300
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -65,6 +67,8 @@ class MatterLog:
         self.gaps = []         # [start, end] when the log was not read (the counts miss those times)
         self.status = {"ok": False, "since": None, "lines": 0, "used": 0, "error": None, "level": None}
         self._saved = 0
+        self.seen = collections.deque(maxlen=SEEN_KEEP)   # last lines read (as suplog.py)
+        self._opened = False   # the stream of the current try was opened
         self._load()
 
     # ------------------------------------------------------------ state
@@ -202,16 +206,28 @@ class MatterLog:
 
     def _follow(self):
         with self._open("/addons/" + MATTER_SLUG + "/logs/follow", entries=1, timeout=READ_TIMEOUT) as r:
+            self._opened = True
             first = not self.status["ok"]
-            self.status.update({"ok": True, "since": time.time(), "error": None})
+            self.status.update({"ok": True, "error": None, **({"since": time.time()} if first else {})})
             if first:
                 LOG.info(t("Matter Server log: followed per node"))
-            for raw in r:
-                self.feed(raw.decode("utf-8", "replace"))
-                if time.time() - self._saved > SAVE_S:
-                    self.save()
-                if self.w and self.w.stop.is_set():
-                    return
+            self.feed_lines(r)
+
+    def feed_lines(self, lines):
+        """Lines of the stream: the ones read before (sent again when the stream reopens) are skipped."""
+        known = set(self.seen)
+        for raw in lines:
+            line = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw
+            if known:
+                if line in known:
+                    continue
+                known = set()          # past the lines sent again: every line is new
+            self.seen.append(line)
+            self.feed(line)
+            if time.time() - self._saved > SAVE_S:
+                self.save()
+            if self.w and self.w.stop.is_set():
+                return
 
     def run(self):
         if not self.token:
@@ -221,6 +237,7 @@ class MatterLog:
         self._level()
         delay, lost = 10, None
         while not (self.w and self.w.stop.is_set()):
+            self._opened = False
             try:
                 if lost:
                     with self.lock:
@@ -229,6 +246,14 @@ class MatterLog:
                     lost = None
                 self._follow()
                 delay = 10
+            except TimeoutError as err:
+                if self._opened:
+                    # the stream was open and no line came for READ_TIMEOUT: the log was quiet (at
+                    # night), nothing was missed. Opened again at once: no gap, the offline nodes
+                    # kept, no new log line, the line sent again not counted twice (feed_lines)
+                    continue
+                self.status.update({"ok": False, "error": str(err)[:120] or "timeout"})
+                LOG.debug("Matter Server log: %s", err)
             except urllib.error.HTTPError as err:
                 self.status.update({"ok": False, "error": f"HTTP {err.code}"})
                 if err.code in (401, 403):

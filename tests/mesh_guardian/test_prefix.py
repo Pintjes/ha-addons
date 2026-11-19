@@ -63,7 +63,7 @@ class W(ns["W"]):
         self.br = {"salon": {"online": True, "omr": NEW}, "cuisine": {"online": True, "omr": NEW}}
         self.matter = {"000000000000004D": {"online": True, "prefix": OLD},
                        "0000000000000036": {"online": True, "prefix": NEW},
-                       "00000000000000AA": {"online": True, "prefix": "fd59:30d4:9210:dc15::/64"}}   # Wi-Fi
+                       "00000000000000AA": {"online": True, "prefix": "fd00:eeee:ffff:1::/64"}}   # Wi-Fi
         self.omr_left, self.omr_changes, self.usb_links = {}, [], None
         self.omr_fixed_off, self.omr_fixed_said = None, False
 

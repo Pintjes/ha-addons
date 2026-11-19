@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.40.6] - 2026-11-19
+
+### Fixed
+
+- Log of the Matter Server followed per node: 15 minutes without a line (a quiet night) were taken for a loss. The stream is now opened again at once, without a gap in the counts, keeping the nodes seen offline (their time offline was lost), without a new "followed per node" line, and the last line sent again on reopening is no longer counted twice (as for the Supervisor log). A real failure still leaves a gap.
+
+### Tests
+
+- Border router test with made-up values only (documentation address ranges), in English; one more address prefix of the prefix test made up.
+
 ## [2.40.5] - 2026-11-19
 
 ### Fixed

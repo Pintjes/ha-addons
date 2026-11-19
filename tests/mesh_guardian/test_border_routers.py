@@ -1,5 +1,6 @@
-"""Essai de la fusion des annonces d'un meme border router (methodes extraites de watcher.py,
-qui ne s'importe pas ici : zeroconf et paho absents)."""
+"""Merging of the announcements of one border router (methods extracted from watcher.py, which
+cannot be imported here: zeroconf and paho are missing). Made-up values only (documentation
+address ranges)."""
 import ast
 import logging
 import sys
@@ -13,7 +14,7 @@ body = [m for m in cls.body if isinstance(m, ast.FunctionDef) and m.name in want
 assert len(body) == len(want), [m.name for m in body]
 mod = ast.Module(body=[ast.ClassDef(name="W", bases=[], keywords=[], body=body, decorator_list=[])], type_ignores=[])
 ns = {"LOG": logging.getLogger("x")}
-exec(compile(ast.fix_missing_locations(mod), "watcher_extrait", "exec"), ns)
+exec(compile(ast.fix_missing_locations(mod), "watcher_extract", "exec"), ns)
 
 
 class W(ns["W"]):
@@ -35,37 +36,37 @@ class W(ns["W"]):
         return b.get("label") or "?"
 
 
-SALON = {"addrs": ["192.168.10.241", "fd00:5959::c3b6", "fe80::62f5"], "ext_pan": "106d", "online": True}
-CUISINE = {"addrs": ["192.168.10.252", "fd00:5959::c1ad", "fe80::d640"], "ext_pan": "106d", "online": True}
+ROUTER_A = {"addrs": ["192.0.2.10", "2001:db8::a", "fe80::1"], "ext_pan": "abcd", "online": True}
+ROUTER_B = {"addrs": ["192.0.2.20", "2001:db8::b", "fe80::2"], "ext_pan": "abcd", "online": True}
 
-# nouvelle annonce du meme appareil : elle reprend la carte, son nom et son historique
+# new announcement of the same device: it takes over the card, its name and its history
 w = W()
-w.br = {"old": dict(SALON, label="Routeur tiers A"), "cui": dict(CUISINE, label="Routeur tiers B")}
-w.br_names = {"old": {"name": "Routeur tiers A", "detached": [1.0]}, "cui": {"name": "Routeur tiers B", "detached": []}}
-new = dict(SALON, addrs=["192.168.10.241", "fe80::62f5"])
-assert w._br_twin("new", new) == "old" and w._br_twin("new", dict(new, ext_pan="autre")) is None
-assert w._br_twin("new", {"addrs": ["fe80::62f5"], "ext_pan": "106d"}) is None      # lien-local seul : ne dit rien
-assert w._br_twin("cui", CUISINE) is None
+w.br = {"old": dict(ROUTER_A, label="Router A"), "b": dict(ROUTER_B, label="Router B")}
+w.br_names = {"old": {"name": "Router A", "detached": [1.0]}, "b": {"name": "Router B", "detached": []}}
+new = dict(ROUTER_A, addrs=["192.0.2.10", "fe80::1"])
+assert w._br_twin("new", new) == "old" and w._br_twin("new", dict(new, ext_pan="other")) is None
+assert w._br_twin("new", {"addrs": ["fe80::1"], "ext_pan": "abcd"}) is None      # link-local only: tells nothing
+assert w._br_twin("b", ROUTER_B) is None
 w._br_take_over("old", "new")
-assert set(w.br) == {"new", "cui"} and w.br["new"]["label"] == "Routeur tiers A"
-assert w.br_names["new"] == {"name": "Routeur tiers A", "detached": [1.0], "replaces": ["old"]} and w.cleared == ["old"]
-# l'ancienne annonce, encore sur le reseau, est ignoree tant que la nouvelle est en ligne
-assert w._br_replaced("old") and not w._br_replaced("new") and not w._br_replaced("cui")
+assert set(w.br) == {"new", "b"} and w.br["new"]["label"] == "Router A"
+assert w.br_names["new"] == {"name": "Router A", "detached": [1.0], "replaces": ["old"]} and w.cleared == ["old"]
+# the old announcement, still on the network, is ignored while the new one is online
+assert w._br_replaced("old") and not w._br_replaced("new") and not w._br_replaced("b")
 w.br["new"]["online"] = False
-assert not w._br_replaced("old")                                                   # sinon elle peut revenir
-# ... et si elle revient, elle reprend la carte a son tour, sans boucle
+assert not w._br_replaced("old")                                                   # otherwise it can come back
+# ... and if it comes back, it takes the card over in turn, without a loop
 w._br_take_over("new", "old")
-assert set(w.br) == {"old", "cui"} and w.br_names["old"]["replaces"] == ["new"]
+assert set(w.br) == {"old", "b"} and w.br_names["old"]["replaces"] == ["new"]
 
-# doublon deja present (versions precedentes) : la carte hors ligne est absorbee par celle en ligne
+# duplicate already there (earlier versions): the offline card is folded into the online one
 w = W()
-w.br = {"old": dict(SALON, online=False), "new": dict(SALON), "cui": dict(CUISINE, online=False)}
-w.br_names = {"old": {"name": "Routeur tiers A", "detached": [1.0, 2.0]}, "new": {"name": None, "detached": [3.0]}}
-assert w._br_fold_stale() and set(w.br) == {"new", "cui"}                           # Cuisine hors ligne sans double : reste
-assert w.br_names["new"] == {"name": "Routeur tiers A", "detached": [1.0, 2.0, 3.0], "replaces": ["old"]}
-assert w.br["new"]["label"] == "Routeur tiers A" and not w._br_fold_stale()
-# deux cartes en ligne : rien n'est devine
+w.br = {"old": dict(ROUTER_A, online=False), "new": dict(ROUTER_A), "b": dict(ROUTER_B, online=False)}
+w.br_names = {"old": {"name": "Router A", "detached": [1.0, 2.0]}, "new": {"name": None, "detached": [3.0]}}
+assert w._br_fold_stale() and set(w.br) == {"new", "b"}                             # B offline without a twin: stays
+assert w.br_names["new"] == {"name": "Router A", "detached": [1.0, 2.0, 3.0], "replaces": ["old"]}
+assert w.br["new"]["label"] == "Router A" and not w._br_fold_stale()
+# two cards online: nothing is guessed
 w = W()
-w.br = {"a": dict(SALON), "b": dict(SALON)}
+w.br = {"a": dict(ROUTER_A), "b2": dict(ROUTER_A)}
 assert not w._br_fold_stale() and len(w.br) == 2
 print("OK")
