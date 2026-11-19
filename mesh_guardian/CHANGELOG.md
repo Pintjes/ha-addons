@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.40.4] - 2026-11-19
+
+### Changed
+
+- "Automatic recovery" in the facts on top of the page: its state with a dot, bold and in colour, as on the line of the imposed network prefix (green on, orange off). Same place and words.
+
 ## [2.40.3] - 2026-11-19
 
 ### Fixed

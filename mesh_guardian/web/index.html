@@ -108,8 +108,10 @@
   .br { flex-wrap: wrap; }
   .br .ancl { flex-basis: 100%; display: flex; align-items: center; gap: 2px; margin-top: 2px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12.5px; }
   .br .ancv { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
-  .br .ancv i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-  .br .ancv.ok { color: var(--ok); } .br .ancv.warn { color: var(--warn); }
+  .br .ancv i, .facts .ancv i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .br .ancv.ok, .facts .ancv.ok { color: var(--ok); } .br .ancv.warn, .facts .ancv.warn { color: var(--warn); }
+  /* a state in the facts (automatic recovery): dot and word as on the line of the imposed prefix */
+  .facts .ancv { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; }
   .br .brp { color: var(--mut); display: inline-flex; }
   .br small { color: var(--mut); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* small "i" (the info icon of the page, muted): its text on hover */
@@ -732,7 +734,7 @@ function renderHero() {
     [L("f_leader"), esc(n.leader || "—")],
     [`<span title="${esc(L("f_omr_tip"))}">${L("f_omr")}</span>`, n.omr_changes_24h == null ? "—"
       : n.omr_changes_24h >= 2 ? `<span class="st warn">${IC.warn}${n.omr_changes_24h}</span>` : n.omr_changes_24h],
-    [L("f_recov"), n.auto_recovery ? L("on") : L("off")]];
+    [L("f_recov"), `<span class="ancv ${n.auto_recovery ? "ok" : "warn"}"><i></i>${esc(L(n.auto_recovery ? "on" : "off"))}</span>`]];
   const mc = D.matter_commands;
   if (mc && mc.hour) facts.push([`<span title="${esc(cmdTip(mc))}">${L("f_cmd")}</span>`, mc.hour.radio]);
   let score = `<span class="mut" style="font-size:12px">${L("q_wait")}</span>`;
