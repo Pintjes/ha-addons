@@ -227,6 +227,23 @@ SHELL = """\
   nav svg { width: 18px; height: 18px; fill: currentColor; vertical-align: -3px; }
   nav button.eye { padding: .5rem .6rem; margin-left: auto; }
   nav button.eye.on { border-bottom-color: transparent; color: #1f6feb; }
+  nav button.info { padding: .5rem .6rem; }
+  nav button.info.on { border-bottom-color: transparent; color: #1f6feb; }
+  nav .badge { margin-left: .25rem; padding: 0 .4rem; border-radius: 9px; font-size: .75rem; background: #d29922;
+               color: #fff; vertical-align: 2px; }
+  main[hidden], #report[hidden] { display: none; }
+  #report { flex: 1; overflow: auto; padding: .5rem 1rem 1.5rem; }
+  #report h2 { margin: .6rem 0 .4rem; font-size: 1.15rem; }
+  #report h3 { margin: 0 0 .5rem; font-size: 1rem; }
+  #report p { margin: .4rem 0; max-width: 60rem; }
+  #report .muted { opacity: .75; font-size: .85rem; }
+  #report .app { max-width: 60rem; margin: .8rem 0; padding: .7rem 1rem; border-radius: 8px;
+                 background: #fff; border: 1px solid #d5dbe1; }
+  #report table { border-collapse: collapse; font-size: .9rem; }
+  #report td { padding: .1rem 1.2rem .1rem 0; vertical-align: top; }
+  #report td:first-child { min-width: 8rem; }
+  #report .tip { margin: .6rem 0 .2rem; padding: .5rem .7rem; border-left: 3px solid #d29922;
+                 background: rgba(210, 153, 34, .12); }
   nav button .vis, nav button .link { display: none; margin-left: .4rem; }
   body.editing nav .tabs button .vis, body.editing nav .tabs button .link { display: inline; }
   nav button .link:hover { color: #1f6feb; }
@@ -247,13 +264,18 @@ SHELL = """\
     body { background: #111a22; color: #e3e8ee; }
     nav { background: #1c2733; border-bottom-color: #2b3947; }
     nav button.on { color: #6ea8ff; border-bottom-color: #6ea8ff; }
+    #report .app { background: #1c2733; border-color: #2b3947; }
   }
 </style>
 </head>
 <body>
 <nav><div class="tabs">%(tabs)s</div><button type="button" class="eye"
-  title="Show or hide apps / Afficher ou masquer des applications"></button></nav>
+  title="Show or hide apps / Afficher ou masquer des applications"></button><button type="button" class="info"
+  title="Detected settings / Réglages détectés">%(badge)s</button></nav>
 <main></main>
+<section id="report" hidden>
+%(report)s
+</section>
 <script>
   // One frame per app, created the first time its tab is opened: an app keeps
   // its page when you come back to it.
@@ -345,6 +367,18 @@ SHELL = """\
   function icon(path) {
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + path + '"/></svg>';
   }
+  // The settings report: it takes the place of the apps, which stay loaded
+  const INFO = "M11,9H13V7H11M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20"
+    + "M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,17H13V11H11V17Z";
+  const info = document.querySelector("nav button.info");
+  const report = document.querySelector("#report");
+  info.insertAdjacentHTML("afterbegin", icon(INFO));
+  function showReport(on) {
+    report.hidden = !on;
+    main.hidden = on;
+    info.classList.toggle("on", on);
+  }
+  info.addEventListener("click", () => showReport(report.hidden));
   let hiddenApps = [];
   try { hiddenApps = JSON.parse(localStorage.getItem("side_door_hidden") || "[]"); } catch (error) { /* none */ }
   let editing = false;
@@ -402,6 +436,7 @@ SHELL = """\
   }
   // "force": an app asked by a dashboard button opens even when hidden here
   function show(key, page, force) {
+    showReport(false);
     let tab = find(key);
     if (!tab || (isHidden(tab.dataset.app) && !force)) tab = tabs.find((t) => !isHidden(t.dataset.app));
     const empty = main.querySelector(".none");
@@ -674,13 +709,65 @@ def read_headers(label, text):
     return headers
 
 
-def shell_page(apps):
-    """The page with the row of tabs."""
+REPORT_STATES = {
+    "apply": "auto_settings: apply. A start page that is found is applied; nothing else is.",
+    "report": "auto_settings: report. Nothing is applied, it is only said here.",
+    "first": "First start of the detection: nothing was applied, it is only said here. "
+             "The next start applies the start page found.",
+    "off": "auto_settings: off. The apps were not looked at.",
+    "none": "The detection did not run.",
+}
+
+
+def sentence(text):
+    """A sentence from a fragment of the log: capital letter, full stop."""
+    if "_" not in text.split(" ")[0]:  # not the name of a setting
+        text = text[:1].upper() + text[1:]
+    return text if text.endswith((".", "!", "?")) else text + "."
+
+
+def suggestions(report):
+    """How many suggestions (a setting the user may change) the report holds."""
+    return sum(1 for app in report["apps"] for each in app["hints"] if each["advice"])
+
+
+def report_page(report):
+    """The part of the tabs page that says what is in effect for each app, what
+    the detection found and what it suggests. Made from what the add-on knows
+    at its start; everything is escaped (an answer of an app is not trusted)."""
+    esc = html.escape
+    out = ["<h2>Detected settings / Réglages détectés</h2>",
+           f'<p>{esc(REPORT_STATES.get(report["state"], REPORT_STATES["none"]))}</p>',
+           '<p class="muted">Seen at the last start of the add-on. '
+           "<b>set</b>: written in the configuration. <b>default</b>: the choice of the add-on. "
+           "<b>detected</b>: found by the detection. hide_proxy, headers and verify_tls are never set automatically.</p>"]
+    for app in report["apps"]:
+        out.append(f'<div class="app"><h3>{esc(app["name"])}</h3><table>')
+        for name, value, where in app["settings"]:
+            out.append(f"<tr><td>{esc(name)}</td><td>{esc(value)}</td><td class=\"muted\">{esc(where)}</td></tr>")
+        out.append(f'</table><p>Detection: {esc(app["verdict"])}.</p>')
+        for each in app["hints"]:
+            if not each["advice"]:
+                out.append(f'<p class="muted">{esc(sentence(each["seen"]))}</p>')
+                continue
+            out.append(f'<div class="tip"><b>{esc(each["setting"])}</b>: suggestion, not applied.<br>'
+                       f'{esc(sentence(each["seen"]))} {esc(sentence(each["advice"]))}<br>'
+                       f'{esc(sentence(each["warning"]))}</div>')
+        out.append("</div>")
+    return "\n".join(out)
+
+
+def shell_page(apps, report=None):
+    """The page with the row of tabs (and the settings report, behind the
+    button at the end of the row)."""
     tabs = "".join(
         f'<button type="button" data-app="{app["id"]}" data-start="{html.escape(app["start"])}">'
         f'{html.escape(app["name"])}</button>' for app in apps
     )
-    return SHELL % {"tabs": tabs}
+    report = report or {"state": "none", "apps": []}
+    count = suggestions(report)
+    badge = f'<span class="badge">{count}</span>' if count else ""
+    return SHELL % {"tabs": tabs, "report": report_page(report), "badge": badge}
 
 
 def name_servers(path="/etc/resolv.conf"):
@@ -715,7 +802,7 @@ def build(options, mark="sd0", dns=None, probe=None):
     None, message for the log). 'dns': the DNS servers (read from the system
     when not given). 'probe': what looks at the apps to find out their start
     page (see detect); it gets the apps and returns ({address: start page},
-    lines for the log)."""
+    lines for the log, what the report of the tabs page says)."""
     if dns is None:
         dns = name_servers()
     apps = read_apps(options)
@@ -724,7 +811,7 @@ def build(options, mark="sd0", dns=None, probe=None):
         head = HEAD % {"port": PORT, "web": WEB, "njs": NJS, "mark": mark, "maps": ""}
         why = "every app is hidden" if apps else "no valid app"
         return head + NOT_SET, {}, None, f"{why}: set one in the add-on configuration"
-    found, notes = probe(shown) if probe else ({}, [])
+    found, notes, facts = probe(shown) if probe else ({}, [], {"state": "none", "apps": {}})
     for app in shown:
         if found.get(app["target"]) and not app["start"]:
             app["start"] = found[app["target"]]
@@ -787,7 +874,12 @@ def build(options, mark="sd0", dns=None, probe=None):
         message += f"\n[side_door] {app['name']}: {in_effect(app)}"
     for note in notes:
         message += f"\n[side_door] {note}"
-    return conf, script_apps, shell_page(shown) if several else None, message
+    report = {"state": facts["state"], "apps": []}
+    for app in shown:
+        fact = facts["apps"].get(app["target"]) or {
+            "verdict": "not looked at (auto_settings: off)" if facts["state"] == "off" else "not looked at", "hints": []}
+        report["apps"].append({"name": app["name"], "settings": effective(app), **fact})
+    return conf, script_apps, shell_page(shown, report) if several else None, message
 
 
 def settings(app):
@@ -804,10 +896,11 @@ def settings(app):
     return f" [{', '.join(said)}]" if said else ""
 
 
-def in_effect(app):
-    """Every setting of an app as it applies, and where it comes from: "set"
-    (written in the configuration) or "default" (the add-on's own choice).
-    The values of 'headers' are secrets: only their names are said."""
+def effective(app):
+    """Every setting of an app as it applies, and where it comes from: [(name,
+    value, origin)], origin "set" (written in the configuration), "detected"
+    or "default" (the add-on's own choice). The values of 'headers' are
+    secrets: only their names are given."""
     def origin(key):
         if key in app["set"]:
             return "set"
@@ -816,16 +909,21 @@ def in_effect(app):
     def onoff(value):
         return "on" if value else "off"
 
-    parts = [f"start {app['start'] or '-'} ({origin('start')})",
-             f"rewrite {onoff(app['rewrite'])} ({origin('rewrite')})",
-             f"inject_script {onoff(app['inject'])} ({origin('inject_script')})",
-             f"hide_proxy {onoff(app['hide_proxy'])} ({origin('hide_proxy')})"]
+    rows = [("start", app["start"] or "-", origin("start")),
+            ("rewrite", onoff(app["rewrite"]), origin("rewrite")),
+            ("inject_script", onoff(app["inject"]), origin("inject_script")),
+            ("hide_proxy", onoff(app["hide_proxy"]), origin("hide_proxy"))]
     if app["origin"].startswith("https://"):
-        parts.append(f"verify_tls {app['verify_tls']} -> certificate {'checked' if tls_verified(app) else 'not checked'} "
-                     f"({origin('verify_tls')})")
+        rows.append(("verify_tls", f"{app['verify_tls']} -> certificate {'checked' if tls_verified(app) else 'not checked'}",
+                     origin("verify_tls")))
     names = ", ".join(name for name, _ in app["headers"])
-    parts.append(f"headers {names or '-'} ({origin('headers')})")
-    return "; ".join(parts)
+    rows.append(("headers", names or "-", origin("headers")))
+    return rows
+
+
+def in_effect(app):
+    """The settings of an app, for the log."""
+    return "; ".join(f"{name} {value} ({where})" for name, value, where in effective(app))
 
 
 # Detection of the settings of an app (DOCS.md, "Automatic detection"). Each
@@ -919,21 +1017,29 @@ def probe_app(app, get=fetch):
         path = (target.path or "/") + (f"?{target.query}" if target.query else "")
         hops += 1
     if first[0] in (401, 403) and "headers" not in app["set"]:
-        result["hints"].append(f"answers {first[0]} to a plain request: if a gateway guards it, "
-                               "'headers' can carry the token it lets in (never set automatically)")
+        result["hints"].append(hint("headers", f"answers {first[0]} to a plain request",
+                                    "if a gateway guards it, 'headers' can carry the token it lets in",
+                                    "never set automatically"))
     if not result["why"]:
         result["why"] = leads_to(result, base, path, status, body)
     if "hide_proxy" not in app["set"] and not app["hide_proxy"]:
         try:
             again = get(app, base, deadline, RELAYED)
             if again[:2] != first:
-                result["hints"].append(f"answers differently (status {first[0]}, then {again[0]}) when the request "
-                                       "looks relayed: if it asks for a login only through Side Door, set "
-                                       "hide_proxy (never set automatically: it opens the app without login to "
-                                       "every Home Assistant administrator)")
+                result["hints"].append(hint(
+                    "hide_proxy", f"answers differently (status {first[0]}, then {again[0]}) when the request looks relayed",
+                    "if it asks for a login only through Side Door, set hide_proxy",
+                    "never set automatically: it opens the app without login to every Home Assistant administrator"))
         except Failed as error:
-            result["hints"].append(f"hide_proxy not checked: the request that looks relayed failed ({error})")
+            result["hints"].append(hint("hide_proxy", f"hide_proxy not checked: the request that looks relayed failed ({error})"))
     return result
+
+
+def hint(setting, seen, advice="", warning=""):
+    """What the detection saw, and what the user may set because of it. A
+    suggestion is never applied. Said in the log as one line."""
+    line = f"{seen}: {advice} ({warning})" if advice else seen
+    return {"setting": setting, "seen": seen, "advice": advice, "warning": warning, "line": line}
 
 
 def leads_to(result, base, path, status, body):
@@ -987,7 +1093,7 @@ def detect(apps, mode, get=fetch, path=DETECTED):
     cannot be looked at keeps the page found last time; a value written in the
     configuration is never replaced."""
     if mode == "off" or not apps:
-        return {}, []
+        return {}, [], {"state": "off", "apps": {}}
     # The very first time (no file of what was found yet), nothing is applied:
     # the user sees in the log what would be, and the next start applies it
     first = mode == "apply" and not os.path.exists(path)
@@ -996,41 +1102,46 @@ def detect(apps, mode, get=fetch, path=DETECTED):
     saved = load_detected(path)
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(apps)) as pool:
         jobs = [(app, pool.submit(probe_app, app, get)) for app in apps]
-    keep, notes = {}, []
+    keep, notes, facts = {}, [], {}
     for app, job in jobs:
         key, name, written = app["target"], app["name"], "start" in app["set"]
+        hints = []
         try:
             result = job.result()
         except Exception as error:  # an app that cannot be looked at must not stop the add-on
             old = saved.get(key, "")
             if str(error) == "certificate verify failed" and "verify_tls" not in app["set"]:
-                notes.append(f"{name}: certificate verify failed: verify_tls off lets it in if you trust the network "
-                             "(never set automatically)")
+                hints.append(hint("verify_tls", "certificate verify failed",
+                                  "verify_tls off lets it in if you trust the network", "never set automatically"))
             if written:
-                notes.append(f"{name}: start page written in the configuration, not replaced; not looked at ({error})")
+                verdict = f"start page written in the configuration, not replaced; not looked at ({error})"
             else:
                 keep[key] = old
-                notes.append(f"{name}: not looked at ({error})" + (f", start page kept as last time: {old}" if old else ""))
-            continue
-        # One line for each app that was looked at
-        if written:
-            notes.append(f"{name}: start page written in the configuration, not replaced")
+                verdict = f"not looked at ({error})" + (f", start page kept as last time: {old}" if old else "")
         else:
-            keep[key] = result["start"]
-            if result["start"] and applying:
-                notes.append(f"{name}: start page {result['start']} found (the address redirects there) and applied")
-            elif result["start"]:
-                notes.append(f"{name}: start page {result['start']} found, not applied ({not_applied})")
-            elif result["why"]:
-                notes.append(f"{name}: no start page applied ({result['why']})")
+            hints = result["hints"]
+            # One line for each app that was looked at
+            if written:
+                verdict = "start page written in the configuration, not replaced"
             else:
-                notes.append(f"{name}: no start page needed (the root of the app answers)")
-        notes += [f"{name}: {hint}" for hint in result["hints"]]
+                keep[key] = result["start"]
+                if result["start"] and applying:
+                    verdict = f"start page {result['start']} found (the address redirects there) and applied"
+                elif result["start"]:
+                    verdict = f"start page {result['start']} found, not applied ({not_applied})"
+                elif result["why"]:
+                    verdict = f"no start page applied ({result['why']})"
+                else:
+                    verdict = "no start page needed (the root of the app answers)"
+        notes.append(f"{name}: {verdict}")
+        notes += [f"{name}: {each['line']}" for each in hints]
+        facts[key] = {"verdict": verdict, "hints": hints}
     save_detected(path, keep)
     if first:
         notes.insert(0, "detection: first start, nothing is applied, only said below; the next start applies it")
     found = {key: start for key, start in keep.items() if start and valid_start(start)} if applying else {}
-    return found, notes
+    state = "first" if first else mode
+    return found, notes, {"state": state, "apps": facts}
 
 
 def script(source, script_apps, mark="sd0"):

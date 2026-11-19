@@ -405,8 +405,9 @@ class Detect(unittest.TestCase):
         os.remove(self.file)
         said = io.StringIO()
         with contextlib.redirect_stdout(said):
-            found, notes = run.detect(run.read_apps({"apps": [{"name": "P", "url": site.url}]}), "off", path=self.file)
-        self.assertEqual((found, notes, site.seen), ({}, [], []))
+            found, notes, facts = run.detect(run.read_apps({"apps": [{"name": "P", "url": site.url}]}), "off",
+                                             path=self.file)
+        self.assertEqual((found, notes, facts["apps"], site.seen), ({}, [], {}, []))
         self.assertFalse(os.path.exists(self.file))
 
     def test_requests_are_plain_gets_without_the_headers_of_the_configuration(self):
@@ -463,7 +464,83 @@ class Detect(unittest.TestCase):
                 raise run.Failed("TimeoutError")
             return 200, "", False, b""
         result = run.probe_app(app, get)
-        self.assertEqual(result["hints"], ["hide_proxy not checked: the request that looks relayed failed (TimeoutError)"])
+        self.assertEqual([each["line"] for each in result["hints"]],
+                         ["hide_proxy not checked: the request that looks relayed failed (TimeoutError)"])
+
+    def report(self, options, mode="apply"):
+        shell = self.build(options, mode)[1]
+        return shell[shell.index('<section id="report"'):shell.index("</section>")]
+
+    def test_the_report_says_the_settings_with_their_origin(self):
+        site = self.site({"/": to("/web/index.html"), "/web/index.html": PAGE})
+        other = self.site({"/": PAGE})
+        page = self.report({"apps": [{"name": "P", "url": site.url, "inject_script": False},
+                                     {"name": "Q", "url": other.url, "headers": "X-Token: secret"}]})
+        self.assertIn("<h3>P</h3>", page)
+        self.assertIn("<tr><td>start</td><td>web/index.html</td><td class=\"muted\">detected</td></tr>", page)
+        self.assertIn("<tr><td>inject_script</td><td>off</td><td class=\"muted\">set</td></tr>", page)
+        self.assertIn("<tr><td>rewrite</td><td>on</td><td class=\"muted\">default</td></tr>", page)
+        self.assertIn("<tr><td>headers</td><td>X-Token</td><td class=\"muted\">set</td></tr>", page)
+        self.assertIn("Detection: start page web/index.html found (the address redirects there) and applied.", page)
+        self.assertIn("Detection: no start page needed (the root of the app answers).", page)
+        self.assertIn("auto_settings: apply.", page)
+        # Neither a value of 'headers' nor the address of an app
+        self.assertNotIn("secret", page)
+        self.assertNotIn("127.0.0.1", page)
+
+    def test_the_report_gives_the_suggestions_and_their_warning(self):
+        def root(request):
+            return (401, [], b"") if request.headers.get("X-Forwarded-For") else PAGE
+        relayed = self.site({"/": root})
+        guarded = self.site({"/": (403, [], b"")})
+        quiet = self.site({"/": PAGE})
+        options = {"apps": [{"name": "A", "url": relayed.url}, {"name": "B", "url": guarded.url},
+                            {"name": "C", "url": quiet.url}]}
+        shell = self.build(options)[1]
+        page = self.report(options)
+        self.assertIn("<b>hide_proxy</b>: suggestion, not applied.", page)
+        self.assertIn("Answers differently (status 200, then 401) when the request looks relayed. "
+                      "If it asks for a login only through Side Door, set hide_proxy.", page)
+        self.assertIn("Never set automatically: it opens the app without login to every Home Assistant administrator.", page)
+        self.assertIn("<b>headers</b>: suggestion, not applied.", page)
+        self.assertIn("Answers 403 to a plain request.", page)
+        self.assertEqual(page.count("suggestion, not applied"), 2)
+        # The button of the row counts them
+        self.assertIn('<span class="badge">2</span></button>', shell)
+        # Nothing to suggest: no count
+        self.assertNotIn('class="badge"', self.build({"apps": [{"name": "A", "url": quiet.url},
+                                                              {"name": "B", "url": quiet.url}]})[1])
+
+    def test_the_report_says_why_an_app_was_not_looked_at(self):
+        page = self.report({"apps": [{"name": "Off", "url": "http://127.0.0.1:9"},
+                                     {"name": "Two", "url": "http://127.0.0.1:9/x"}]})
+        self.assertIn("Detection: not looked at (", page)
+        page = self.report({"apps": [{"name": "Off", "url": "http://127.0.0.1:9"}, {"name": "Two", "url": "http://h"}]},
+                           "off")
+        self.assertIn("auto_settings: off.", page)
+        self.assertEqual(page.count("Detection: not looked at (auto_settings: off)."), 2)
+
+    def test_the_report_of_the_first_start_and_of_the_report_mode(self):
+        site = self.site({"/": to("/web/index.html"), "/web/index.html": PAGE})
+        options = {"apps": [{"name": "P", "url": site.url}, {"name": "Q", "url": site.url + "/q/"}]}
+        self.assertIn("auto_settings: report. Nothing is applied", self.report(options, "report"))
+        os.remove(self.file)
+        page = self.report(options)
+        self.assertIn("First start of the detection: nothing was applied", page)
+        self.assertIn("found, not applied (first start of the detection: restart to apply it).", page)
+
+    def test_what_an_app_answers_is_escaped_in_the_report(self):
+        site = self.site({"/": to("/web/<b>x</b>"), "/web/<b>x</b>": PAGE})
+        shell = self.build({"apps": [{"name": "<i>P</i>", "url": site.url}, {"name": "Q", "url": site.url}]})[1]
+        self.assertNotIn("<i>P</i>", shell)
+        self.assertNotIn("<b>x</b>", shell)
+        self.assertIn("&lt;i&gt;P&lt;/i&gt;", shell)
+
+    def test_the_tabs_page_is_valid_with_the_report(self):
+        shell = self.build({"apps": [{"name": "P", "url": "http://127.0.0.1:9"}, {"name": "Q", "url": "http://h"}]})[1]
+        self.assertNotIn("%(", shell)
+        self.assertEqual(shell.count('class="info"'), 1)
+        self.assertIn('title="Detected settings / Réglages détectés"', shell)
 
     def test_the_mode_of_auto_settings(self):
         self.assertEqual(run.auto_mode({}), "apply")

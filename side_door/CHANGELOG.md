@@ -4,6 +4,17 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.7.0] - 2026-11-19
+
+### Added
+
+- With several apps, an information button at the end of the row of tabs
+  opens a report: for each app, every setting as it applies with its origin
+  (`set`, `default`, `detected`), what the detection found, and its
+  suggestions (`hide_proxy`, `headers`, `verify_tls`) with the reason and the
+  warning. The button shows how many suggestions there are. It is what the log
+  already said, seen at the last start; nothing more is applied.
+
 ## [2.6.1] - 2026-11-19
 
 ### Changed

@@ -114,6 +114,12 @@ most 4 requests per app, waits 5 seconds at most, and writes what it learnt in
 - The Log tab has one line for each app that was looked at, whatever the
   result (`no start page needed`, `found`, `no start page applied (reason)`,
   `written in the configuration, not replaced`, `not looked at`).
+- With several apps (a row of tabs), the information button at the end of the
+  row opens a report with the same content as the log, as of the last start:
+  for each app, every setting with its origin (`set`, `default`, `detected`),
+  the verdict of the detection and the suggestions with their reason and
+  warning. The button shows the number of suggestions. With a single app there
+  is no row, so no report: the Log tab is the place.
 - With `auto_settings: report` the Log tab says what was found and nothing is
   applied; with `off` no request is sent.
 - The very first time the detection runs (no `/data/detected.json` yet, for
