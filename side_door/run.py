@@ -931,8 +931,8 @@ def probe_app(app, get=fetch):
                                        "looks relayed: if it asks for a login only through Side Door, set "
                                        "hide_proxy (never set automatically: it opens the app without login to "
                                        "every Home Assistant administrator)")
-        except Failed:
-            pass
+        except Failed as error:
+            result["hints"].append(f"hide_proxy not checked: the request that looks relayed failed ({error})")
     return result
 
 
@@ -1006,20 +1006,26 @@ def detect(apps, mode, get=fetch, path=DETECTED):
             if str(error) == "certificate verify failed" and "verify_tls" not in app["set"]:
                 notes.append(f"{name}: certificate verify failed: verify_tls off lets it in if you trust the network "
                              "(never set automatically)")
-            if not written:
+            if written:
+                notes.append(f"{name}: start page written in the configuration, not replaced; not looked at ({error})")
+            else:
                 keep[key] = old
                 notes.append(f"{name}: not looked at ({error})" + (f", start page kept as last time: {old}" if old else ""))
             continue
-        notes += [f"{name}: {hint}" for hint in result["hints"]]
+        # One line for each app that was looked at
         if written:
-            continue
-        keep[key] = result["start"]
-        if result["start"] and applying:
-            notes.append(f"{name}: start page {result['start']} found (the address redirects there) and applied")
-        elif result["start"]:
-            notes.append(f"{name}: start page {result['start']} found, not applied ({not_applied})")
-        elif result["why"]:
-            notes.append(f"{name}: no start page applied ({result['why']})")
+            notes.append(f"{name}: start page written in the configuration, not replaced")
+        else:
+            keep[key] = result["start"]
+            if result["start"] and applying:
+                notes.append(f"{name}: start page {result['start']} found (the address redirects there) and applied")
+            elif result["start"]:
+                notes.append(f"{name}: start page {result['start']} found, not applied ({not_applied})")
+            elif result["why"]:
+                notes.append(f"{name}: no start page applied ({result['why']})")
+            else:
+                notes.append(f"{name}: no start page needed (the root of the app answers)")
+        notes += [f"{name}: {hint}" for hint in result["hints"]]
     save_detected(path, keep)
     if first:
         notes.insert(0, "detection: first start, nothing is applied, only said below; the next start applies it")

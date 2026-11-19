@@ -4,6 +4,16 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.6.1] - 2026-11-19
+
+### Changed
+
+- The log now has one line of verdict for each app the detection looked at:
+  nothing needed, found (applied or not), refused with the reason, start page
+  written in the configuration and not replaced, or not looked at. When the
+  request that looks relayed fails, the log says so instead of staying
+  silent. How the apps are relayed does not change.
+
 ## [2.6.0] - 2026-11-19
 
 ### Added

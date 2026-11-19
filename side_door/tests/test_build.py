@@ -434,6 +434,37 @@ class Detect(unittest.TestCase):
         self.assertIn("headers - (default)", message)
         self.assertEqual(conf, build({"apps": [{"name": "P", "url": site.url}]})[0])
 
+    def test_each_app_that_was_looked_at_gets_one_line(self):
+        plain = self.site({"/": PAGE})
+        found = self.site({"/": to("/web/index.html"), "/web/index.html": PAGE})
+        gate = self.site({"/": to("/login/"), "/login/": PAGE})
+        written = self.site({"/": PAGE})
+        _, _, message = self.build({"apps": [
+            {"name": "Plain", "url": plain.url}, {"name": "Found", "url": found.url},
+            {"name": "Gate", "url": gate.url}, {"name": "Written", "url": written.url, "start": "mine.html"},
+            {"name": "Off", "url": "http://127.0.0.1:9"}, {"name": "OffWritten", "url": "http://127.0.0.1:9", "start": "a"}]})
+        lines = message.split("\n")
+        for name, expected in [
+                ("Plain", "no start page needed (the root of the app answers)"),
+                ("Found", "start page web/index.html found (the address redirects there) and applied"),
+                ("Gate", "no start page applied (the page looks like a login (its address))"),
+                ("Written", "start page written in the configuration, not replaced"),
+                ("Off", "not looked at ("),
+                ("OffWritten", "start page written in the configuration, not replaced; not looked at (")]:
+            with self.subTest(name):
+                said = [line for line in lines if line.startswith(f"[side_door] {name}: ") and expected in line]
+                self.assertEqual(len(said), 1, lines)
+
+    def test_a_failed_check_of_the_relayed_request_is_said(self):
+        app = run.read_apps({"apps": [{"name": "P", "url": "http://h"}]})[0]
+
+        def get(app_, path, deadline, headers=None):
+            if headers:
+                raise run.Failed("TimeoutError")
+            return 200, "", False, b""
+        result = run.probe_app(app, get)
+        self.assertEqual(result["hints"], ["hide_proxy not checked: the request that looks relayed failed (TimeoutError)"])
+
     def test_the_mode_of_auto_settings(self):
         self.assertEqual(run.auto_mode({}), "apply")
         self.assertEqual(run.auto_mode({"auto_settings": "report"}), "report")

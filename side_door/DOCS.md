@@ -111,6 +111,9 @@ most 4 requests per app, waits 5 seconds at most, and writes what it learnt in
   app without login to every Home Assistant administrator), when it answers 401
   or 403 to a plain request (`headers`), or when its certificate does not pass
   (`verify_tls`).
+- The Log tab has one line for each app that was looked at, whatever the
+  result (`no start page needed`, `found`, `no start page applied (reason)`,
+  `written in the configuration, not replaced`, `not looked at`).
 - With `auto_settings: report` the Log tab says what was found and nothing is
   applied; with `off` no request is sent.
 - The very first time the detection runs (no `/data/detected.json` yet, for
