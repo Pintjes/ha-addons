@@ -133,6 +133,31 @@ class Build(unittest.TestCase):
         self.assertIn("Raw -> http://h/ [paths not rewritten, script not injected]", message)
         self.assertIn("Immo -> http://192.168.1.10:8000/,", message)
 
+    def test_log_says_every_setting_and_where_it_comes_from(self):
+        _, _, _, message, _ = build({"apps": [
+            A,
+            dict(B, hide_proxy=False, headers="X-Token: secret-value"),
+            {"name": "Lan", "url": "https://192.168.1.1", "verify_tls": "auto"},
+            {"name": "Named", "url": "https://app.example.com"}]})
+        lines = {line.split("] ", 1)[1].split(": ", 1)[0]: line for line in message.split("\n")[1:]}
+        self.assertEqual(lines["Immo"].split(": ", 1)[1],
+                         "start - (default); rewrite on (default); inject_script on (default); "
+                         "hide_proxy off (default); headers - (default)")
+        # An explicit "off" is a value written by the user, not the default
+        self.assertIn("start web/index.html (set)", lines["Plex"])
+        self.assertIn("hide_proxy off (set)", lines["Plex"])
+        self.assertIn("headers X-Token (set)", lines["Plex"])
+        self.assertIn("verify_tls auto -> certificate not checked (set)", lines["Lan"])
+        self.assertIn("verify_tls auto -> certificate checked (default)", lines["Named"])
+        # Never the value of a header
+        self.assertNotIn("secret-value", message)
+
+    def test_configuration_does_not_depend_on_where_a_setting_comes_from(self):
+        # Written as the default or left out: the same nginx configuration
+        plain = build({"apps": [A]})[0]
+        written = build({"apps": [dict(A, rewrite=True, inject_script=True, hide_proxy=False, verify_tls="auto")]})[0]
+        self.assertEqual(plain, written)
+
     def test_old_options_of_the_whole_add_on_are_ignored(self):
         conf, apps, _, _, _ = build({"apps": [A], "inject_script": False, "hide_proxy": True, "rewrite_paths": False})
         self.assertTrue(apps["1"]["inject"])

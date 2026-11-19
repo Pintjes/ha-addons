@@ -72,6 +72,12 @@ apps:
 
 ### Settings of an app
 
+Only `name` and `url` are needed. A setting you leave out takes its default
+(the table below), which is what most apps need: do not add a setting just
+because the form shows it. The **Log** tab says, for each app, every setting as
+it applies and where it comes from: `(set)` when it is written in the
+configuration, `(default)` when it is left out.
+
 Each entry can also have, only when the app needs it:
 
 | Setting | Default | Description |

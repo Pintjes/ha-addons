@@ -4,6 +4,20 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.5.0] - 2026-11-19
+
+### Added
+
+- The log lists, for each app, every setting as it applies and where it comes
+  from: `(set)` when written in the configuration, `(default)` when left out
+  (names of headers only, never their values).
+
+### Changed
+
+- The descriptions of the configuration and the documentation say that only
+  `name` and `url` are needed: a setting left out takes its default. No change
+  to how the apps are relayed.
+
 ## [2.4.2] - 2026-11-17
 
 ### Fixed

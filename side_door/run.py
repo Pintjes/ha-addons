@@ -593,7 +593,10 @@ def read_apps(options):
                      # On unless turned off: harmless for an app that does
                      # not need it, needed by an app built in JavaScript
                      "rewrite": flag(entry, "rewrite", True), "inject": flag(entry, "inject_script", True),
-                     "hide_proxy": flag(entry, "hide_proxy", False), "verify_tls": verify_tls})
+                     "hide_proxy": flag(entry, "hide_proxy", False), "verify_tls": verify_tls,
+                     # What the user wrote: the others are the add-on's own choice
+                     "set": [key for key in ("start", "headers", "rewrite", "inject_script", "hide_proxy",
+                                             "verify_tls") if entry.get(key) not in (None, "")]})
     return apps
 
 
@@ -753,7 +756,10 @@ def build(options, mark="sd0", dns=None):
     hidden = [app["name"] for app in apps if app["hidden"]]
     if hidden:
         listed += f" (hidden: {', '.join(hidden)})"
-    return conf, script_apps, shell_page(shown) if several else None, f"{len(shown)} app(s): {listed}"
+    message = f"{len(shown)} app(s): {listed}"
+    for app in shown:
+        message += f"\n[side_door] {app['name']}: {in_effect(app)}"
+    return conf, script_apps, shell_page(shown) if several else None, message
 
 
 def settings(app):
@@ -768,6 +774,29 @@ def settings(app):
     if app["origin"].startswith("https://"):
         said.append("certificate " + ("checked" if "proxy_ssl_verify on;" in tls_rules(app) else "not checked"))
     return f" [{', '.join(said)}]" if said else ""
+
+
+def in_effect(app):
+    """Every setting of an app as it applies, and where it comes from: "set"
+    (written in the configuration) or "default" (the add-on's own choice).
+    The values of 'headers' are secrets: only their names are said."""
+    def origin(key):
+        return "set" if key in app["set"] else "default"
+
+    def onoff(value):
+        return "on" if value else "off"
+
+    parts = [f"start {app['start'] or '-'} ({origin('start')})",
+             f"rewrite {onoff(app['rewrite'])} ({origin('rewrite')})",
+             f"inject_script {onoff(app['inject'])} ({origin('inject_script')})",
+             f"hide_proxy {onoff(app['hide_proxy'])} ({origin('hide_proxy')})"]
+    if app["origin"].startswith("https://"):
+        checked = "proxy_ssl_verify on;" in tls_rules(app)
+        parts.append(f"verify_tls {app['verify_tls']} -> certificate {'checked' if checked else 'not checked'} "
+                     f"({origin('verify_tls')})")
+    names = ", ".join(name for name, _ in app["headers"])
+    parts.append(f"headers {names or '-'} ({origin('headers')})")
+    return "; ".join(parts)
 
 
 def script(source, script_apps, mark="sd0"):
