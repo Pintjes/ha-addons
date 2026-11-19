@@ -79,7 +79,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.40.6"
+VERSION = "2.40.7"
 OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
 OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
@@ -320,6 +320,7 @@ class Watch:
         self.last_event = t("Starting")
         self.events_count = 0
         self.prev_leaders = None
+        self.global_lock = threading.RLock()   # check_global: called from several threads, one change said once
         self.prev_partitions = None
         self._settled = None       # partitions and leader as published
         self._unsettled = None     # a different state, not held SETTLE_S yet
@@ -1372,8 +1373,10 @@ class Watch:
                 return
             c["online"] = False
             c["since"] = time.time()
-            self.emit("speaker_offline", t('"{name}" offline', name=c.get("fn"), reason=reason),
-                      cast=c.get("fn"), reason=reason)
+            # the kind of announcement says what it is (a Google TV, a speaker…): Google Cast or AirPlay
+            text = ('Google Cast "{name}" offline' if c.get("kind") == "cast"
+                    else 'AirPlay "{name}" offline' if c.get("kind") == "airplay" else '"{name}" offline')
+            self.emit("speaker_offline", t(text, name=c.get("fn")), cast=c.get("fn"), reason=reason, kind=c.get("kind"))
             self.dirty = True
 
     # ---------------------------------------------------------------- global
@@ -1476,6 +1479,12 @@ class Watch:
                       br=label, seconds=round(d, 1))
 
     def check_global(self):
+        # mDNS callbacks and the main loop call it: without a lock, two threads can both see the
+        # same change against the same previous values and say it twice
+        with self.global_lock:
+            self._check_global()
+
+    def _check_global(self):
         s = self.summary()
         self.flush_short_detaches()
         leaders = (tuple(s["leader_keys"]), s["leader"])
@@ -2017,8 +2026,13 @@ class Watch:
             return
         self.omr_fixed_said = True
         cur = omr.get("current") or omr.get("mode") or t("unknown")
-        self.emit("omr_fixed_lost", t("Fixed OMR prefix {p} no longer in place on the border router (now: {cur})",
-                                      p=omr.get("wanted"), cur=cur) + (f" ({omr['error']})" if omr.get("error") else ""),
+        # the same prefix still published, nobody imposing it any more: not "no longer in place
+        # (now: the same prefix)"
+        same = not omr.get("error") and omr.get("current") and omr.get("current") == omr.get("wanted")
+        text = (t("OMR prefix {p} still published, no longer imposed", p=omr.get("wanted"))
+                if same else t("Fixed OMR prefix {p} no longer in place on the border router (now: {cur})",
+                               p=omr.get("wanted"), cur=cur))
+        self.emit("omr_fixed_lost", text + (f" ({omr['error']})" if omr.get("error") else ""),
                   prefix=omr.get("wanted"), current=omr.get("current"), mode=omr.get("mode"), error=omr.get("error"))
 
     def _on_message(self, msg):

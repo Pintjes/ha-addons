@@ -908,12 +908,12 @@ class Reattach:
                         except Exception as err:  # noqa: BLE001
                             LOG.debug("commissioning complete of %s, back: %s", name, err)
                     if not closed:
-                        LOG.info("recovery of %s: back, fail-safe not closed (it expires by itself)", name)
+                        LOG.info(t("Recovery of {node}: back, fail-safe not closed (it expires by itself)", node=name))
                     self._recover_result(nid, name, "back", t("{node}: back after the recovery attempt", node=name))
                     return
             self._recover_result(nid, name, "noanswer", t("{node}: still unavailable after the recovery attempt", node=name))
         except Exception as err:  # noqa: BLE001
-            LOG.warning("recovery of %s: %s", name, err)
+            LOG.warning(t("Recovery of {node}: {err}", node=name, err=err))
             self._recover_result(nid, name, "noanswer", t("{node}: still unavailable after the recovery attempt", node=name))
         finally:
             self.recovering.discard(nid)
@@ -929,7 +929,7 @@ class Reattach:
             res = self._command(node_id, 48, "ArmFailSafe", {"expiryLengthSeconds": FAILSAFE_S, "breadcrumb": 1},
                                 timeout=RECOVER_WAIT_S)
         except Exception as err:  # noqa: BLE001 - no session: nothing reaches the node
-            LOG.info("recovery of %s, no answer to ArmFailSafe: %s", name, err)
+            LOG.info(t("Recovery of {node}: no answer to ArmFailSafe ({err})", node=name, err=err))
             announced = (self.w.matter.get(nid) or {}).get("online") if hasattr(self.w, "matter") else None
             self._recover_result(nid, name, "unreachable",
                                  (t("{node}: no longer announced on the network, its address is not known: "
@@ -938,7 +938,7 @@ class Reattach:
                                  + (" · " + alive_txt if alive_txt else ""))
             return False
         if _field(res, "errorCode", "0") != 0:
-            LOG.info("recovery of %s, ArmFailSafe refused: %s", name, res)
+            LOG.info(t("Recovery of {node}: ArmFailSafe refused ({res})", node=name, res=res))
             self._recover_result(nid, name, "failed", t("{node}: recovery attempt refused", node=name))
             return False
         try:
@@ -947,7 +947,7 @@ class Reattach:
             LOG.debug("recovery of %s, no answer to ConnectNetwork: %s", name, err)
             return True
         if _field(res, "networkingStatus", "0") != 0:
-            LOG.info("recovery of %s, ConnectNetwork refused: %s", name, res)
+            LOG.info(t("Recovery of {node}: ConnectNetwork refused ({res})", node=name, res=res))
             try:
                 self._command(node_id, 48, "ArmFailSafe", {"expiryLengthSeconds": 0, "breadcrumb": 0}, timeout=30)
             except Exception as err:  # noqa: BLE001

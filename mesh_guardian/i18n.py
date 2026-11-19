@@ -222,6 +222,19 @@ FR = {
     "{n} smart speaker": "{n} enceinte connectée",
     '{node} missing from mDNS': "{node} : annonce mDNS perdue",
     '"{name}" offline': '« {name} » hors ligne',
+    'Google Cast "{name}" offline': 'Google Cast « {name} » hors ligne',
+    'AirPlay "{name}" offline': 'AirPlay « {name} » hors ligne',
+    "Recovery of {node}: back, fail-safe not closed (it expires by itself)":
+        "Récupération de {node} : revenue, fail-safe non refermé (il expire de lui-même)",
+    "Recovery of {node}: {err}": "Récupération de {node} : {err}",
+    "Recovery of {node}: no answer to ArmFailSafe ({err})": "Récupération de {node} : pas de réponse à ArmFailSafe ({err})",
+    "Recovery of {node}: ArmFailSafe refused ({res})": "Récupération de {node} : ArmFailSafe refusé ({res})",
+    "Recovery of {node}: ConnectNetwork refused ({res})": "Récupération de {node} : ConnectNetwork refusé ({res})",
+    "OMR prefix {p} still published, no longer imposed": "Préfixe OMR {p} encore publié, plus imposé",
+    "OMR prefix {p} still published, no longer imposed: the other border routers (Google TV…) can publish "
+    "their prefixes again and the network change its prefix":
+        "Préfixe OMR {p} encore publié, plus imposé : les autres border routers (Google TV…) peuvent republier "
+        "leurs préfixes et le réseau changer de préfixe",
     "Thread leader: {before} → {after}": "Leader Thread : {before} → {after}",
     "Thread partitions: {before} → {after}": "Partitions Thread : {before} → {after}",
     "Border router {name}: detach ({d}s)": "Border router {name} : décrochage ({d} s)",

@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.40.7] - 2026-11-19
+
+### Fixed
+
+- A Wi-Fi node that did not come back after the recovery pings is advised "Check its power", no longer "Unreachable: Thread diagnostic to do".
+- A change of leader, partition or OMR prefix is said once: the comparison with the previous values is done under a lock (it is called from several threads).
+- The log lines of the recovery attempt are translated (they were in English only).
+- Imposed OMR prefix no longer imposed but still published: "OMR prefix … still published, no longer imposed", instead of "no longer in place (now: the same prefix)".
+- A Google Cast or AirPlay device offline says its kind: 'Google Cast "…" offline'.
+
 ## [2.40.6] - 2026-11-19
 
 ### Fixed

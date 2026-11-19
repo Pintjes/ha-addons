@@ -225,6 +225,10 @@ def advise(rows, brs, ctx):
                             t("{n} other mains-powered nodes of the room dropped at the same time", n=cut), "high"))
             elif bat:
                 out.append((bat, bat, "high"))
+            elif r["id"] in ctx["gave_up"] and r.get("network") == "wifi":
+                # a Wi-Fi node has no Thread diagnostic: its power, after the recovery pings
+                out.append((t("Check its batteries") if r.get("battery") else t("Check its power"),
+                            t("it did not come back after the recovery pings"), "high"))
             elif r["id"] in ctx["gave_up"]:
                 # the pings gave up: that proves nothing about the node itself. Cutting its power is
                 # only suggested once the Thread diagnostic proved its network stack stuck ("frozen")
@@ -366,10 +370,14 @@ def advise(rows, brs, ctx):
     if isinstance(omr, dict) and not omr.get("enforced") and (
             omr.get("error") or (off is not None and ctx["now"] - off >= OMR_FIXED_GRACE_S)):
         cur = omr.get("current") or omr.get("mode") or t("unknown")
-        notes.append(("bad" if omr.get("error") else "warn",
-                      t("Fixed OMR prefix {p} no longer in place on the border router (now: {cur}): the other border "
-                        "routers (Google TV…) can publish their prefixes again and the network change its prefix",
-                        p=omr.get("wanted"), cur=cur) + (f" ({omr['error']})" if omr.get("error") else "")))
+        # the same prefix still published, nobody imposing it any more: said so, not "now: the same prefix"
+        same = not omr.get("error") and omr.get("current") and omr.get("current") == omr.get("wanted")
+        text = (t("OMR prefix {p} still published, no longer imposed: the other border routers (Google TV…) can publish "
+                  "their prefixes again and the network change its prefix", p=omr.get("wanted")) if same
+                else t("Fixed OMR prefix {p} no longer in place on the border router (now: {cur}): the other border "
+                       "routers (Google TV…) can publish their prefixes again and the network change its prefix",
+                       p=omr.get("wanted"), cur=cur))
+        notes.append(("bad" if omr.get("error") else "warn", text + (f" ({omr['error']})" if omr.get("error") else "")))
     anc = ctx.get("anchor") or {}
     if anc.get("takeover"):
         notes.append(("warn", tn("The other border routers (Google TV…) took over the OMR prefix: {fav} instead of {wanted}; "

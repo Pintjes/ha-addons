@@ -43,13 +43,14 @@ assert 'keys[ext] = f"node:{n[\'node_id\']:016X}"' in cl and "resolve_leader(key
 # --- watcher: _settle and check_global, extracted (zeroconf absent)
 wsrc = open(os.path.join(MG, "watcher.py"), encoding="utf-8").read()
 cls = next(n for n in ast.parse(wsrc).body if isinstance(n, ast.ClassDef) and n.name == "Watch")
-body = [m for m in cls.body if isinstance(m, ast.FunctionDef) and m.name in ("_settle", "check_global")]
-assert len(body) == 2
+body = [m for m in cls.body if isinstance(m, ast.FunctionDef) and m.name in ("_settle", "check_global", "_check_global")]
+assert len(body) == 3
 ns = {"time": time, "t": lambda s, **k: s.format(**k) if k else s, "SETTLE_S": 60}
 exec(compile(ast.fix_missing_locations(ast.Module(body=[ast.ClassDef(name="W", bases=[], keywords=[], body=body,
                                                                        decorator_list=[])], type_ignores=[])), "w", "exec"), ns)
 w = ns["W"]()
 w._settled, w._unsettled, w._short_detaches, w.quiet = None, None, [], False
+w.global_lock = threading.RLock()
 w.prev_leaders = w.prev_partitions = w.prev_omr = None
 events = []
 w.emit = lambda kind, text, **k: events.append((kind, text))
