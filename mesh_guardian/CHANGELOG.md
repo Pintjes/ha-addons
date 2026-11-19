@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.40.3] - 2026-11-19
+
+### Fixed
+
+- No more false "Thread leader" change at start. The leader is taken only from a role this add-on read itself less than 2 hours ago, never from the cache of the Matter Server (it does not follow role changes: a node leader long ago stayed leader there). With no fresh role, the leader is "unknown" and no change is reported. No traffic added.
+- First search of the leader 30 s after the start instead of 120 s (same reads, sooner).
+
 ## [2.40.2] - 2026-11-19
 
 ### Added

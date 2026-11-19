@@ -37,6 +37,7 @@ def node_hex(node_id):
 
 
 FRESH_KEEP_S = 2 * 3600   # a value read from a node wins over the Matter Server cache this long
+LEADER_FRESH_S = 2 * 3600  # a leader role read by this add-on counts this long (roles are read hourly)
 STAMPS_FILE = "/data/value_times.json"
 STAMP_KEEP_S = 7 * 86400  # times kept across a restart
 # values whose age is shown: role, tables, addresses, uptime, counters, Wi-Fi signal
@@ -294,11 +295,19 @@ class MatterLive:
             return [{"node_id": int(k, 16), "available": n["available"], "attributes": dict(n["attributes"]),
                      "last": n["last"], "radio": n["radio"], "date_commissioned": n.get("date_commissioned")} for k, n in self.nodes.items()]
 
-    def leaders(self):
-        """Hex ids of the available nodes whose Thread role is leader (cheap: no copy)."""
+    def leaders(self, now=None):
+        """Hex ids of the available nodes whose Thread role is leader, as read by this add-on
+        within LEADER_FRESH_S (cheap: no copy). Never from the Matter Server cache: it does not
+        follow role changes, a node that was leader long ago stays leader there (false leader
+        change at start)."""
+        now = time.time() if now is None else now
         with self.lock:
-            return [k for k, n in self.nodes.items()
-                    if n["attributes"].get("0/53/1") == 6 and n.get("available") is not False]
+            out = []
+            for k, n in self.nodes.items():
+                read = self.fresh.get((k, "0/53/1"))
+                if read and read[1] == 6 and now - read[0] < LEADER_FRESH_S and n.get("available") is not False:
+                    out.append(k)
+            return out
 
     def last_heard(self, ext):
         """Seconds since a node last heard the device with this extended address (neighbor

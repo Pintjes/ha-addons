@@ -38,7 +38,8 @@ ROLE = {0: "unspecified", 1: "unassigned", 2: "sleepy_end_device", 3: "end_devic
         5: "router", 6: "leader"}
 COUNTERS = {"14": "detached", "15": "child", "16": "router", "17": "leader", "18": "attach_attempts",
             "19": "partition_changes", "20": "better_partition", "21": "parent_changes"}
-EPISODE_MIN_NODES = 5   # detaches of at least this many nodes in one survey interval:
+LEADER_FIRST_S = 30     # first search of the leader after the start (before it: unknown, never the cache)
+EPISODE_MIN_NODES = 5  # detaches of at least this many nodes in one survey interval:
 EPISODE_SHARE = 0.2     # (or this share of the nodes) are one network episode
 HISTORY_FILE = "/data/radio_history.json"
 TOPOLOGY_FILE = "/share/mesh_guardian/topology.json"
@@ -342,7 +343,10 @@ class Radio:
         self.w.dirty = True
 
     def mesh_leader(self):
-        """Names of the Matter nodes that are Thread leader (current values when possible)."""
+        """Names of the Matter nodes that are Thread leader: the leader found by asking a router
+        (check_leader), else a leader role read by this add-on less than 2 h ago, never a role of
+        the Matter Server cache. Nothing fresh: "unknown" upstream, and no leader change is
+        reported from "unknown"."""
         if self.leader_name and time.time() - self.leader_t < 2400:
             return [self.leader_name]
         if self.live and self.live.connected:
@@ -376,7 +380,7 @@ class Radio:
             self.w.dirty = True
 
     def run_leader(self):
-        time.sleep(120)
+        time.sleep(LEADER_FIRST_S)
         while not self.w.stop.is_set():
             if self.live and self.live.connected:
                 try:
