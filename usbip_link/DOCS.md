@@ -26,6 +26,10 @@ Every `check_interval` seconds the add-on checks the link:
 - server silent for less than that (a single check is enough), then back → the device is detached and
   attached again all the same: after a virtual machine pause or a restart of usbipd the kernel may
   never notice that the link is dead (0.4.2);
+- Home Assistant's own clock jumps by more than 20 seconds (the virtual machine was paused, as Hyper-V
+  does when Windows restarts with "Save": it is saved, then restored a minute later) → the device is
+  detached at once, without waiting for the server, and attached again when it answers, then the add-ons
+  of `restart_addons` are restarted (0.4.2);
 - attached again after a loss → the add-ons of `restart_addons` are restarted (the
   OpenThread border router opens its radio only when it starts);
 - attached for the first time (start of Home Assistant) → those of them that already run,

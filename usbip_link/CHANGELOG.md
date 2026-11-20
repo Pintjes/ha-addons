@@ -9,9 +9,17 @@
   which only looked at the port, did nothing, silently. Now, when the server answers again after
   **any** silence, even a single check, the device is detached and attached again, and the add-ons of
   `restart_addons` are restarted (before, a detach only happened after three silent checks, 30 s).
+- Machine paused then resumed (Hyper-V "Save" when Windows restarts: the virtual machine is saved, then
+  restored a minute later, without a boot): the link is dead and nothing tells the kernel. The clock gives
+  it away: the wall clock jumps forward by the length of the pause while the monotonic one stops. A jump
+  of more than 20 s, seen within 2 s, detaches the device **at once**, the server answering or not (this
+  frees whatever is stuck on the dead device, the border router included), attaches it again as soon as
+  the server answers, and restarts the add-ons of `restart_addons`. A clock set back by more than 20 s
+  counts too.
 - An add-on restart the Supervisor refuses (HTTP 503 while it starts, at the boot of Home Assistant) was
   lost, the border router staying started without its radio: it is tried again every 15 s for 5 min, said
-  in the log, then given up said too. A 4xx error is not retried.
+  in the log, then given up said too (with the hint that it may be stuck on the dead device: stop it,
+  then start it by hand). A 4xx error is not retried.
 - No MQTT broker found at the start (Supervisor not ready): the add-on went on without MQTT until its next
   restart. The broker is now looked for again every 30 s, in the background, until found.
 

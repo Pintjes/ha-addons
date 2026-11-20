@@ -415,6 +415,101 @@ finally:
     ul.LOG.removeHandler(cap3)
 assert mq4.client is None and sum("No MQTT broker yet" in m for m in cap3.messages) == 1, cap3.messages
 
+# reprise d'une VM mise en pause (Hyper-V « enregistrer ») : l'horloge murale saute, la monotone non
+class Clocks:
+    def __init__(self):
+        self.w, self.m = 1_000_000.0, 500.0
+
+    def wall(self):
+        return self.w
+
+    def mono(self):
+        return self.m
+
+    def tick(self, s):               # temps qui passe normalement
+        self.w += s
+        self.m += s
+
+
+ck = Clocks()
+cw = ul.ClockWatch(wall=ck.wall, mono=ck.mono)
+ck.tick(2)
+assert cw.poll(2) == 0.0
+ck.tick(2.5)                         # un peu de retard : pas une pause
+assert cw.poll(2) == 0.0
+ck.w += 52                           # pause de 52 s : monotone arretee, murale remise a l'heure (cas du 19/11)
+assert cw.poll(2) == 52.0
+ck.tick(2)
+assert cw.poll(2) == 0.0             # une seule fois
+ck.w += 19                           # sous le seuil (20 s) : ignore
+assert cw.poll(2) == 0.0
+ck.w -= 40                           # horloge remise en arriere
+assert cw.poll() == -40.0
+ck.tick(60)                          # monotone qui compte la pause : une attente de 2 s qui dure 60 s
+assert cw.poll(2) == 58.0
+ck.tick(60)                          # sans attente connue (travail de la passe) : rien, la derive est nulle
+assert cw.poll() == 0.0
+
+# reprise detectee, serveur deja la : detache tout de suite et rattache dans le meme passage, add-ons redemarres
+f9 = Fake()
+f9.attached = True
+link9 = ul.Link({"server": "192.168.1.10", "devices": [{"name": "ZBT-2", "hardware_id": "303a:831a"}],
+                 "restart_addons": ["core_openthread_border_router"]}, runner=f9.run, probe=f9.probe, clock=f9.clock)
+link9.check()
+link9.events = []
+f9.calls.clear()
+f9.now += 52
+link9.resumed(52.0)
+assert [k for k, _ in link9.events] == ["clock_jump"] and "+52 s" in link9.events[0][1] and link9.resume_pending
+assert f9.calls == []                # rien n'est fait avant le passage
+link9.check()
+assert f9.calls[:2] == ["port", "detach -p 0"] and "attach -r 192.168.1.10 -b 2-3" in f9.calls
+assert [k for k, _ in link9.events] == ["clock_jump", "resumed", "attached"], link9.events
+assert "the machine was paused" in link9.events[1][1] and "again after 52 s" in link9.events[2][1]
+assert link9.restart == ["core_openthread_border_router"] and not link9.resume_pending and not link9.silent
+# reprise, serveur pas encore la (reseau pas remonte) : detache quand meme, rattache des qu'il repond
+f10 = Fake()
+f10.attached = True
+link10 = ul.Link({"server": "192.168.1.10", "devices": [{"name": "ZBT-2", "hardware_id": "303a:831a"}],
+                  "restart_addons": ["core_openthread_border_router"]}, runner=f10.run, probe=f10.probe, clock=f10.clock)
+link10.check()
+f10.up = False
+link10.resumed(52.0)
+link10.events = []
+f10.calls.clear()
+link10.check()
+assert not f10.attached and "detach -p 0" in f10.calls and not any(c.startswith("attach") for c in f10.calls)
+assert [k for k, _ in link10.events] == ["server_down", "resumed"] and not link10.public()["devices"][0]["attached"]
+assert not link10.resume_pending                      # rien de plus a detacher
+f10.up = True
+f10.now += 8
+link10.events = []
+link10.check()
+assert f10.attached and link10.restart == ["core_openthread_border_router"] and not link10.silent
+assert [k for k, _ in link10.events] == ["server_up", "attached"] and "again after" in link10.events[1][1]
+# reprise mais detachement refuse : retente au passage suivant
+f11 = Fake()
+f11.attached = True
+fail = [True]
+
+
+def run11(a, timeout=20):
+    if a[1] == "detach" and fail[0]:
+        raise RuntimeError("busy")
+    return f11.run(a, timeout)
+
+
+link11 = ul.Link({"server": "192.168.1.10", "devices": [{"name": "ZBT-2", "hardware_id": "303a:831a"}]},
+                 runner=run11, probe=f11.probe, clock=f11.clock)
+link11.check()
+link11.resumed(30.0)
+link11.check()
+assert link11.resume_pending and f11.attached
+fail[0] = False
+link11.check()
+assert not link11.resume_pending and f11.attached and link11.public()["devices"][0]["attaches"] == 1
+assert any("attach -r" in c for c in f11.calls)
+
 # remontage de /sys : un refus (profil AppArmor, droit manquant) est dit dans le journal, sans arreter l'add-on
 calls = []
 assert ul.remount_sys(lambda args, timeout=20: calls.append((args, timeout))) is True

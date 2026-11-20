@@ -56,6 +56,8 @@ RUNNING = ("started", "error")   # states of an add-on restarted after the first
 RETRY_S = 15             # s between two tries of a restart the Supervisor refused (503 while it starts)
 RETRY_MAX_S = 300        # s: a restart is tried again for this long, then given up
 MQTT_RETRY_S = 30        # s between two tries to find the MQTT broker, until found
+CLOCK_JUMP_S = 20        # s: a jump of the clock (wall vs monotonic) beyond this = machine paused and resumed
+WATCH_STEP_S = 2         # s: the wait between two checks is cut in steps of this length to see a jump at once
 
 TEXTS = {
     "fr": {
@@ -79,13 +81,22 @@ TEXTS = {
         "Cannot restart the add-on {slug}: {err} (trying again for up to {m} min)":
             "Impossible de redémarrer l'add-on {slug} : {err} (nouvel essai pendant {m} min au plus)",
         "Add-on {slug} restarted after {n} tries": "Add-on {slug} redémarré au bout de {n} essais",
-        "Add-on {slug} not restarted after {m} min: {err}": "Add-on {slug} non redémarré après {m} min : {err}",
+        "Add-on {slug} not restarted after {m} min: {err}. It may be stuck on the dead device: stop it, then start it "
+        "again by hand":
+            "Add-on {slug} non redémarré après {m} min : {err}. Il est peut-être bloqué sur le périphérique mort : "
+            "l'arrêter puis le redémarrer à la main",
         "{name}: already attached (port {port}, {server} {busid}), taken as it is":
             "{name} : déjà attaché (port {port}, {server} {busid}), repris tel quel",
         "{name}: server {server} answers again after a silence, the device is detached and attached again (the link may "
         "have died without the kernel noticing)":
             "{name} : le serveur {server} répond à nouveau après un silence, périphérique détaché puis rattaché (la "
             "liaison a pu mourir sans que le noyau le voie)",
+        "The clock jumped by {gap} s (machine paused and resumed?): the links are checked at once":
+            "L'horloge a sauté de {gap} s (machine mise en pause puis reprise ?) : les liaisons sont vérifiées tout de suite",
+        "{name}: the machine was paused, the device is detached at once (its link may be dead) and attached again when "
+        "the server answers":
+            "{name} : la machine a été mise en pause, périphérique détaché tout de suite (sa liaison a pu mourir) et "
+            "rattaché dès que le serveur répond",
         "{name}: cannot detach port {port}: {err}": "{name} : impossible de détacher le port {port} : {err}",
         "{name}: bus id changed on the server ({old} -> {new})": "{name} : identifiant de bus modifié sur le serveur ({old} -> {new})",
         "Connected to MQTT": "Connecté à MQTT",
@@ -182,6 +193,32 @@ def resolve(host):
         return set()
 
 
+class ClockWatch:
+    """Spots a pause of the machine (a virtual machine saved by Hyper-V, then resumed) or a step of its
+    clock. The monotonic clock of Linux does not count the time the machine was stopped, and the wall clock
+    is set right again after the resume: read together, they drift apart by the length of the pause. If
+    the monotonic clock counted it instead, a wait that lasted much longer than asked shows it."""
+
+    def __init__(self, wall=time.time, mono=time.monotonic):
+        self.wallf, self.monof = wall, mono
+        self.wall, self.mono = wall(), mono()
+
+    def poll(self, expected=None):
+        """Seconds of the jump since the last call (+ forward, - backward), or 0.0 when under CLOCK_JUMP_S.
+        `expected`: the time the caller just waited, to spot a wait that lasted far longer."""
+        w, m = self.wallf(), self.monof()
+        dw, dm = w - self.wall, m - self.mono
+        self.wall, self.mono = w, m
+        drift = dw - dm
+        late = max(dw, dm) - expected if expected is not None else 0.0
+        for gap in (drift, late):
+            if gap > CLOCK_JUMP_S:
+                return gap
+        if drift < -CLOCK_JUMP_S:
+            return drift
+        return 0.0
+
+
 def percentile(values, pct):
     """Nearest-rank percentile of a list (None when empty): the smallest value that at least pct % of
     the values do not exceed."""
@@ -222,6 +259,7 @@ class Link:
         self.dead = 0
         self.silent = False      # the server did not answer at a check since the last time it did
         self.silent_at = None    # time of the first silent check of that silence
+        self.resume_pending = False   # the clock jumped: the attached devices are detached at the next check
         self.last_busid = {}     # device name -> bus id of the last attachment, to say a change
         self.latency_ms = None   # last answer time of the server
         self.latencies = []      # last LATENCY_SAMPLES answer times, for the average and the worst
@@ -260,7 +298,10 @@ class Link:
         self.dead = 0 if up else self.dead + 1
         # back after a silence, even one check: a link that died without the kernel noticing (virtual
         # machine resumed, usbipd restarted) would keep the port "in use": detach and attach again
-        suspect = up and self.silent
+        # (or the clock jumped: virtual machine resumed after a pause: detach at once, server answering or not,
+        # which also frees what is stuck on the dead device)
+        force = self.resume_pending
+        suspect = force or (up and self.silent)
         if not up and not self.silent:
             self.silent, self.silent_at = True, self.clock()
         detach_failed = False
@@ -294,9 +335,14 @@ class Link:
                     st["error"] = txt
                     detach_failed = True   # tried again at the next check
                     continue
-                self.emit("resumed", t("{name}: server {server} answers again after a silence, the device is detached and "
-                                       "attached again (the link may have died without the kernel noticing)",
-                                       name=d["name"], server=self.server), logging.WARNING)
+                if force:
+                    self.emit("resumed", t("{name}: the machine was paused, the device is detached at once (its link may "
+                                           "be dead) and attached again when the server answers", name=d["name"]),
+                              logging.WARNING)
+                else:
+                    self.emit("resumed", t("{name}: server {server} answers again after a silence, the device is detached "
+                                           "and attached again (the link may have died without the kernel noticing)",
+                                           name=d["name"], server=self.server), logging.WARNING)
                 self._lost(st)
                 if self.silent_at is not None:
                     st["lost_at"] = min(st["lost_at"], self.silent_at)   # the loss dates from the silence
@@ -355,7 +401,7 @@ class Link:
                 first = first or not st["attached_once"]
             st["attached_once"], st["lost_at"] = True, None
         if suspect and not detach_failed:
-            self.silent, self.silent_at = False, None
+            self.silent, self.silent_at, self.resume_pending = False, None, False
         if reattached:
             self.restart, self.restart_if_running = list(self.restart_addons), False
         elif first:
@@ -364,6 +410,15 @@ class Link:
         self.checks += 1
         # the latency moves at each check: published with the rest, not a reason to publish by itself
         return json.dumps(self.public(latency=False), sort_keys=True) != before
+
+    def resumed(self, gap):
+        """The clock jumped by `gap` s (ClockWatch): the machine was paused (a virtual machine saved and
+        resumed) and the links with it. The next check detaches the devices at once."""
+        self.resume_pending = True
+        if not self.silent:
+            self.silent, self.silent_at = True, self.clock() - max(0.0, gap)
+        self.emit("clock_jump", t("The clock jumped by {gap} s (machine paused and resumed?): the links are checked at once",
+                                  gap=f"{gap:+.0f}"), logging.WARNING)
 
     def _lost(self, st):
         st.update(attached=False, since=self.clock(), busid=None)
@@ -608,7 +663,8 @@ class RestartQueue:
                     LOG.warning(t("Cannot restart the add-on {slug}: {err}", slug=slug, err=err))
                     del self.items[slug]
                 elif now >= it["until"]:
-                    LOG.warning(t("Add-on {slug} not restarted after {m} min: {err}", slug=slug, m=RETRY_MAX_S // 60, err=err))
+                    LOG.warning(t("Add-on {slug} not restarted after {m} min: {err}. It may be stuck on the dead device: "
+                                  "stop it, then start it again by hand", slug=slug, m=RETRY_MAX_S // 60, err=err))
                     del self.items[slug]
                 elif it["tries"] == 1:   # said at the first refusal only
                     LOG.warning(t("Cannot restart the add-on {slug}: {err} (trying again for up to {m} min)", slug=slug,
@@ -640,8 +696,12 @@ def main():
     interval = max(3, int(options.get("check_interval") or 10))
     last_pub, last_latency = 0.0, None
     queue = RestartQueue()
+    watch = ClockWatch()
     while not stop.is_set():
         mq.retry(time.time())
+        gap = watch.poll()            # a pause during the work of the last pass
+        if gap:
+            link.resumed(gap)
         try:
             changed = link.check()
         except Exception as err:  # noqa: BLE001 - one bad pass must not end the add-on
@@ -658,7 +718,16 @@ def main():
             link.events = []
             mq.publish()
             last_pub, last_latency = time.time(), latency
-        stop.wait(interval)
+        waited = 0
+        while waited < interval and not stop.is_set():   # in steps: a pause of the machine is seen within seconds
+            step = min(WATCH_STEP_S, interval - waited)
+            if stop.wait(step):
+                break
+            waited += step
+            gap = watch.poll(step)
+            if gap:
+                link.resumed(gap)
+                break
     # the devices stay attached: a restart of the add-on must not cut the radio of the border router
 
 
