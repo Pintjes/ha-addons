@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.4.2] - 2026-11-20
+
+### Fixed
+
+- Attached device, server silent for a short while (virtual machine resumed, usbipd restarted):
+  the kernel may never see the link die, the port stays "in use" on a dead connection and the add-on,
+  which only looked at the port, did nothing, silently. Now, when the server answers again after
+  **any** silence, even a single check, the device is detached and attached again, and the add-ons of
+  `restart_addons` are restarted (before, a detach only happened after three silent checks, 30 s).
+- An add-on restart the Supervisor refuses (HTTP 503 while it starts, at the boot of Home Assistant) was
+  lost, the border router staying started without its radio: it is tried again every 15 s for 5 min, said
+  in the log, then given up said too. A 4xx error is not retried.
+- No MQTT broker found at the start (Supervisor not ready): the add-on went on without MQTT until its next
+  restart. The broker is now looked for again every 30 s, in the background, until found.
+
+### Added
+
+- Clearer log: `already attached (port, server, bus id), taken as it is` at the start of the add-on,
+  `answers again after a silence, the device is detached and attached again`, `cannot detach port`
+  (said once, tried again at each check), `bus id changed on the server` (device plugged into another USB
+  port), `restarted after N tries`.
+
 ## [0.4.1] - 2026-11-17
 
 ### Added

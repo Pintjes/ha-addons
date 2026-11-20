@@ -23,13 +23,20 @@ Every `check_interval` seconds the add-on checks the link:
 - not attached → attached as soon as the server answers;
 - server silent three checks in a row → the device is detached (a dead link would keep the
   port busy for a long time) and attached again when the server is back;
+- server silent for less than that (a single check is enough), then back → the device is detached and
+  attached again all the same: after a virtual machine pause or a restart of usbipd the kernel may
+  never notice that the link is dead (0.4.2);
 - attached again after a loss → the add-ons of `restart_addons` are restarted (the
   OpenThread border router opens its radio only when it starts);
 - attached for the first time (start of Home Assistant) → those of them that already run,
   or are in error, are restarted once: they may have started before the device was there.
 
 A restart of the add-on itself does not detach anything, and restarts nothing: a device
-found attached is taken as it is, and its state is published only once checked.
+found attached is taken as it is (the log says so), and its state is published only once checked.
+
+A restart that Home Assistant refuses (it answers 503 while it starts) is tried again every
+15 seconds for 5 minutes, and the log says so. Without a MQTT broker at the start, the add-on keeps
+looking for it every 30 seconds.
 
 ## 1. Windows: share the device (usbipd-win)
 

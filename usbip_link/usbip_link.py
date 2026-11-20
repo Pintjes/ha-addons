@@ -15,6 +15,9 @@ Every `check_interval` seconds:
 - an attached device whose server no longer answers for DEAD_CHECKS checks in a row (the server
   restarts: Windows update…) is detached, so that its port is free and the device is attached
   again when the server is back, instead of a dead link the kernel keeps for a long time;
+- when the server answers again after ANY silence, even a single check, the attached device is
+  detached and attached again: the kernel does not always see a link die (a virtual machine
+  resumed, a restarted usbipd), and the port would stay "in use" on a dead connection;
 - after an attachment that follows a loss, the add-ons listed in `restart_addons` are restarted
   (the OpenThread border router opens its radio at start only); after the first attachment, only
   those already running (or in error): at the start of Home Assistant they may have started before
@@ -39,7 +42,7 @@ import time
 import urllib.request
 from datetime import datetime
 
-VERSION = "0.4.1"
+VERSION = "0.4.2"
 LOG = logging.getLogger("usbip_link")
 STATE_TOPIC = "usbip_link/state"
 DISCOVERY = "homeassistant"
@@ -50,6 +53,9 @@ USBIP_PORT = 3240
 LATENCY_SAMPLES = 30     # latency average over this many checks (5 min at 10 s)
 LATENCY_PUBLISH_S = 60   # a change of the latency alone is published at most this often
 RUNNING = ("started", "error")   # states of an add-on restarted after the first attachment
+RETRY_S = 15             # s between two tries of a restart the Supervisor refused (503 while it starts)
+RETRY_MAX_S = 300        # s: a restart is tried again for this long, then given up
+MQTT_RETRY_S = 30        # s between two tries to find the MQTT broker, until found
 
 TEXTS = {
     "fr": {
@@ -70,8 +76,21 @@ TEXTS = {
         "Add-on {slug} restarted: it started before the device was attached":
             "Add-on {slug} redémarré : il avait démarré avant l'attachement du périphérique",
         "Cannot restart the add-on {slug}: {err}": "Impossible de redémarrer l'add-on {slug} : {err}",
+        "Cannot restart the add-on {slug}: {err} (trying again for up to {m} min)":
+            "Impossible de redémarrer l'add-on {slug} : {err} (nouvel essai pendant {m} min au plus)",
+        "Add-on {slug} restarted after {n} tries": "Add-on {slug} redémarré au bout de {n} essais",
+        "Add-on {slug} not restarted after {m} min: {err}": "Add-on {slug} non redémarré après {m} min : {err}",
+        "{name}: already attached (port {port}, {server} {busid}), taken as it is":
+            "{name} : déjà attaché (port {port}, {server} {busid}), repris tel quel",
+        "{name}: server {server} answers again after a silence, the device is detached and attached again (the link may "
+        "have died without the kernel noticing)":
+            "{name} : le serveur {server} répond à nouveau après un silence, périphérique détaché puis rattaché (la "
+            "liaison a pu mourir sans que le noyau le voie)",
+        "{name}: cannot detach port {port}: {err}": "{name} : impossible de détacher le port {port} : {err}",
+        "{name}: bus id changed on the server ({old} -> {new})": "{name} : identifiant de bus modifié sur le serveur ({old} -> {new})",
         "Connected to MQTT": "Connecté à MQTT",
-        "No MQTT broker: the state is only in the log": "Pas de broker MQTT : l'état n'est que dans le journal",
+        "No MQTT broker yet: the state is only in the log until it answers (trying again every {s} s)":
+            "Pas encore de broker MQTT : l'état n'est que dans le journal tant qu'il ne répond pas (nouvel essai toutes les {s} s)",
         "omr_prefix is set but no longer used here: the fixed OMR prefix moved to the Thread Anchor add-on":
             "omr_prefix est rempli mais ne sert plus ici : le préfixe OMR fixe est passé dans l'add-on Thread Anchor",
     },
@@ -201,6 +220,9 @@ class Link:
                                   "attached_once": False, "lost_at": None, "attaches": 0} for d in self.devices}
         self.server_ok = None
         self.dead = 0
+        self.silent = False      # the server did not answer at a check since the last time it did
+        self.silent_at = None    # time of the first silent check of that silence
+        self.last_busid = {}     # device name -> bus id of the last attachment, to say a change
         self.latency_ms = None   # last answer time of the server
         self.latencies = []      # last LATENCY_SAMPLES answer times, for the average and the worst
         self.events = []       # (kind, text) since the last publish, for the log and MQTT
@@ -236,6 +258,12 @@ class Link:
                 self.emit("server_up", t("Server {server} answers again", server=self.server))
             self.server_ok = up
         self.dead = 0 if up else self.dead + 1
+        # back after a silence, even one check: a link that died without the kernel noticing (virtual
+        # machine resumed, usbipd restarted) would keep the port "in use": detach and attach again
+        suspect = up and self.silent
+        if not up and not self.silent:
+            self.silent, self.silent_at = True, self.clock()
+        detach_failed = False
         try:
             ports = parse_port(self.run(["usbip", "port"]))
         except Exception as err:  # noqa: BLE001 - no port in use, or the module is missing
@@ -256,10 +284,31 @@ class Link:
                                         "the server is back)", name=d["name"], server=self.server), logging.WARNING)
                 self._lost(st)
                 continue
+            if p and suspect:
+                try:
+                    self.run(["usbip", "detach", "-p", str(int(p["port"]))])
+                except Exception as err:  # noqa: BLE001
+                    txt = t("{name}: cannot detach port {port}: {err}", name=d["name"], port=p["port"], err=err)
+                    if st["error"] != txt:
+                        self.emit("detach_failed", txt, logging.WARNING)
+                    st["error"] = txt
+                    detach_failed = True   # tried again at the next check
+                    continue
+                self.emit("resumed", t("{name}: server {server} answers again after a silence, the device is detached and "
+                                       "attached again (the link may have died without the kernel noticing)",
+                                       name=d["name"], server=self.server), logging.WARNING)
+                self._lost(st)
+                if self.silent_at is not None:
+                    st["lost_at"] = min(st["lost_at"], self.silent_at)   # the loss dates from the silence
+                p = None
             if p:
                 if not st["attached"]:
                     # attached already when the add-on started, or by someone else: taken as it is
                     st.update(attached=True, since=self.clock(), busid=p["busid"], error=None, attached_once=True)
+                    self.last_busid[d["name"]] = p["busid"]
+                    self.emit("adopted", t("{name}: already attached (port {port}, {server} {busid}), taken as it is",
+                                           name=d["name"], port=p["port"], server=p["server"] or self.server,
+                                           busid=p["busid"]))
                 continue
             if st["attached"]:
                 self.emit("lost", t("{name}: link lost", name=d["name"]), logging.WARNING)
@@ -291,6 +340,11 @@ class Link:
                 st["error"] = txt
                 continue
             again = st["lost_at"] is not None
+            old = self.last_busid.get(d["name"])
+            if old and old != busid:
+                self.emit("busid_changed", t("{name}: bus id changed on the server ({old} -> {new})", name=d["name"],
+                                             old=old, new=busid), logging.WARNING)
+            self.last_busid[d["name"]] = busid
             st.update(attached=True, since=self.clock(), busid=busid, error=None, attaches=st["attaches"] + 1)
             if again:
                 self.emit("attached", t("{name}: attached again after {d} ({server} {busid})", name=d["name"],
@@ -300,6 +354,8 @@ class Link:
                 self.emit("attached", t("{name}: attached ({server} {busid})", name=d["name"], server=self.server, busid=busid))
                 first = first or not st["attached_once"]
             st["attached_once"], st["lost_at"] = True, None
+        if suspect and not detach_failed:
+            self.silent, self.silent_at = False, None
         if reattached:
             self.restart, self.restart_if_running = list(self.restart_addons), False
         elif first:
@@ -377,12 +433,26 @@ def slug_of(name):
 
 class Mqtt:
     def __init__(self, link):
-        self.link, self.client = link, None
+        self.link, self.client, self.last_try, self.warned = link, None, time.time(), False
+        self.connect()
+
+    def retry(self, now):
+        """Looks for the broker again every MQTT_RETRY_S until found (the Supervisor may refuse at boot)."""
+        if self.client is None and now - self.last_try >= MQTT_RETRY_S:
+            self.last_try = now
+            self.connect()
+
+    def connect(self):
         try:
             import paho.mqtt.client as mqtt   # noqa: PLC0415
             conf = supervisor("/services/mqtt")
         except Exception as err:  # noqa: BLE001
-            LOG.warning("%s (%s)", t("No MQTT broker: the state is only in the log"), err)
+            if not self.warned:   # said once; the next tries only in the debug log
+                LOG.warning("%s (%s)", t("No MQTT broker yet: the state is only in the log until it answers (trying again "
+                                         "every {s} s)", s=MQTT_RETRY_S), err)
+                self.warned = True
+            else:
+                LOG.debug("MQTT: %s", err)
             return
         c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="usbip_link")
         if conf.get("username"):
@@ -462,25 +532,89 @@ def publish_due(changed, events, now, last_pub, latency, last_latency):
     return latency != last_latency and now - last_pub >= LATENCY_PUBLISH_S
 
 
+def restart_one(slug, if_running, sup):
+    """Restarts one add-on (with `if_running`, only if it is started or in error: a stopped one finds the
+    device when it starts). Returns "done", "skipped" or ("failed", error)."""
+    try:
+        if if_running:
+            state = (sup(f"/addons/{slug}/info") or {}).get("state")
+            if state not in RUNNING:
+                LOG.debug("%s: %s, not restarted", slug, state)
+                return "skipped"
+        sup(f"/addons/{slug}/restart", method="POST", timeout=120)
+    except Exception as err:  # noqa: BLE001
+        return "failed", err
+    return "done"
+
+
 def do_restarts(slugs, if_running, sup=None):
-    """Restarts the add-ons `slugs`; with `if_running`, only those started or in error (a stopped one
-    finds the device when it starts). Returns the slugs restarted."""
+    """Restarts the add-ons `slugs` once; returns the slugs restarted."""
     sup = sup or supervisor
     done = []
     for slug in slugs:
-        try:
-            if if_running:
-                state = (sup(f"/addons/{slug}/info") or {}).get("state")
-                if state not in RUNNING:
-                    LOG.debug("%s: %s, not restarted", slug, state)
-                    continue
-            sup(f"/addons/{slug}/restart", method="POST", timeout=120)
+        res = restart_one(slug, if_running, sup)
+        if res == "done":
             LOG.info(t("Add-on {slug} restarted: it started before the device was attached" if if_running
                        else "Add-on {slug} restarted", slug=slug))
             done.append(slug)
-        except Exception as err:  # noqa: BLE001
-            LOG.warning(t("Cannot restart the add-on {slug}: {err}", slug=slug, err=err))
+        elif res != "skipped":
+            LOG.warning(t("Cannot restart the add-on {slug}: {err}", slug=slug, err=res[1]))
     return done
+
+
+def retryable(err):
+    """A refusal worth trying again: the Supervisor not ready (5xx) or not reachable; a 4xx will not change."""
+    code = getattr(err, "code", None)
+    return code is None or code >= 500
+
+
+class RestartQueue:
+    """The add-on restarts to do. One the Supervisor refuses (503 while it starts, as at the boot of Home
+    Assistant) is tried again every RETRY_S for RETRY_MAX_S, and said in the log, instead of being lost."""
+
+    def __init__(self, sup=None):
+        self.sup = sup or supervisor
+        self.items = {}    # slug -> {"if_running", "until", "tries"}
+        self.next_try = 0.0
+
+    def add(self, slugs, if_running, now):
+        for slug in slugs:
+            old = self.items.get(slug)
+            self.items[slug] = {"if_running": if_running and (old["if_running"] if old else True),
+                                "until": now + RETRY_MAX_S, "tries": old["tries"] if old else 0}
+        self.next_try = now
+
+    def due(self, now):
+        return bool(self.items) and now >= self.next_try
+
+    def run(self, now):
+        """One pass over the pending restarts; returns the slugs restarted."""
+        done = []
+        for slug, it in list(self.items.items()):
+            it["tries"] += 1
+            res = restart_one(slug, it["if_running"], self.sup)
+            if res == "skipped":
+                del self.items[slug]
+            elif res == "done":
+                LOG.info(t("Add-on {slug} restarted: it started before the device was attached" if it["if_running"]
+                           else "Add-on {slug} restarted", slug=slug))
+                if it["tries"] > 1:
+                    LOG.info(t("Add-on {slug} restarted after {n} tries", slug=slug, n=it["tries"]))
+                del self.items[slug]
+                done.append(slug)
+            else:
+                err = res[1]
+                if not retryable(err):
+                    LOG.warning(t("Cannot restart the add-on {slug}: {err}", slug=slug, err=err))
+                    del self.items[slug]
+                elif now >= it["until"]:
+                    LOG.warning(t("Add-on {slug} not restarted after {m} min: {err}", slug=slug, m=RETRY_MAX_S // 60, err=err))
+                    del self.items[slug]
+                elif it["tries"] == 1:   # said at the first refusal only
+                    LOG.warning(t("Cannot restart the add-on {slug}: {err} (trying again for up to {m} min)", slug=slug,
+                                  err=err, m=RETRY_MAX_S // 60))
+        self.next_try = now + RETRY_S
+        return done
 
 
 def main():
@@ -505,7 +639,9 @@ def main():
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     interval = max(3, int(options.get("check_interval") or 10))
     last_pub, last_latency = 0.0, None
+    queue = RestartQueue()
     while not stop.is_set():
+        mq.retry(time.time())
         try:
             changed = link.check()
         except Exception as err:  # noqa: BLE001 - one bad pass must not end the add-on
@@ -514,7 +650,9 @@ def main():
         if link.restart:
             todo, link.restart = link.restart, []
             stop.wait(RESTART_SETTLE_S)
-            do_restarts(todo, link.restart_if_running)
+            queue.add(todo, link.restart_if_running, time.time())
+        if queue.due(time.time()):
+            queue.run(time.time())
         latency = link.latency()
         if publish_due(changed, link.events, time.time(), last_pub, latency, last_latency):
             link.events = []

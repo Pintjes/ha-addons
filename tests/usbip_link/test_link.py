@@ -273,6 +273,148 @@ mq.on_connect(mq.client, None, None, 0)   # reconnexion apres le premier passage
 states = [ul.json.loads(p) for tp, p in mq.client.sent if tp == "usbip_link/state"]
 assert len(states) == 1 and states[0]["devices"][0]["attached"] is True
 
+import logging  # noqa: E402
+
+
+class _Cap(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.messages = []
+
+    def emit(self, record):
+        self.messages.append(record.getMessage())
+
+
+# 0.4.2 : retour du serveur apres un silence, meme d'un seul passage (VM reprise, usbipd relance : le noyau ne voit pas la
+# liaison mourir) : detache puis rattache, puis redemarre les add-ons
+f6 = Fake()
+f6.attached = True
+link6 = ul.Link({"server": "192.168.1.10", "devices": [{"name": "ZBT-2", "hardware_id": "303a:831a"}],
+                 "restart_addons": ["core_openthread_border_router"]}, runner=f6.run, probe=f6.probe, clock=f6.clock)
+link6.check()                                        # port deja tenu au demarrage : repris tel quel, et dit
+assert [k for k, _ in link6.events] == ["adopted"] and "repris tel quel" not in link6.events[0][1]
+assert "already attached (port 00, 192.168.1.10 2-3)" in link6.events[0][1] and link6.restart == []
+link6.events = []
+f6.calls.clear()
+link6.check()
+assert f6.calls == ["port"] and link6.events == []   # serveur present : rien n'est touche
+f6.up = False
+link6.check()                                        # un seul passage muet : pas de detachement (DEAD_CHECKS = 3)
+assert f6.attached and link6.silent and link6.public()["devices"][0]["attached"]
+f6.up = True
+f6.calls.clear()
+link6.events = []
+f6.now += 10
+link6.check()
+assert f6.calls[:3] == ["port", "detach -p 0", "list -r 192.168.1.10"] and "attach -r 192.168.1.10 -b 2-3" in f6.calls
+assert [k for k, _ in link6.events] == ["server_up", "resumed", "attached"], link6.events
+assert "again after 10 s" in link6.events[2][1] and link6.public()["devices"][0]["attaches"] == 1
+assert link6.restart == ["core_openthread_border_router"] and link6.restart_if_running is False and not link6.silent
+f6.calls.clear()
+link6.check()
+assert f6.calls == ["port"]                          # le drapeau est retombe : pas de rattachement en boucle
+# detachement refuse : dit une fois, retente au passage suivant, drapeau garde
+f7 = Fake()
+f7.attached = True
+link7 = ul.Link({"server": "192.168.1.10", "devices": [{"name": "ZBT-2", "hardware_id": "303a:831a"}]},
+                runner=lambda a, timeout=20: (_ for _ in ()).throw(RuntimeError("busy")) if a[1] == "detach" else f7.run(a, timeout),
+                probe=f7.probe, clock=f7.clock)
+link7.check()
+f7.up = False
+link7.check()
+f7.up = True
+link7.events = []
+link7.check()
+assert [k for k, _ in link7.events] == ["server_up", "detach_failed"] and "port 00: busy" in link7.events[1][1] and link7.silent
+assert link7.public()["devices"][0]["attached"]
+link7.events = []
+link7.check()
+assert link7.events == [] and link7.silent           # meme refus : pas de repetition dans le journal
+# BUSID qui change sur le serveur (autre port USB) : dit, retrouve par VID:PID
+f8 = Fake()
+link8 = ul.Link({"server": "192.168.1.10", "devices": [{"name": "ZBT-2", "hardware_id": "303a:831a"}]},
+                runner=f8.run, probe=f8.probe, clock=f8.clock)
+link8.check()
+f8.attached = False
+LIST_MOVED = LIST.replace("2-3: Espressif", "1-1: Espressif")
+f8.run, orig8 = (lambda a, timeout=20: LIST_MOVED if a[1] == "list" else Fake.run(f8, a, timeout)), f8.run
+link8.run = f8.run
+link8.events = []
+link8.check()
+assert [k for k, _ in link8.events] == ["lost", "busid_changed", "attached"], link8.events
+assert "2-3 -> 1-1" in link8.events[1][1] and link8.public()["devices"][0]["busid"] == "1-1"
+
+# redemarrages avec nouveaux essais : un 503 du Supervisor (boot) est retente, dit dans le journal, puis abandonne
+class Http(Exception):
+    def __init__(self, code):
+        super().__init__(f"HTTP Error {code}")
+        self.code = code
+
+
+logs = []
+cap2 = _Cap()
+ul.LOG.addHandler(cap2)
+ul.LOG.setLevel(logging.INFO)
+try:
+    refuse = {"otbr": 3, "zha": 99, "gone": 1}
+    posts = []
+
+    def sup2(path, method="GET", timeout=30):
+        slug = path.split("/")[2]
+        if path.endswith("/info"):
+            return {"state": "started"}
+        posts.append(slug)
+        if slug == "gone":
+            raise Http(404)
+        if refuse.get(slug, 0) > 0:
+            refuse[slug] -= 1
+            raise Http(503)
+        return {}
+
+    q = ul.RestartQueue(sup=sup2)
+    assert not q.due(0)
+    q.add(["otbr", "zha", "gone"], False, 1000.0)
+    assert q.due(1000.0) and q.run(1000.0) == [] and set(q.items) == {"otbr", "zha"}   # 404 : abandonne tout de suite
+    assert not q.due(1000.0 + ul.RETRY_S - 1) and q.due(1000.0 + ul.RETRY_S)
+    assert q.run(1015.0) == [] and q.run(1030.0) == []
+    assert q.run(1045.0) == ["otbr"] and set(q.items) == {"zha"}                       # 4e essai : repart
+    assert q.run(1060.0) == [] and "zha" in q.items
+    assert q.run(1000.0 + ul.RETRY_MAX_S) == [] and q.items == {} and not q.due(2000.0)   # delai ecoule : abandon dit
+finally:
+    ul.LOG.removeHandler(cap2)
+msgs = cap2.messages
+assert sum("Cannot restart the add-on otbr: HTTP Error 503 (trying again for up to 5 min)" in m for m in msgs) == 1, msgs
+assert any("Cannot restart the add-on gone: HTTP Error 404" in m and "trying again" not in m for m in msgs)
+assert any("Add-on otbr restarted after 4 tries" in m for m in msgs) and any("Add-on zha not restarted after 5 min" in m for m in msgs)
+# un nouvel ordre pendant l'attente : fusionne ; « seulement ceux qui tournent » ne l'emporte pas sur « toujours »
+q2 = ul.RestartQueue(sup=lambda p, method="GET", timeout=30: {"state": "started"})
+q2.add(["a"], True, 0.0)
+q2.add(["a", "b"], False, 5.0)
+assert q2.items["a"]["if_running"] is False and q2.items["b"]["if_running"] is False
+
+# liaison MQTT reprise en tache de fond : le courtier introuvable au boot est cherche a nouveau, sans bruit
+tries = []
+mq3 = ul.Mqtt.__new__(ul.Mqtt)
+mq3.link, mq3.client, mq3.last_try, mq3.warned = link5, None, 100.0, True
+mq3.connect = lambda: (tries.append(1), setattr(mq3, "client", object() if len(tries) == 2 else None))
+mq3.retry(100.0 + ul.MQTT_RETRY_S - 1)
+assert tries == []
+mq3.retry(100.0 + ul.MQTT_RETRY_S)
+mq3.retry(100.0 + ul.MQTT_RETRY_S + 1)               # trop tot depuis l'essai
+mq3.retry(100.0 + 2 * ul.MQTT_RETRY_S + 1)
+assert len(tries) == 2 and mq3.client is not None
+mq3.retry(10000.0)                                   # connecte : plus d'essai
+assert len(tries) == 2
+cap3 = _Cap()
+ul.LOG.addHandler(cap3)
+try:
+    mq4 = ul.Mqtt(link5)                             # sans Supervisor (pas de jeton) : un seul avertissement
+    mq4.last_try = 0.0
+    mq4.retry(1e9)
+finally:
+    ul.LOG.removeHandler(cap3)
+assert mq4.client is None and sum("No MQTT broker yet" in m for m in cap3.messages) == 1, cap3.messages
+
 # remontage de /sys : un refus (profil AppArmor, droit manquant) est dit dans le journal, sans arreter l'add-on
 calls = []
 assert ul.remount_sys(lambda args, timeout=20: calls.append((args, timeout))) is True
