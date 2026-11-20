@@ -36,7 +36,9 @@ FR = {
     'Supervisor log: {n} lines read, {r} restarts found': 'Journal du Supervisor : {n} lignes lues, {r} redémarrages trouvés',
     'Supervisor log not readable (HTTP {code}): restarts are detected by the live link only':
         'Journal du Supervisor illisible (HTTP {code}) : les redémarrages sont détectés par le lien direct seulement',
+    '{n} node out of {total} is reconnecting, nothing to do': '{n} node sur {total} se reconnecte, rien à faire',
     '{n} of {total} nodes are reconnecting, nothing to do': '{n} nodes sur {total} se reconnectent, rien à faire',
+    '{n} node out of {total} did not come back': "{n} node sur {total} n'est pas revenue",
     '{n} of {total} nodes did not come back': "{n} nodes sur {total} ne sont pas revenues",
     'all {total} nodes came back': 'les {total} nodes sont revenues',
     # advice

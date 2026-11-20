@@ -49,6 +49,8 @@ DIAG_BUSY_RETRY_S = 10   # every this often
 ANCHOR_FILE = "/data/anchor.json"
 ANCHOR_SUFFIX = "_thread_anchor"   # slug of the add-on in the Supervisor: <repository hash>_thread_anchor
 CATCHUP_SETTLE_S = 60   # after the return of radio and prefix: time left to the nodes to follow
+RETAINED_GRACE_S = 60   # a retained state (sent again by the broker when MG connects) can be old: an
+#                         error in it waits this long for a live state before it pauses the recovery or is said
 REPORT_DAYS = 7         # days of the event log read before the anchoring
 REPORT_EVERY_S = 600    # the report is computed again this often (it reads the event log)
 OMR_EPISODE_S = 1800    # OMR changes this close together are one episode (a burst of the border routers)
@@ -120,6 +122,7 @@ class Anchor:
         self.available = None        # thread_anchor/state/available: True / False / None (never heard)
         self.blocked_since = None    # radio or prefix out: recovery paused since
         self.block_reason = None
+        self.retained_t = None       # state or availability known only from a retained message, since (None: live)
         self.dropped = set()         # nodes that dropped while blocked: the catch-up pass
         self.catchup_at = None       # time of the catch-up pass (blocked ended + settle)
         self.takeover_since = None   # the other border routers favor their own prefix since
@@ -147,19 +150,31 @@ class Anchor:
             LOG.warning(t("Cannot write {file}: {err}", file=ANCHOR_FILE, err=err))
 
     # ------------------------------------------------------------ MQTT
-    def on_state(self, payload):
+    def _heard(self, retained):
+        """A retained message (sent again by the broker when MG connects, e.g. after a restart of
+        Home Assistant) may be old: noted, so an error in it waits for a live state (RETAINED_GRACE_S).
+        A live message ends that wait."""
+        if retained:
+            if self.retained_t is None:
+                self.retained_t = self.clock()
+        else:
+            self.retained_t = None
+
+    def on_state(self, payload, retained=False):
         try:
             data = json.loads(payload) if payload else None
         except ValueError:
             return
         with self.lock:
             self.state = data if isinstance(data, dict) else None
+            self._heard(retained)
         self.update()
 
-    def on_available(self, payload):
+    def on_available(self, payload, retained=False):
         txt = (payload.decode() if isinstance(payload, bytes) else str(payload or "")).strip().lower()
         with self.lock:
             self.available = True if txt == "online" else False if txt == "offline" else None
+            self._heard(retained)
         self.update()
 
     def on_children(self, payload):
@@ -315,10 +330,14 @@ class Anchor:
     def _update(self, now):
         omr = self.omr()
         cut = self.radio_cut()
+        # a prefix error known only from a retained message, less than RETAINED_GRACE_S ago: maybe old,
+        # a live state usually follows within seconds. Nothing paused nor said meanwhile
+        held = bool(omr and not omr.get("enforced") and omr.get("error") and self.retained_t is not None
+                    and now - self.retained_t < RETAINED_GRACE_S)
         reason = None
         if cut:
             reason = t("radio {names} cut off (USB/IP)", names=", ".join(cut))
-        elif omr and not omr.get("enforced") and omr.get("error"):
+        elif omr and not omr.get("enforced") and omr.get("error") and not held:
             reason = t("OMR prefix no longer in place ({err})", err=omr["error"])
         events = []
         with self.lock:
@@ -365,7 +384,7 @@ class Anchor:
             self.w.emit(kind, txt, **data)
         if events:
             self.w.dirty = True
-        if hasattr(self.w, "omr_fixed"):
+        if hasattr(self.w, "omr_fixed") and not held:
             self.w.omr_fixed(omr, now=now)   # 🧭 events: prefix no longer / again in place
 
     def blocked(self):

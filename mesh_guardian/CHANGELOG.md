@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.40.8] - 2026-11-20
+
+### Fixed
+
+- No false "OMR prefix no longer in place" and "Recovery paused", then "back in place" and "resumed" in the same second, when Mesh Guardian connects (after a restart of Home Assistant): the state of Thread Anchor sent again by the broker (retained) can be old, so an error in it now waits 60 s for a live state. A live state is handled at once as before; an error still there after 60 s is said.
+- Restart note in the singular for one node: "1 node out of 25 did not come back" ("1 node sur 25 n'est pas revenue"), same for "is reconnecting".
+
 ## [2.40.7] - 2026-11-19
 
 ### Fixed

@@ -16,7 +16,7 @@ import logging
 import threading
 import time
 
-from i18n import lang, t
+from i18n import lang, t, tn
 from store import load_json, save_json
 
 LOG = logging.getLogger("mg.table")
@@ -1003,10 +1003,12 @@ class NodeTable:
         if waiting and now - m["t"] < RESTART_GRACE_S:
             for r in waiting:
                 r["after_restart"] = True
-            return [("warn", who + t(": ") + t("{n} of {total} nodes are reconnecting, nothing to do",
-                                             n=len(waiting), total=len(ids)))]
+            return [("warn", who + t(": ") + tn("{n} node out of {total} is reconnecting, nothing to do",
+                                              "{n} of {total} nodes are reconnecting, nothing to do",
+                                              len(waiting), total=len(ids)))]
         if waiting:
-            return [("info", who + t(": ") + t("{n} of {total} nodes did not come back", n=len(waiting), total=len(ids)))]
+            return [("info", who + t(": ") + tn("{n} node out of {total} did not come back", "{n} of {total} nodes did not come back",
+                                              len(waiting), total=len(ids)))]
         return [("info", who + t(": ") + t("all {total} nodes came back", total=len(ids)))]
 
     def _advise(self, rows):
