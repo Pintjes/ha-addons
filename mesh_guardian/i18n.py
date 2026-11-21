@@ -90,6 +90,7 @@ FR = {
     "it did not come back after the recovery pings": "pas revenue après les pings de récupération",
     "Check its batteries": "Vérifier les piles",
     "Check its power": "Vérifier l'alimentation",
+    "Offline: cause unknown, the recovery attempt looks for it": "Hors ligne : cause inconnue, la tentative de récupération la cherche",
     "Answers now and then: unplug it for 10s": "Répond par intermittence : débrancher 10 s",
     "Answers now and then: remove the battery for 10s": "Répond par intermittence : retirer la pile 10 s",
     "Answers now and then: try the recovery attempt": "Répond par intermittence : lancer la tentative de récupération",

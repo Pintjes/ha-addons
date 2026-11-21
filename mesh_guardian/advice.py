@@ -240,8 +240,12 @@ def advise(rows, brs, ctx):
                 # it answered a recovery ping, or the Matter Server opened several sessions within the hour:
                 # it has power, "check its power" would be wrong
                 out.append((t("Answers now and then: try the recovery attempt"), "", "high"))
-            else:
+            elif r.get("ping_ok") is False:
+                # proof: no answer to the ping and no neighbor heard it recently (hb is empty here)
                 out.append((t("Check its batteries") if r.get("battery") else t("Check its power"), "", "high"))
+            else:
+                # nothing proves a power problem (no ping result, or an absence from the topology only)
+                out.append((t("Offline: cause unknown, the recovery attempt looks for it"), "", "high"))
         elif r.get("network") != "thread":
             if (r.get("network") == "wifi" and r.get("rssi") is not None and r["rssi"] <= WIFI_WEAK
                     and not r.get("link_old")):
