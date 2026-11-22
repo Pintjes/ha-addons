@@ -80,7 +80,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.40.11"
+VERSION = "2.40.12"
 OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
 OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
@@ -104,6 +104,7 @@ KNOWN_FILE = "/data/known_nodes.json"
 BR_NAMES_FILE = "/data/br_names.json"
 BR_FORGOTTEN_FILE = "/data/br_forgotten.json"   # border routers removed by the user, ignored while unchanged
 BR_FORGOTTEN_KEEP_S = 30 * 86400
+LEADER_FILE = "/data/leader.json"   # Thread leader as last published: kept while the add-on starts
 PREFIXES_FILE = "/data/prefixes.json"
 PROXY_HOST = "mg-proxy-"   # host name of the announcements made in a node's place
 PROXY_HOLD_S = 24 * 3600   # an announcement in a node's place kept until it announces itself, this long at most
@@ -378,6 +379,8 @@ class Watch:
         self._load_br_names()
         self.br_forgotten = {}   # border agent key -> {"names": [mDNS names], "role": role when removed, "t", "seen"}
         self._load_br_forgotten()
+        self.leader_saved = None   # {"keys", "text"}: the Thread leader as last published
+        self._load_leader()
         self._load_prefixes()
         self.restore_brs()
 
@@ -1456,9 +1459,21 @@ class Watch:
                 mesh = self.radio.mesh_leaders() if self.radio else []
                 leader_txt = ", ".join(name for _, name in mesh) if mesh else t("unknown")
                 leader_keys = [key for key, _ in mesh]
+                if self.quiet or not self._names_loaded():
+                    # start: the roles come from before the restart, the leader found by asking a
+                    # router comes at +30 s and Home Assistant gives the names at about +45 s (a
+                    # leader would be "0x2C" then "0x13"). Keep the leader published before the
+                    # restart, else "unknown", until the start is over and the names are there
+                    saved = self.leader_saved or {}
+                    leader_keys = list(saved.get("keys") or [])
+                    leader_txt = saved.get("text") or t("unknown")
             st = self._settle({"parts": partitions, "leader_keys": leader_keys, "leader": leader_txt,
                                "leaders_count": len(leaders)}, mine)
             partitions, leader_keys, leader_txt = st["parts"], st["leader_keys"], st["leader"]
+            if (not self.quiet and leader_keys and leader_txt != t("unknown")
+                    and self.leader_saved != {"keys": list(leader_keys), "text": leader_txt}):
+                self.leader_saved = {"keys": list(leader_keys), "text": leader_txt}
+                self._save_leader()
             leaders_count = st["leaders_count"]
             omr = sorted({b["omr"] for b in online if b["omr"]})
             nodes_on = sorted(k for k, n in self.matter.items() if n["online"])
@@ -1498,6 +1513,22 @@ class Watch:
                 "events_count": self.events_count,
                 "updated": now_iso(),
             }
+
+    def _names_loaded(self):
+        """Home Assistant gave the names of the nodes (read about 45 s after the start)."""
+        h = getattr(self, "healer", None)
+        return h is None or any(n.get("name") for n in list(h.nodes.values()))
+
+    def _load_leader(self):
+        saved = load_json(LEADER_FILE)
+        if isinstance(saved, dict) and isinstance(saved.get("keys"), list) and saved.get("text"):
+            self.leader_saved = {"keys": [str(k) for k in saved["keys"]], "text": str(saved["text"])}
+
+    def _save_leader(self):
+        try:
+            save_json(LEADER_FILE, self.leader_saved, ensure_ascii=False)
+        except Exception as err:  # noqa: BLE001
+            LOG.warning(t("Cannot write {file}: {err}", file=LEADER_FILE, err=err))
 
     def _settle(self, raw, mine):
         """Partitions and leader as published (lock held): a change counts once it held

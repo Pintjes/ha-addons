@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.40.12] - 2026-11-22
+
+### Fixed
+
+- No false Thread leaders in the history of Home Assistant at each start (e.g. "unknown" → "0x2C" → "0x13" → the real name within a minute): while the add-on starts (and until Home Assistant gave the names of the nodes), the leader found in the mesh is not published; the leader published before the restart is kept (saved in `/data/leader.json`), else "unknown". A border router leader (known from its announcement) is unchanged, and a real leader change after the start is still reported.
+
 ## [2.40.11] - 2026-11-22
 
 ### Changed
