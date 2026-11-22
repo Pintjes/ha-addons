@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import queue
+import re
 import signal
 import socket
 import threading
@@ -79,7 +80,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.40.9"
+VERSION = "2.40.10"
 OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
 OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
@@ -229,6 +230,23 @@ def short(name, type_):
     return name[: -len(type_) - 1] if name.endswith("." + type_) else name
 
 
+NODE_HEX = re.compile(r"[0-9A-F]{16}")
+CONFLICT_SUFFIX = re.compile(r" \(\d+\)$")
+
+
+def matter_instance(inst):
+    """(fabric, node id, renamed) of a Matter operational instance "<fabric>-<node>", or None. A name
+    conflict on the local network renames an instance "<fabric>-<node> (5)": still the same node.
+    Anything else than 16 hex digits is not a node id."""
+    if "-" not in inst:
+        return None
+    fabric, node = inst.split("-", 1)
+    bare = CONFLICT_SUFFIX.sub("", node).upper()
+    if not NODE_HEX.fullmatch(bare):
+        return None
+    return fabric, bare, bare != node.upper()
+
+
 def _int16(text):
     try:
         return int(text, 16)
@@ -366,6 +384,8 @@ class Watch:
             return
         try:
             for node in known:
+                if not NODE_HEX.fullmatch(str(node)):
+                    continue   # e.g. "…23 (5)" kept by 2.40.9 and older from a renamed announcement
                 self.matter.setdefault(node, {
                     "online": False, "since": None, "fails": 0,
                     "addrs": [], "prefix": None, "seen": False,
@@ -653,8 +673,9 @@ class Watch:
             self.burst = {"start": now, "last": now, "matter": set(), "br": set(), "cast": set()}
         self.burst["last"] = now
         if type_ == T_MATTER:
-            inst = short(name, T_MATTER)
-            self.burst["matter"].add(inst.split("-", 1)[-1].upper())
+            parsed = matter_instance(short(name, T_MATTER))   # a renamed copy "… (5)" is the same node
+            if parsed:
+                self.burst["matter"].add(parsed[1])
         elif type_ == T_MESHCOP:
             self.burst["br"].add(name)
         else:
@@ -1132,13 +1153,12 @@ class Watch:
 
     # ---------------------------------------------------------------- matter
     def update_matter(self, name, info):
-        inst = short(name, T_MATTER)
-        if "-" not in inst:
+        parsed = matter_instance(short(name, T_MATTER))
+        if not parsed:
             return
-        fabric, node = inst.split("-", 1)
+        fabric, node, _renamed = parsed
         if FABRIC and fabric.upper() != FABRIC:
             return
-        node = node.upper()
         if info is not None and str(getattr(info, "server", "") or "").startswith(PROXY_HOST):
             return   # our own announcement made in the node's place (proxy_announce): not the node
         addrs = sorted(info.parsed_addresses(IPVersion.All)) if info else []
@@ -1573,11 +1593,11 @@ class Watch:
             if key:
                 self.br_gone(key, reason)
         elif type_ == T_MATTER:
-            inst = short(name, T_MATTER)
-            if "-" in inst:
-                fabric, node = inst.split("-", 1)
-                if not FABRIC or fabric.upper() == FABRIC:
-                    self.matter_gone(node.upper(), reason)
+            parsed = matter_instance(short(name, T_MATTER))
+            # a renamed copy "<fabric>-<node> (5)" going away says nothing about the node: its own
+            # name may still be announced
+            if parsed and not parsed[2] and (not FABRIC or parsed[0].upper() == FABRIC):
+                self.matter_gone(parsed[1], reason)
         elif type_ in COMPANIONS:
             self.cast_gone(name, reason)
 

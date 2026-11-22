@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.40.10] - 2026-11-22
+
+### Fixed
+
+- No false "Node 0x23 (5) unknown to Home Assistant" / "unknown to the Matter Server": an mDNS name conflict on the local network renames an announcement "<fabric>-<node> (5)"; it is now the same node. The removal of such a renamed copy no longer says the node is gone, and a key of this kind kept by an older version is dropped from the list of known nodes at start.
+
 ## [2.40.9] - 2026-11-21
 
 ### Fixed

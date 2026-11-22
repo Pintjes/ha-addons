@@ -5,6 +5,7 @@ Valeurs fictives uniquement."""
 import ast
 import ipaddress
 import os
+import re
 import sys
 import threading
 import time
@@ -14,15 +15,17 @@ MG = sys.argv[1]
 src = open(os.path.join(MG, "watcher.py"), encoding="utf-8").read()
 tree = ast.parse(src)
 funcs = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in ("txt_of", "unknown_records", "short", "prefix64",
-                                                                              "local_addresses", "own_announcement")]
-assert len(funcs) == 6, [f.name for f in funcs]
+                                                                              "local_addresses", "own_announcement",
+                                                                              "matter_instance")]
+assert len(funcs) == 7, [f.name for f in funcs]
 cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Watch")
 body = [m for m in cls.body if isinstance(m, ast.FunctionDef) and m.name in ("update_matter", "unknown_nodes")]
 assert len(body) == 2
 mod = ast.Module(body=funcs + [ast.ClassDef(name="W", bases=[], keywords=[], body=body, decorator_list=[])], type_ignores=[])
 FAB = "0011223344556677"
 ns = {"time": time, "ipaddress": ipaddress, "T_MATTER": "_matter._tcp.local.", "FABRIC": FAB, "PROXY_HOST": "mg-proxy-",
-      "IPVersion": types.SimpleNamespace(All=0), "t": lambda s, **k: s, "fmt_duration": str}
+      "IPVersion": types.SimpleNamespace(All=0), "t": lambda s, **k: s, "fmt_duration": str,
+      "NODE_HEX": re.compile(r"[0-9A-F]{16}"), "CONFLICT_SUFFIX": re.compile(r" \(\d+\)$")}
 exec(compile(ast.fix_missing_locations(mod), "watcher_extrait", "exec"), ns)
 
 w = ns["W"]()
