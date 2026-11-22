@@ -6,6 +6,7 @@ FROM python:3.13.18-alpine3.24
 RUN pip install --no-cache-dir --only-binary=:all: "paho-mqtt==2.2.0"
 
 COPY thread_anchor.py /
+COPY LICENSE /LICENSE
 
 LABEL \
     io.hass.name="Thread Anchor" \
