@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.14] - 2026-11-22
+
+### Changed
+
+- License changed: proprietary from this version (end user license agreement in `LICENSE`, French text
+  prevailing, with an English translation; © 2026 Pintjes. All rights reserved); earlier versions stay under
+  GPL-3.0-or-later. No change in behavior.
 ## [0.1.13] - 2026-11-22
 
 ### Changed

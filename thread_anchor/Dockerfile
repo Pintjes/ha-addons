@@ -15,6 +15,6 @@ LABEL \
     org.opencontainers.image.title="Thread Anchor" \
     org.opencontainers.image.authors="Pintjes" \
     org.opencontainers.image.source="https://github.com/Pintjes/ha-addons" \
-    org.opencontainers.image.licenses="GPL-3.0-or-later"
+    org.opencontainers.image.licenses="LicenseRef-Proprietary"
 
 CMD [ "python3", "-u", "/thread_anchor.py" ]

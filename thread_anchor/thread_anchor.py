@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Thread Anchor — Home Assistant add-on
 # Author: Pintjes — https://github.com/Pintjes/ha-addons
-# License: GPL-3.0-or-later (see LICENSE)
+# © 2026 Pintjes. All rights reserved. See LICENSE.
 """Thread Anchor: keeps the OpenThread border router of Home Assistant on a fixed OMR prefix.
 
 Every Thread device has an address in the OMR (off-mesh routable) prefix of the network, chosen
@@ -34,7 +34,7 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
-VERSION = "0.1.13"
+VERSION = "0.1.14"
 LOG = logging.getLogger("thread_anchor")
 STATE_TOPIC = "thread_anchor/state"
 DISCOVERY = "homeassistant"

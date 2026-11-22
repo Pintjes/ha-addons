@@ -8,7 +8,6 @@
   <img src="https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-informational" alt="Architectures">
   <img src="https://img.shields.io/badge/status-beta-orange" alt="Status: beta">
   <a href="https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml"><img src="https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/Pintjes/ha-addons/blob/main/thread_anchor/LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg" alt="License: GPL-3.0"></a>
 </p>
 
 > **Beta.** Thread Anchor reaches the OpenThread border router through the
@@ -55,4 +54,4 @@ Full documentation: [DOCS.md](DOCS.md).
 
 ## License
 
-[GPL-3.0](LICENSE) © Pintjes
+© 2026 Pintjes. All rights reserved. See [LICENSE](LICENSE).
