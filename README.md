@@ -2,6 +2,7 @@
 
 [![Add repository to my Home Assistant][repo-badge]][repo-link]
 [![CI][ci-badge]][ci-link]
+[![Licence : propriétaire][license-badge]][license-link]
 
 Add-on repository for [Home Assistant](https://www.home-assistant.io/).
 
@@ -38,6 +39,8 @@ These add-ons are independent projects, not affiliated with or endorsed by Anthr
 [repo-link]: https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FPintjes%2Fha-addons
 [ci-badge]: https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml/badge.svg
 [ci-link]: https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml
+[license-badge]: https://img.shields.io/badge/licence-propri%C3%A9taire-lightgrey
+[license-link]: https://github.com/Pintjes/ha-addons/blob/main/LICENSE
 [mg-version]: https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FPintjes%2Fha-addons%2Fmain%2Fmesh_guardian%2Fconfig.yaml&query=%24.version&label=&color=blue
 [vab-version]: https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FPintjes%2Fha-addons%2Fmain%2Fvoice_agent_bridge%2Fconfig.yaml&query=%24.version&label=&color=blue
 [sd-version]: https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FPintjes%2Fha-addons%2Fmain%2Fside_door%2Fconfig.yaml&query=%24.version&label=&color=blue
