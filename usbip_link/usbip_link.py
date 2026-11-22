@@ -1,6 +1,6 @@
 # USB/IP Link — Home Assistant add-on
 # Author: Pintjes — https://github.com/Pintjes/ha-addons
-# License: GPL-3.0-or-later (see LICENSE)
+# © 2026 Pintjes. All rights reserved. See LICENSE.
 # Idea from rogerfar/ha-usbip-client (shell scripts, MIT); no code taken from it: written anew in
 # Python, attachment kept up for good instead of once at start.
 """USB devices of another computer (USB/IP server: usbipd-win on Windows, usbipd on Linux) attached
@@ -42,7 +42,7 @@ import time
 import urllib.request
 from datetime import datetime
 
-VERSION = "0.4.2"
+VERSION = "0.4.3"
 LOG = logging.getLogger("usbip_link")
 STATE_TOPIC = "usbip_link/state"
 DISCOVERY = "homeassistant"

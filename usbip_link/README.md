@@ -8,7 +8,6 @@
   <img src="https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-informational" alt="Architectures">
   <img src="https://img.shields.io/badge/status-beta-orange" alt="Status: beta">
   <a href="https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml"><img src="https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/Pintjes/ha-addons/blob/main/usbip_link/LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg" alt="License: GPL-3.0"></a>
 </p>
 
 > **Beta.** The add-on loads a kernel module and attaches devices (`SYS_ADMIN`, `SYS_MODULE`),
@@ -56,7 +55,9 @@ Full documentation: [DOCS.md](DOCS.md).
 
 ## License
 
-[GPL-3.0](LICENSE) © Pintjes
+Proprietary, © 2026 Pintjes. All rights reserved: see the [license agreement](LICENSE)
+(French text, English translation below). Versions before 0.4.3 stay under GPL-3.0-or-later.
+Third-party components keep their own licenses.
 
 The idea comes from [rogerfar/ha-usbip-client](https://github.com/rogerfar/ha-usbip-client);
 USB/IP Link is written anew and uses none of its code.

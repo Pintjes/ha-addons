@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.3] - 2026-11-22
+
+### Changed
+
+- License changed: proprietary from this version (© 2026 Pintjes, all rights reserved, end user license
+  agreement in `LICENSE`, French text and English translation); earlier versions stay under
+  GPL-3.0-or-later. No change to the behaviour of the add-on.
+
 ## [0.4.2] - 2026-11-20
 
 ### Fixed
