@@ -32,6 +32,28 @@ COUNTERS = {"detached": "0/53/14", "partition_changes": "0/53/19", "parent_chang
 # (link quality 3 and 2 = good and fair, 1 = weak; the RSSI only when it is not known)
 THRESHOLDS = {"rssi_good": -80, "rssi_bad": -90, "lqi_good": 3, "lqi_bad": 1}
 NEW_PARENT_S = 30 * 60
+
+
+def counter_deltas(cur, old, own, cur_reboots, old_reboots):
+    """Thread counters (detaches...) given since an older snapshot, the same way for the node table
+    and the radio survey. cur, old: {name: value}; own(name): the old value was already the node's
+    own (not one of the Matter Server cache, which can be days old). A restart of the node is judged
+    on its reboot counter (0/51/1), never on its uptime: the uptime of the Matter Server cache can be
+    stale, smaller than the old one without any restart, and then every counter since the boot of
+    the node (e.g. 275 detaches over weeks) was counted as the last 24 h.
+    Returns ({name: count or None when unknown}, restarts)."""
+    restarts = max(0, cur_reboots - old_reboots) if cur_reboots is not None and old_reboots is not None else 0
+    out = {}
+    for name, a in cur.items():
+        b = (old or {}).get(name)
+        if a is None or b is None or not own(name):
+            out[name] = None
+        else:
+            # after a restart the counters start from 0: the value now is what came since
+            out[name] = a if restarts else max(0, a - b)
+    return out, restarts
+
+
 OLD_S = 2 * 3600   # a value the node gave longer ago than this (or nobody knows when) is old: shown as such, never as current
 BACKGROUND_S = 20
 
@@ -653,17 +675,14 @@ class NodeTable:
             # instability over 24h (difference with the survey of about 24h ago)
             old = ref.get(nid)
             uptime, reboots = a.get("0/51/2"), a.get("0/51/1")
-            rebooted = bool(old and uptime is not None and (old.get("u") or 0) > uptime)
-            diff = {}
-            for key, path in COUNTERS.items():
-                cur, before = a.get(path), ((old or {}).get("c") or {}).get(key)
+
+            def own(key, nid=nid):
                 # the value of 24h ago must be the node's own too: one taken from the Matter Server
                 # cache can be days old, and the difference would count all those days
-                known = self.live.known_since(nid, path)
-                if cur is None or before is None or known is None or ref_t is None or ref_t < known:
-                    diff[key] = None
-                else:
-                    diff[key] = cur if rebooted else max(0, cur - before)
+                known = self.live.known_since(nid, COUNTERS[key])
+                return known is not None and ref_t is not None and ref_t >= known
+            diff, _ = counter_deltas({key: a.get(path) for key, path in COUNTERS.items()}, (old or {}).get("c"),
+                                     own, reboots, (old or {}).get("r"))
             reb_24 = None
             if old and reboots is not None and old.get("r") is not None:
                 reb_24 = max(0, reboots - old["r"])

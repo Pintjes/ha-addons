@@ -30,7 +30,7 @@ from datetime import datetime
 from i18n import t, tn
 from store import load_json, save_json
 from advice import weak_link
-from nodetable import ext_of, find_parents, hop_links, routes_to_br
+from nodetable import counter_deltas, ext_of, find_parents, hop_links, routes_to_br
 
 LOG = logging.getLogger("mg.radio")
 
@@ -161,10 +161,10 @@ class Radio:
                 p = prev["nodes"].get(nid)
                 if not p:
                     continue
-                a, b = (c.get("c") or {}).get("detached"), (p.get("c") or {}).get("detached")
-                if a is None or b is None or not self._own_value(nid, "detached", prev["t"]):
-                    continue
-                d = a if (c.get("u") or 0) < (p.get("u") or 0) else max(0, a - b)
+                got, _ = counter_deltas({"detached": (c.get("c") or {}).get("detached")}, p.get("c"),
+                                        lambda k, nid=nid, at=prev["t"]: self._own_value(nid, k, at),
+                                        c.get("r"), p.get("r"))
+                d = got["detached"]
                 if d:
                     deltas[nid] = d
             if len(deltas) >= max(EPISODE_MIN_NODES, EPISODE_SHARE * len(cur["nodes"])):
@@ -286,17 +286,14 @@ class Radio:
                 if not old:
                     continue
                 # reboot counter (the cached uptime can be stale); a software update is not instability
-                reboots = (max(0, n["reboots"] - old["r"]) if n.get("reboots") is not None
-                           and old.get("r") is not None else 0)
+                names = ("detached", "parent_changes", "partition_changes", "attach_attempts")
+                d, reboots = counter_deltas({k: n["counters"].get(k) for k in names}, old["c"],
+                                            lambda k, nid=nid: self._own_value(nid, k, ref["t"]),
+                                            n.get("reboots"), old.get("r"))
+                d = {k: v for k, v in d.items() if v is not None}
                 rebooted = reboots > 0
                 if reboots and n.get("boot") == 5:
                     reboots -= 1
-                d = {}
-                for k in ("detached", "parent_changes", "partition_changes", "attach_attempts"):
-                    a, b = n["counters"].get(k), (old["c"] or {}).get(k)
-                    if a is None or b is None or not self._own_value(nid, k, ref["t"]):
-                        continue
-                    d[k] = a if rebooted else max(0, a - b)
                 score = d.get("detached", 0) * 3 + d.get("partition_changes", 0) * 2 + d.get("parent_changes", 0)
                 if score or reboots:
                     unstable.append({"name": n["name"], "area": n["area"], "role": n["role"],
