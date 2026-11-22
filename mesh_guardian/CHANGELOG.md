@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - A stop or restart of Thread Anchor is no longer a false "OMR prefix no longer in place (now: the same prefix)" with the recovery of lost nodes paused: while the border routers still announce the prefix, nothing is paused and nothing is said for a restart within 60 s; after that, "Thread Anchor stopped: OMR prefix … still published, no longer imposed". A prefix no longer announced while Thread Anchor is stopped is still a loss, said at once.
 - Detaches over 24 h of the node table no longer aberrant (e.g. 275 while the radio survey said 5 at most): the table judged a restart of the node on its uptime, and a stale uptime of the Matter Server cache then counted every detach since the boot of the node. The table and the radio survey now share one computation, which judges a restart on the reboot counter only.
 
+### Changed
+
+- **Remove from the list** on a border router that is still a Thread router or the leader: the confirmation says it will no longer be watched until it disappears and returns, or its role changes. A removed border router that comes back keeps the name you confirmed for it.
+
 ## [2.40.11] - 2026-11-22
 
 ### Changed

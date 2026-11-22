@@ -461,12 +461,20 @@ class Watch:
         f = self.br_forgotten.get(key)
         if f is None:
             return False
-        if now - (f.get("seen") or 0) > BR_SILENT_S or role != f.get("role"):
-            self.br_forgotten.pop(key, None)
-            self._save_br_forgotten()
+        if not f.get("ignore", True) or now - (f.get("seen") or 0) > BR_SILENT_S or role != f.get("role"):
+            self._br_unforget(key)
             return False
         f["seen"] = now
         return True
+
+    def _br_unforget(self, key):
+        """A removed border router comes back: as a new entry, with the name the user confirmed
+        for it (lock held)."""
+        f = self.br_forgotten.pop(key, None)
+        self._save_br_forgotten()
+        if f and f.get("name") and key not in self.br_names:
+            self.br_names[key] = {"name": f["name"], "detached": []}
+            self._save_br_names()
 
     def _save_br_names(self):
         cutoff = time.time() - 7 * 86400
@@ -990,10 +998,13 @@ class Watch:
                 return False
             label = self.br_label(b)
             names = [k for k, v in self.br_by_name.items() if v == key]
-            if b.get("online"):
-                now = time.time()
-                self.br_forgotten[key] = {"names": names, "role": b.get("role"), "t": now, "seen": now}
-                self._save_br_forgotten()
+            now = time.time()
+            # online: its announcements are ignored while unchanged; offline: back at its next one.
+            # Either way it keeps the name the user confirmed when it comes back
+            self.br_forgotten[key] = {"names": names, "role": b.get("role"), "t": now, "seen": now,
+                                      "ignore": bool(b.get("online")),
+                                      "name": (self.br_names.get(key) or {}).get("name")}
+            self._save_br_forgotten()
             self._drop_br(key)
             self.br_by_name = {k: v for k, v in self.br_by_name.items() if v != key}
         self.emit("br_removed", t("Border router {name} removed from the list", name=label), br=label)
@@ -1669,9 +1680,7 @@ class Watch:
                     # a removed border router withdrew its announcement: its next one is a return
                     gone = [k for k, f in self.br_forgotten.items() if name in (f.get("names") or [])]
                     for k in gone:
-                        self.br_forgotten.pop(k, None)
-                    if gone:
-                        self._save_br_forgotten()
+                        self._br_unforget(k)
         elif type_ == T_MATTER:
             parsed = matter_instance(short(name, T_MATTER))
             # a renamed copy "<fabric>-<node> (5)" going away says nothing about the node: its own

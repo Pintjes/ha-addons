@@ -375,7 +375,8 @@ const T = {
     br_net:"Thread network", br_prefix:"Prefix", br_last:"Last contact", br_subnet:"Same subnet as Home Assistant", br_det:"Detaches (24h)", br_detaches:"Detaches of the last 7 days",
     br_through:"Nodes going through it ({n})", br_children:"Nodes attached to it ({n})", br_model:"Model", br_id:"Identifier", br_ext:"Extended address", br_xpan:"Extended PAN ID", br_part:"Partition", br_addr:"Addresses", br_if:"Thread interface",
     br_src:{mdns:"announcement", thread:"heard over Thread"}, br_remove:"Remove from the list", br_remove_tip:"Remove this border router from the list, its alerts and its entity. It comes back by itself if it leaves and returns, or if its Thread role changes.",
-    br_remove_confirm:"{n}: remove this border router from the list? It comes back by itself if it leaves and returns, or if its Thread role changes.", br_removed:"{n} removed from the list", br_offline_adv:"Check its power and its network, or remove it from the list if you took it away on purpose.",
+    br_remove_confirm:"{n}: remove this border router from the list? It comes back by itself if it leaves and returns, or if its Thread role changes.", br_removed:"{n} removed from the list",
+    br_remove_active:"It is still a Thread router or the leader: it will no longer be watched until it disappears and returns, or its role changes.", br_offline_adv:"Check its power and its network, or remove it from the list if you took it away on purpose.",
     brs:"Border routers", br_usb:"radio over USB/IP {v} ms", br_seen:"seen {t}", br_never:"never seen", br_primary:"primary", offline:"offline", other_subnet:"other subnet than Home Assistant",
     nodes:"Nodes", search:"Filter: name, area, model…", c_all:"All", c_issues:"To handle", c_bat:"On battery",
     h_node:"Node", h_status:"Status · role", h_link:"Attachment · signal", h_resp:"Response", h_bat:"Power", h_last:"Last contact", h_adv:"Advice",
@@ -480,7 +481,8 @@ const T = {
     br_net:"Réseau Thread", br_prefix:"Préfixe", br_last:"Dernier contact", br_subnet:"Même sous-réseau que Home Assistant", br_det:"Décrochages (24 h)", br_detaches:"Décrochages des 7 derniers jours",
     br_through:"Nodes qui passent par lui ({n})", br_children:"Nodes rattachées à lui ({n})", br_model:"Modèle", br_id:"Identifiant", br_ext:"Adresse étendue", br_xpan:"Extended PAN ID", br_part:"Partition", br_addr:"Adresses", br_if:"Interface Thread",
     br_src:{mdns:"annonce", thread:"entendu en Thread"}, br_remove:"Retirer de la liste", br_remove_tip:"Retirer ce border router de la liste, de ses alertes et de son entité. Il revient tout seul s'il disparaît puis revient, ou si son rôle Thread change.",
-    br_remove_confirm:"{n} : retirer ce border router de la liste ? Il revient tout seul s'il disparaît puis revient, ou si son rôle Thread change.", br_removed:"{n} retiré de la liste", br_offline_adv:"Vérifier son alimentation et son réseau, ou le retirer de la liste s'il a été enlevé exprès.",
+    br_remove_confirm:"{n} : retirer ce border router de la liste ? Il revient tout seul s'il disparaît puis revient, ou si son rôle Thread change.", br_removed:"{n} retiré de la liste",
+    br_remove_active:"Il est encore routeur ou leader Thread : il ne sera plus surveillé jusqu'à ce qu'il disparaisse puis revienne, ou que son rôle change.", br_offline_adv:"Vérifier son alimentation et son réseau, ou le retirer de la liste s'il a été enlevé exprès.",
     brs:"Border routers", br_usb:"radio via USB/IP {v} ms", br_seen:"vu {t}", br_never:"jamais vu", br_primary:"primaire", offline:"hors ligne", other_subnet:"autre sous-réseau que Home Assistant",
     nodes:"Nodes", search:"Filtrer : nom, pièce, modèle…", c_all:"Toutes", c_issues:"À traiter", c_bat:"Sur pile",
     h_node:"Node", h_status:"Statut · rôle", h_link:"Rattachement · signal", h_resp:"Réponse", h_bat:"Alimentation", h_last:"Dernier contact", h_adv:"Conseil",
@@ -1455,7 +1457,9 @@ function openBr(id) {
 }
 async function removeBr(id) {
   const b = (D.border_routers || []).find(x => x.id === id);
-  if (!b || !confirm(F("br_remove_confirm", {n: b.name}))) return;
+  // still a router or the leader of the Thread network: said, it would no longer be watched
+  const active = b && b.online && (b.role === "router" || b.role === "leader");
+  if (!b || !confirm(F("br_remove_confirm", {n: b.name}) + (active ? "\n\n" + L("br_remove_active") : ""))) return;
   let ok = false;
   try {
     ok = (await (await fetch("api/br_forget", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({id})})).json()).ok;

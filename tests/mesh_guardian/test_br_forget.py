@@ -16,7 +16,7 @@ src = open(os.path.join(MG, "watcher.py"), encoding="utf-8").read()
 tree = ast.parse(src)
 cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Watch")
 want = ("forget_br", "_drop_br", "_clear_br_entity", "_br_still_forgotten", "_save_br_forgotten",
-        "_load_br_forgotten", "handle_removed")
+        "_load_br_forgotten", "handle_removed", "_br_unforget")
 body = [m for m in cls.body if isinstance(m, ast.FunctionDef) and m.name in want]
 assert len(body) == len(want), [m.name for m in body]
 mod = ast.Module(body=[ast.ClassDef(name="W", bases=[], keywords=[], body=body, decorator_list=[])], type_ignores=[])
@@ -79,9 +79,10 @@ assert w.forget_br("unknown") is False
 now = time.time()
 assert w._br_still_forgotten(KEY, "child", now + 60) is True
 assert w._br_still_forgotten(KEY, "child", now + 400) is True       # the 5-min rebrowse keeps it fresh
-# its Thread role changes: it comes back
+# its Thread role changes: it comes back, with the name the user confirmed (2.40.12)
 assert w._br_still_forgotten(KEY, "router", now + 500) is False and KEY not in w.br_forgotten
 assert KEY not in store[ns["BR_FORGOTTEN_FILE"]]
+assert w.br_names[KEY]["name"] == "TV demo"
 
 # nothing heard for longer than BR_SILENT_S: its next announcement is a return
 w = watch()
@@ -92,12 +93,14 @@ assert w._br_still_forgotten(KEY, "child", time.time() + 901) is False
 w = watch()
 w.forget_br(KEY)
 w.handle_removed(ns["T_MESHCOP"], NAME, "withdrawn")
-assert w.gone == [] and KEY not in w.br_forgotten
+assert w.gone == [] and KEY not in w.br_forgotten and w.br_names[KEY]["name"] == "TV demo"
 
-# an offline one removed: nothing kept, its next announcement is simply new
+# an offline one removed: not ignored, its next announcement brings it back, with its name
 w = watch()
 w.br[KEY]["online"] = False
-assert w.forget_br(KEY) is True and w.br_forgotten == {}
+assert w.forget_br(KEY) is True and KEY not in w.br_names
+assert w._br_still_forgotten(KEY, "child", time.time() + 1) is False
+assert KEY not in w.br_forgotten and w.br_names[KEY]["name"] == "TV demo"
 
 # a restart keeps the removal (time of the last announcement reset to the start)
 w2 = watch()
@@ -112,4 +115,7 @@ assert w2.br_forgotten == {}                                          # forgotte
 page = open(os.path.join(MG, "web", "index.html"), encoding="utf-8").read()
 assert "const remove = `<div" in page and "br_remove_online" not in page
 assert "if (!b || !confirm(" in page
+# 2.40.12: still a router or the leader -> the confirmation says it will no longer be watched
+assert 'const active = b && b.online && (b.role === "router" || b.role === "leader");' in page
+assert page.count("br_remove_active:") == 2 and 'L("br_remove_active")' in page
 print("OK")
