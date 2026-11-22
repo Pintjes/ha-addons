@@ -34,7 +34,7 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
-VERSION = "0.1.12"
+VERSION = "0.1.13"
 LOG = logging.getLogger("thread_anchor")
 STATE_TOPIC = "thread_anchor/state"
 DISCOVERY = "homeassistant"
@@ -103,11 +103,15 @@ TEXTS = {
         "The network favors {p} ({prf})": "Le réseau retient {p} ({prf})",
         "Border router restarted: OMR prefix checked again": "Border router redémarré : préfixe OMR revérifié",
         "Parent of the border router changed: {a} -> {b}": "Parent du border router changé : {a} -> {b}",
-        "Border router unreachable: {err}": "Border router injoignable : {err}",
+        "Border router unreachable": "Border router injoignable",
+        "Border router: cannot run a command in its container (restarting?)":
+            "Border router : commande impossible dans son conteneur (redémarrage ?)",
+        "Border router: no answer in time": "Border router : pas de réponse à temps",
+        "Border router container not found or stopped": "Conteneur du border router introuvable ou arrêté",
         "This border router does not know `br omrconfig` (OpenThread too old): {err}":
             "Ce border router ne connaît pas `br omrconfig` (OpenThread trop ancien) : {err}",
-        "No access to the Docker API ({err}); turn Protection mode off":
-            "Pas d'accès à l'API Docker ({err}) ; désactiver le mode protection",
+        "No access to the Docker API; turn Protection mode off":
+            "Pas d'accès à l'API Docker ; désactiver le mode protection",
         "Connected to MQTT": "Connecté à MQTT",
         "Diagnostic request ignored (no usable id): {err}": "Demande de diagnostic ignorée (pas d'id utilisable) : {err}",
         "Latency request ignored (no usable id): {err}": "Demande de mesure ignorée (pas d'id utilisable) : {err}",
@@ -172,6 +176,21 @@ class _UnixHTTPConnection(http.client.HTTPConnection):
         s.settimeout(self.timeout)
         s.connect(self._sock_path)
         self.sock = s
+
+
+def classify_docker_error(err):
+    """(error_kind, short text key) of a Docker failure; the raw text only goes to the log."""
+    s = str(err)
+    low = s.lower()
+    if s.startswith(("403", "[Errno 2]", "[Errno 13]")):
+        return "access_denied", "No access to the Docker API; turn Protection mode off"
+    if "timed out" in low:
+        return "timeout", "Border router: no answer in time"
+    if s[:1] == "5" or s.startswith("409") or "oci runtime" in low or "exec failed" in low or "is not running" in low:
+        return "exec_failed", "Border router: cannot run a command in its container (restarting?)"
+    if s.startswith("404") or "no such container" in low:
+        return "not_found", "Border router container not found or stopped"
+    return "other", "Border router unreachable"
 
 
 def _docker(method, path, body=None, timeout=30):
@@ -649,7 +668,7 @@ class Anchor:
         self.gate, self.sleep = Gate(), time.sleep   # every ot-ctl of the add-on goes through `otctl`
         self.role = self.routers = None              # Thread role of the border router, routers it sees
         self.link, self.link_at, self.link_role = None, 0.0, None   # its link with the parent and neighbors
-        self.mode = self.current = self.current_prf = self.error = self.applied_at = None
+        self.mode = self.current = self.current_prf = self.error = self.error_kind = self.applied_at = None
         self.favored = self.favored_prf = self.local = None
         self.started_at = None
         self.applied = 0
@@ -734,8 +753,9 @@ class Anchor:
     def _now_iso(self):
         return datetime.fromtimestamp(self.clock(), timezone.utc).astimezone().isoformat(timespec="seconds")
 
-    def emit(self, kind, text, level=logging.INFO):
-        LOG.log(level, text)
+    def emit(self, kind, text, level=logging.INFO, detail=None):
+        # detail: the raw error, in the log only (the event and the state carry the short text)
+        LOG.log(level, "%s [%s]" % (text, detail) if detail else text)
         self.events.append((kind, text))
 
     def _call(self, fn, *args):
@@ -851,20 +871,19 @@ class Anchor:
                 self.emit("follow_lost", t("The network does not follow: it favors {p} ({prf}) instead of {w} ({wprf})",
                                            p=self.favored or "-", prf=self.favored_prf or "?", w=self.prefix,
                                            wprf=self.preference), logging.WARNING)
-            self.error = None
+            self.error = self.error_kind = None
         except DockerError as err:
-            if str(err).startswith(("403", "[Errno 2]", "[Errno 13]")):
-                self._fail(t("No access to the Docker API ({err}); turn Protection mode off", err=err))
-            else:
-                self._fail(t("Border router unreachable: {err}", err=err))
+            kind, key = classify_docker_error(err)
+            self._fail(t(key), kind=kind, raw=str(err))
         except OtctlNoAnswer as err:
             # the border router is there, another command kept it busy: what was read stays as it was
-            self._fail(str(err), keep=True)
+            self._fail(str(err), keep=True, kind="no_answer")
         except Exception as err:  # noqa: BLE001
             if "InvalidCommand" in str(err):
-                self._fail(t("This border router does not know `br omrconfig` (OpenThread too old): {err}", err=err))
+                self._fail(t("This border router does not know `br omrconfig` (OpenThread too old): {err}", err=err),
+                           kind="too_old")
             else:
-                self._fail(t("Border router unreachable: {err}", err=err))
+                self._fail(t("Border router unreachable"), kind="other", raw=str(err) or type(err).__name__)
         return self._signature() != before
 
     def _signature(self):
@@ -990,21 +1009,22 @@ class Anchor:
                 signal = {k: row[k] for k in ("lq_in", "lq_out") if row.get(k) is not None}
                 self.children.note(row["ext"], rloc16, None, "router", "router table", signal)
 
-    def _fail(self, txt, keep=False):
+    def _fail(self, txt, keep=False, kind="other", raw=None):
         if not keep:
             self.mode = self.current = self.current_prf = None
             self.favored = self.favored_prf = self.local = None
             self.role = self.routers = self.link = None
         if txt != self.error:
-            self.emit("error", txt, logging.WARNING)
+            self.emit("error", txt, logging.WARNING, detail=raw)
         self.error = txt
+        self.error_kind = kind
 
     def public(self):
         return {"otbr_addon": self.slug, "wanted": self.prefix, "preference": self.preference, "mode": self.mode,
                 "current": self.current, "current_preference": self.current_prf, "enforced": self.enforced(),
                 "favored": self.favored, "favored_preference": self.favored_prf, "local": self.local,
                 "applied": self.applied, "applied_at": self.applied_at, "otbr_started_at": self.started_at,
-                "error": self.error, "anchored_since": self.anchored_since, "followed": self.followed(),
+                "error": self.error, "error_kind": self.error_kind, "anchored_since": self.anchored_since, "followed": self.followed(),
                 "thread_role": self.role, "thread_routers": self.routers, "thread_link": self.link}
 
 

@@ -196,7 +196,8 @@ d.running = False
 for _ in range(3):
     d.now += 30
     a.check()
-assert [k for k, _ in a.events] == ["error"] and "409" in a.public()["error"] and not a.public()["enforced"]
+assert [k for k, _ in a.events] == ["error"] and not a.public()["enforced"]
+assert a.public()["error_kind"] == "exec_failed" and "409" not in a.public()["error"], a.public()["error"]
 d.now += 10
 assert a.due()
 # il revient sans avoir redemarre (reglage garde) : rien a reimposer, retour signale
@@ -2109,4 +2110,66 @@ cl.sent = []
 mql.on_message(cl, None, Msg("thread_anchor/latency/request", json.dumps({"id": "z3", "count": 10}).encode()))
 assert json.loads(cl.sent[0][1])["error"] == "busy"               # ni de mesure pendant un diagnostic
 mql.diag.running = False
+# ---- 0.1.13 : message d'erreur court + error_kind ; le texte brut reste dans le journal seulement
+RAW_OCI = "500 OCI runtime exec failed: exec failed: unable to start container process: nsexec-0[1]: failed to sync with stage-1"
+CASES = [
+    (RAW_OCI, "exec_failed", "Border router: cannot run a command in its container (restarting?)"),
+    ("409 container is not running", "exec_failed", "Border router: cannot run a command in its container (restarting?)"),
+    ("timed out", "timeout", "Border router: no answer in time"),
+    ("403 forbidden", "access_denied", "No access to the Docker API; turn Protection mode off"),
+    ("[Errno 13] Permission denied", "access_denied", "No access to the Docker API; turn Protection mode off"),
+    ("[Errno 2] No such file or directory", "access_denied", "No access to the Docker API; turn Protection mode off"),
+    ("404 No such container: addon_x", "not_found", "Border router container not found or stopped"),
+    ("something unexpected", "other", "Border router unreachable"),
+]
+for raw, kind, text in CASES:
+    assert ta.classify_docker_error(ta.DockerError(raw)) == (kind, text), raw
+
+
+class BadDocker:
+    def __init__(self, raw):
+        self.raw = raw
+
+    def exec(self, *a):
+        raise ta.DockerError(self.raw)
+
+    started_at = exec
+
+
+class Capture(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.lines = []
+
+    def emit(self, record):
+        self.lines.append(record.getMessage())
+
+
+cap = Capture()
+ta.LOG.addHandler(cap)
+for raw, kind, text in CASES:
+    ab = ta.Anchor({"omr_prefix": P}, docker=BadDocker(raw))
+    ab.check()
+    pub = ab.public()
+    assert pub["error"] == text and pub["error_kind"] == kind, (raw, pub["error"], pub["error_kind"])
+    assert raw not in pub["error"] and [(k, x) for k, x in ab.events] == [("error", text)], ab.events
+    assert any(raw in ln and text in ln for ln in cap.lines), (raw, cap.lines)     # raw text: in the log only
+ta.LOG.removeHandler(cap)
+# french texts, and no error: error_kind is None
+ta.LANG = "fr"
+af = ta.Anchor({"omr_prefix": P}, docker=BadDocker("timed out"))
+af.check()
+assert af.public()["error"] == "Border router : pas de réponse à temps" and af.public()["error_kind"] == "timeout"
+ta.LANG = "en"
+dk = FakeDocker()
+ak = ta.Anchor({"omr_prefix": P, "omr_preference": "med"}, docker=dk, clock=dk.clock)
+ak.check()
+assert ak.public()["error"] is None and ak.public()["error_kind"] is None
+# ot-ctl busy and OpenThread too old keep their kinds
+dk.old = True
+ak2 = ta.Anchor({"omr_prefix": P, "omr_preference": "med"}, docker=dk, clock=dk.clock)
+ak2.check()
+dk.now += 30
+ak2.check()
+assert ak2.public()["error_kind"] == "too_old"
 print("OK")

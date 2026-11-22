@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.13] - 2026-11-22
+
+### Changed
+
+- The `error` of `thread_anchor/state` is now a **short message** per kind of failure (no more raw Docker
+  text such as an OCI runtime message): *cannot run a command in its container (restarting?)*, *no answer in
+  time*, *no access to the Docker API; turn Protection mode off*, *container not found or stopped*, *border
+  router unreachable*. The raw text of the failure only goes to the add-on log.
+
+### Added
+
+- `error_kind` in the state, next to `error`: `exec_failed`, `timeout`, `access_denied`, `not_found`, `other`,
+  `no_answer`, `too_old`; `null` when there is no error. `error` stays a string, so readers that copy it keep working.
 ## [0.1.12] - 2026-11-17
 
 ### Added
