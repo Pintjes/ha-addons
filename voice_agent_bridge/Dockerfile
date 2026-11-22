@@ -18,6 +18,7 @@ RUN apt-get update \
 
 COPY gateway.py prompts.py /app/
 COPY web /app/web
+COPY LICENSE /LICENSE
 WORKDIR /app
 
 LABEL \
@@ -28,6 +29,6 @@ LABEL \
     org.opencontainers.image.title="Voice Agent Bridge" \
     org.opencontainers.image.authors="Pintjes" \
     org.opencontainers.image.source="https://github.com/Pintjes/ha-addons" \
-    org.opencontainers.image.licenses="GPL-3.0-or-later"
+    org.opencontainers.image.licenses="LicenseRef-Proprietary"
 
 CMD [ "python3", "-u", "/app/gateway.py" ]

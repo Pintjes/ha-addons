@@ -209,7 +209,12 @@ Please include the add-on version and the relevant lines of the log.
 
 ## License
 
-[GPL-3.0](https://github.com/Pintjes/ha-addons/blob/main/voice_agent_bridge/LICENSE) © Pintjes
+Proprietary, see the [license agreement](https://github.com/Pintjes/ha-addons/blob/main/voice_agent_bridge/LICENSE) (French, with an English translation). © 2026 Pintjes. All rights reserved.
+Versions before 1.1.3 were published under GPL-3.0-or-later and stay under that license.
+
+Claude Code, which this add-on downloads when its image is built, is proprietary
+software of Anthropic subject to Anthropic's terms. The agent's answers and
+actions come with no guarantee: do not rely on it for safety, alarm or access control.
 
 > Voice Agent Bridge is an independent project, not affiliated with or endorsed by
 > Anthropic. Claude is a trademark of Anthropic, PBC.

@@ -4,6 +4,14 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.3] - 2026-11-22
+
+### Changed
+
+- License changed: proprietary from this version; earlier versions stay under
+  GPL-3.0-or-later. The license agreement (French, with an English translation)
+  is in the `LICENSE` file. No change to the code.
+
 ## [1.1.2] - 2026-11-15
 
 ### Changed
