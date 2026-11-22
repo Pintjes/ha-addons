@@ -1,6 +1,6 @@
 # Mesh Guardian — Home Assistant add-on
 # Author: Pintjes — https://github.com/Pintjes/ha-addons
-# License: GPL-3.0-or-later (see LICENSE)
+# © 2026 Pintjes. All rights reserved. See LICENSE.
 """Parent search on request, for the end devices whose parent link is poor.
 
 A Thread end device picks its parent when it attaches and many firmwares keep

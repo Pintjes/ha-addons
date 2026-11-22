@@ -1,6 +1,6 @@
 # Mesh Guardian — Home Assistant add-on
 # Author: Pintjes — https://github.com/Pintjes/ha-addons
-# License: GPL-3.0-or-later (see LICENSE)
+# © 2026 Pintjes. All rights reserved. See LICENSE.
 """Radio advice: weak parents, follow-up after an action, autonomous models.
 
 In Thread, a node picks its parent when it joins the network. Some firmwares

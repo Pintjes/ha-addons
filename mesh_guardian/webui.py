@@ -1,6 +1,6 @@
 # Mesh Guardian — Home Assistant add-on
 # Author: Pintjes — https://github.com/Pintjes/ha-addons
-# License: GPL-3.0-or-later (see LICENSE)
+# © 2026 Pintjes. All rights reserved. See LICENSE.
 """Node table shown in the Home Assistant sidebar (ingress).
 
 The server only listens on the internal Supervisor network and only accepts

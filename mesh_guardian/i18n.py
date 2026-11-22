@@ -1,6 +1,6 @@
 # Mesh Guardian — Home Assistant add-on
 # Author: Pintjes — https://github.com/Pintjes/ha-addons
-# License: GPL-3.0-or-later (see LICENSE)
+# © 2026 Pintjes. All rights reserved. See LICENSE.
 """Translations of the log, events and entity names (option "language").
 
 Source strings are English. t("text {x}", x=1) returns the translation in the

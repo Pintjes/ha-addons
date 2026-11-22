@@ -1,6 +1,6 @@
 # Mesh Guardian — Home Assistant add-on
 # Author: Pintjes — https://github.com/Pintjes/ha-addons
-# License: GPL-3.0-or-later (see LICENSE)
+# © 2026 Pintjes. All rights reserved. See LICENSE.
 """7-day history of every node: availability, parent (or best link), signal and response
 time every 15 minutes, for the node panel of the table."""
 

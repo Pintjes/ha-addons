@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.40.13] - 2026-11-22
+
+### Changed
+
+- License changed: proprietary from this version ("© 2026 Pintjes. All rights reserved.", end user license agreement in `LICENSE`, French text prevailing, English translation below it, Belgian law). Earlier versions stay under GPL-3.0-or-later. No change of behavior. The source stays public to read and to report issues, but may not be copied, modified or redistributed. The agreement lists the third-party components (zeroconf LGPL-2.1+, ifaddr MIT, paho-mqtt EPL-2.0 or BSD-3-Clause, websocket-client Apache-2.0, jsQR Apache-2.0, qrcode-generator MIT) and is shipped in the image.
+
 ## [2.40.12] - 2026-11-22
 
 ### Fixed

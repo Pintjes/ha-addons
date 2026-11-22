@@ -8,7 +8,6 @@
   <img src="https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-informational" alt="Architectures">
   <img src="https://img.shields.io/badge/status-beta-orange" alt="Status: beta">
   <a href="https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml"><img src="https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/Pintjes/ha-addons/blob/main/mesh_guardian/LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg" alt="License: GPL-3.0"></a>
 </p>
 
 > **Beta.** Mesh Guardian has been tested on one installation only. Testers with
@@ -93,8 +92,9 @@ entities.
 ## Contributing
 
 Bug reports and ideas are welcome: [open an issue](https://github.com/Pintjes/ha-addons/issues/new/choose).
-Please include the add-on version and the relevant lines of the log.
+Please include the add-on version and the relevant lines of the log. The code is not open for
+reuse and contributions of code are not accepted: see the license below.
 
 ## License
 
-[GPL-3.0](https://github.com/Pintjes/ha-addons/blob/main/mesh_guardian/LICENSE) © Pintjes
+© 2026 Pintjes. All rights reserved. See [LICENSE](https://github.com/Pintjes/ha-addons/blob/main/mesh_guardian/LICENSE) (end user license agreement, French text prevails). Versions before 2.40.13 stay under GPL-3.0-or-later.

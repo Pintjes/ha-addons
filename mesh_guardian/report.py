@@ -1,6 +1,6 @@
 # Mesh Guardian — Home Assistant add-on
 # Author: Pintjes — https://github.com/Pintjes/ha-addons
-# License: GPL-3.0-or-later (see LICENSE)
+# © 2026 Pintjes. All rights reserved. See LICENSE.
 """Anonymized diagnostic report (Markdown), to paste in an issue or a forum post.
 
 No names, areas, addresses, prefixes or identifiers: nodes are numbered, border

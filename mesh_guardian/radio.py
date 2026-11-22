@@ -1,6 +1,6 @@
 # Mesh Guardian — Home Assistant add-on
 # Author: Pintjes — https://github.com/Pintjes/ha-addons
-# License: GPL-3.0-or-later (see LICENSE)
+# © 2026 Pintjes. All rights reserved. See LICENSE.
 """Radio quality of the Thread mesh, read from the Matter Server.
 
 Every Thread node exposes (Thread Network Diagnostics cluster, endpoint 0):

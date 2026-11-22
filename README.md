@@ -30,7 +30,7 @@ Something wrong, or an idea? [Open an issue](https://github.com/Pintjes/ha-addon
 
 ## License
 
-[GPL-3.0](LICENSE) © Pintjes
+© 2026 Pintjes. All rights reserved. Each add-on is under its own license: see the `LICENSE` file of its folder. The source is public to read and to report issues; it may not be copied, modified or redistributed without permission. Versions published before an add-on's license change stay under GPL-3.0-or-later.
 
 These add-ons are independent projects, not affiliated with or endorsed by Anthropic, the Connectivity Standards Alliance or the Thread Group.
 

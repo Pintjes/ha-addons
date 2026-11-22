@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir --only-binary=:all: \
 
 COPY *.py /
 COPY web /web
+COPY LICENSE /LICENSE
 
 LABEL \
     io.hass.name="Mesh Guardian" \
@@ -17,6 +18,6 @@ LABEL \
     org.opencontainers.image.title="Mesh Guardian" \
     org.opencontainers.image.authors="Pintjes" \
     org.opencontainers.image.source="https://github.com/Pintjes/ha-addons" \
-    org.opencontainers.image.licenses="GPL-3.0-or-later"
+    org.opencontainers.image.licenses="LicenseRef-Proprietary"
 
 CMD [ "python3", "-u", "/watcher.py" ]

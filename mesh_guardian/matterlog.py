@@ -1,6 +1,6 @@
 # Mesh Guardian — Home Assistant add-on
 # Author: Pintjes — https://github.com/Pintjes/ha-addons
-# License: GPL-3.0-or-later (see LICENSE)
+# © 2026 Pintjes. All rights reserved. See LICENSE.
 """What the Matter Server itself says about each node, read in its log.
 
 Home Assistant only shows a node as unavailable after a while. Before that, the Matter

@@ -1,6 +1,6 @@
 # Mesh Guardian — Home Assistant add-on
 # Author: Pintjes — https://github.com/Pintjes/ha-addons
-# License: GPL-3.0-or-later (see LICENSE)
+# © 2026 Pintjes. All rights reserved. See LICENSE.
 """Restarts of the Matter Server and of Home Assistant, read in the Supervisor log.
 
 A restart is a fact written by the Supervisor (when, why, which version), not something to
