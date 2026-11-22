@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-3.0-or-later
+# © 2026 Pintjes. All rights reserved. See LICENSE.
 """Side Door: starts nginx in front of web apps of the local network.
 
 Reads the add-on options, writes the nginx configuration and replaces itself

@@ -4,6 +4,12 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.8.0] - 2026-11-22
+
+### Changed
+
+- License changed: proprietary from this version (end user license agreement in `LICENSE`, French text with an English translation); earlier versions stay under GPL-3.0-or-later. No change to how the apps are relayed.
+
 ## [2.7.0] - 2026-11-19
 
 ### Added

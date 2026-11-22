@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# © 2026 Pintjes. All rights reserved. See LICENSE.
 """The add-on at work, in front of tests/upstream.py: real nginx, real script.
 
 Needs the add-on running on port 8792 with tests/options_live.json, and

@@ -7,7 +7,6 @@
   <img src="https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FPintjes%2Fha-addons%2Fmain%2Fside_door%2Fconfig.yaml&query=%24.version&label=version&color=blue" alt="Version">
   <img src="https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-informational" alt="Architectures">
   <a href="https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml"><img src="https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/Pintjes/ha-addons/blob/main/side_door/LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg" alt="License: GPL-3.0"></a>
 </p>
 
 **Side Door opens a web app of your local network in the Home Assistant
@@ -43,4 +42,7 @@ Full documentation: [DOCS.md](DOCS.md).
 
 ## License
 
-[GPL-3.0](LICENSE) © Pintjes
+Proprietary software, © 2026 Pintjes. All rights reserved. Use is governed by the
+end user license agreement in [LICENSE](LICENSE) (French text, with an English
+translation). Versions before 2.8.0 were published under GPL-3.0-or-later and
+remain under that license.

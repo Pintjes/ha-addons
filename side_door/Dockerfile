@@ -5,6 +5,7 @@ RUN apk add --no-cache python3 ca-certificates
 COPY run.py /run.py
 COPY web /web
 COPY njs /njs
+COPY LICENSE /LICENSE
 
 LABEL \
     io.hass.name="Side Door" \
@@ -14,7 +15,7 @@ LABEL \
     org.opencontainers.image.title="Side Door" \
     org.opencontainers.image.authors="Pintjes" \
     org.opencontainers.image.source="https://github.com/Pintjes/ha-addons" \
-    org.opencontainers.image.licenses="GPL-3.0-or-later"
+    org.opencontainers.image.licenses="LicenseRef-Proprietary"
 
 STOPSIGNAL SIGTERM
 ENTRYPOINT []

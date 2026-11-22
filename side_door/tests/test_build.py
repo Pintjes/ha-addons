@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# © 2026 Pintjes. All rights reserved. See LICENSE.
 """What run.py writes from the options: nginx configuration, tabs page, log.
 
 Run from the repository: python -m unittest discover -s side_door/tests -p "test_build.py"

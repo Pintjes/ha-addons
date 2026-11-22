@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# © 2026 Pintjes. All rights reserved. See LICENSE.
 """A small app for test_live.py: each address answers the way some real app
 does (compressed anyway, not in UTF-8, with a cookie reserved to HTTPS...).
 
