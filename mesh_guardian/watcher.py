@@ -2129,7 +2129,9 @@ class Watch:
         # the same prefix still published, nobody imposing it any more: not "no longer in place
         # (now: the same prefix)"
         same = not omr.get("error") and omr.get("current") and omr.get("current") == omr.get("wanted")
-        text = (t("OMR prefix {p} still published, no longer imposed", p=omr.get("wanted"))
+        text = (t("Thread Anchor stopped: OMR prefix {p} still published, no longer imposed", p=omr.get("wanted"))
+                if same and omr.get("stopped") else
+                t("OMR prefix {p} still published, no longer imposed", p=omr.get("wanted"))
                 if same else t("Fixed OMR prefix {p} no longer in place on the border router (now: {cur})",
                                p=omr.get("wanted"), cur=cur))
         self.emit("omr_fixed_lost", text + (f" ({omr['error']})" if omr.get("error") else ""),

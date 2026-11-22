@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - No false Thread leaders in the history of Home Assistant at each start (e.g. "unknown" → "0x2C" → "0x13" → the real name within a minute): while the add-on starts (and until Home Assistant gave the names of the nodes), the leader found in the mesh is not published; the leader published before the restart is kept (saved in `/data/leader.json`), else "unknown". A border router leader (known from its announcement) is unchanged, and a real leader change after the start is still reported.
+- A stop or restart of Thread Anchor is no longer a false "OMR prefix no longer in place (now: the same prefix)" with the recovery of lost nodes paused: while the border routers still announce the prefix, nothing is paused and nothing is said for a restart within 60 s; after that, "Thread Anchor stopped: OMR prefix … still published, no longer imposed". A prefix no longer announced while Thread Anchor is stopped is still a loss, said at once.
 
 ## [2.40.11] - 2026-11-22
 

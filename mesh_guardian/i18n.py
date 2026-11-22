@@ -354,6 +354,8 @@ FR = {
         "router peut décrocher : vérifier le réseau entre Home Assistant et cet ordinateur (Wi-Fi, câble, charge)",
     # Thread Anchor: pause, catch-up, takeover, proposal
     "Thread Anchor is stopped": "Thread Anchor est arrêté",
+    "Thread Anchor stopped: OMR prefix {p} still published, no longer imposed":
+        "Thread Anchor arrêté : préfixe OMR {p} encore publié, plus imposé",
     "radio {names} cut off (USB/IP)": "radio {names} coupée (USB/IP)",
     "OMR prefix no longer in place ({err})": "préfixe OMR plus en place ({err})",
     "Recovery of lost nodes paused: {why}": "Récupération des nodes perdues en pause : {why}",

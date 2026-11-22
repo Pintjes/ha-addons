@@ -95,7 +95,12 @@ ok = dict(st, wanted=P, mode="custom", current=P, enforced=True, favored=P, favo
 a.on_state(json.dumps(ok))
 assert a.omr()["enforced"] and a.blocked() is None and a.anchored_since == T0 + 900
 a.on_available("offline")   # add-on arrete : son dernier etat n'est plus une nouvelle
-assert not a.omr()["enforced"] and a.omr()["error"]
+# 2.40.12 : le prefixe encore annonce par les border routers -> plus impose, mais pas une erreur
+assert not a.omr()["enforced"] and a.omr()["stopped"] and a.omr()["error"] is None and a.omr()["current"] == P
+assert a.blocked() is None
+w.br = {"x": {"omr": G}}    # le prefixe n'est plus annonce : vraie perte, dite
+assert not a.omr()["enforced"] and a.omr()["error"] and a.omr()["current"] == G
+w.br = {"x": {"omr": G}, "y": {"omr": P}}
 a.on_available("online")
 
 # pause : radio coupee -> pas de ping, nodes tombees retenues ; retour -> rattrapage apres 60 s

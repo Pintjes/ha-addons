@@ -291,12 +291,27 @@ class Anchor:
             if not st.get("wanted"):
                 return None
             st = dict(st)
-            if self.available is False:   # the add-on itself is stopped: its last state is not news
-                st["enforced"] = False
-                st["error"] = st.get("error") or t("Thread Anchor is stopped")
+            if self.available is False:
+                # the add-on itself is stopped (often a restart): its last state is not news, and a
+                # stop is not a prefix error. Nobody imposes the prefix any more; whether the network
+                # still has it is seen in the announcements of the border routers. Still there: no
+                # error, no pause ("still published, no longer imposed" after the grace time). Gone,
+                # or not visible: a real loss, said at once
+                st["enforced"], st["stopped"] = False, True
+                pub = self.published_omr()
+                st["current"] = st["wanted"] if st["wanted"] in pub else (next(iter(pub)) if len(pub) == 1 else None)
+                st["error"] = None if st["current"] == st["wanted"] else t("Thread Anchor is stopped")
             return st
         old = (getattr(self.w, "usb_links", None) or {}).get("omr")
         return old if isinstance(old, dict) and old.get("wanted") else None
+
+    def published_omr(self):
+        """OMR prefixes the border routers of the network announce now (mDNS), empty if unknown."""
+        try:
+            with self.w.lock:
+                return set(self.w._omr_now())
+        except Exception:  # noqa: BLE001
+            return set()
 
     def installed(self):
         """Thread Anchor publishes (it is installed and started at least once)."""
@@ -496,7 +511,8 @@ class Anchor:
             return None
         return {"installed": self.installed(), "available": self.available,
                 "wanted": (omr or {}).get("wanted"), "enforced": bool((omr or {}).get("enforced")),
-                "favored": (st or {}).get("favored"), "error": (omr or {}).get("error"),
+                "favored": (st or {}).get("favored"),
+                "error": (omr or {}).get("error") or (t("Thread Anchor is stopped") if (omr or {}).get("stopped") else None),
                 "proposal": self.proposal(), "paused": self.blocked(),
                 "takeover": bool(self.takeover_since), "renumbered": self.renumbered(),
                 "report": self.report()}
