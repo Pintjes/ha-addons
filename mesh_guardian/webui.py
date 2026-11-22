@@ -343,7 +343,7 @@ class WebUI:
                     except Exception as err:  # noqa: BLE001
                         LOG.warning("anchor: %s", err)
                         return self._send(200, json.dumps({"ok": False, "result": "error", "error": str(err)}, ensure_ascii=False))
-                if path == "/api/br_forget":   # remove an offline border router from the list
+                if path == "/api/br_forget":   # remove a border router from the list (online or not)
                     try:
                         body = self._body()
                         ok = ui.w.forget_br(text_of(body, "id"))

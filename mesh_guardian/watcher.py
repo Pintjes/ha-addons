@@ -80,7 +80,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.40.10"
+VERSION = "2.40.11"
 OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
 OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
@@ -102,6 +102,8 @@ EVENT_FILE = os.path.join(EVENT_DIR, "events.jsonl")
 EVENT_FILE_MAX = 5 * 1024 * 1024
 KNOWN_FILE = "/data/known_nodes.json"
 BR_NAMES_FILE = "/data/br_names.json"
+BR_FORGOTTEN_FILE = "/data/br_forgotten.json"   # border routers removed by the user, ignored while unchanged
+BR_FORGOTTEN_KEEP_S = 30 * 86400
 PREFIXES_FILE = "/data/prefixes.json"
 PROXY_HOST = "mg-proxy-"   # host name of the announcements made in a node's place
 PROXY_HOLD_S = 24 * 3600   # an announcement in a node's place kept until it announces itself, this long at most
@@ -374,6 +376,8 @@ class Watch:
         self.br_names = {}       # border agent key -> {"name": confirmed name, "detached": [times]}
         self._load_known()
         self._load_br_names()
+        self.br_forgotten = {}   # border agent key -> {"names": [mDNS names], "role": role when removed, "t", "seen"}
+        self._load_br_forgotten()
         self._load_prefixes()
         self.restore_brs()
 
@@ -432,6 +436,34 @@ class Watch:
         names = load_json(BR_NAMES_FILE)
         if isinstance(names, dict):
             self.br_names = names
+
+    def _load_br_forgotten(self):
+        saved = load_json(BR_FORGOTTEN_FILE)
+        now = time.time()
+        if isinstance(saved, dict):
+            # still announced as at the removal until proven otherwise: a restart is not a return
+            self.br_forgotten = {k: dict(v, seen=now) for k, v in saved.items()
+                                 if isinstance(v, dict) and now - (v.get("t") or 0) < BR_FORGOTTEN_KEEP_S}
+
+    def _save_br_forgotten(self):
+        try:
+            save_json(BR_FORGOTTEN_FILE, self.br_forgotten, ensure_ascii=False)
+        except Exception as err:  # noqa: BLE001
+            LOG.warning(t("Cannot write {file}: {err}", file=BR_FORGOTTEN_FILE, err=err))
+
+    def _br_still_forgotten(self, key, role, now):
+        """True while a border router removed by the user is announced as it was then (lock held).
+        It comes back as a new border router once its announcement went away (withdrawn, or
+        nothing for BR_SILENT_S), or once its Thread role changes (its Thread turned on again)."""
+        f = self.br_forgotten.get(key)
+        if f is None:
+            return False
+        if now - (f.get("seen") or 0) > BR_SILENT_S or role != f.get("role"):
+            self.br_forgotten.pop(key, None)
+            self._save_br_forgotten()
+            return False
+        f["seen"] = now
+        return True
 
     def _save_br_names(self):
         cutoff = time.time() - 7 * 86400
@@ -752,6 +784,8 @@ class Watch:
             "port": info.port,
         }
         with self.lock:
+            if self._br_still_forgotten(key, role, time.time()):
+                return   # removed by the user and announced as it was then: not news
             prev = self.br_by_name.get(name)
             self.br_by_name[name] = key
             if prev and prev != key and prev in self.br:
@@ -943,13 +977,20 @@ class Watch:
         self.dirty = True
 
     def forget_br(self, key):
-        """The user removes an offline border router from the list (it was taken away or its
-        Thread was turned off on purpose). It comes back by itself if it is heard again."""
+        """The user removes a border router from the list (taken away, or its Thread turned off on
+        purpose), online or not: it leaves the list, the alerts, the score and its entity. Its
+        announcements are then ignored while it is announced as it was; it comes back by itself as
+        a new border router when it leaves and returns, or when its Thread role changes."""
         with self.lock:
             b = self.br.get(key)
-            if not b or b.get("online"):
+            if not b:
                 return False
             label = self.br_label(b)
+            names = [k for k, v in self.br_by_name.items() if v == key]
+            if b.get("online"):
+                now = time.time()
+                self.br_forgotten[key] = {"names": names, "role": b.get("role"), "t": now, "seen": now}
+                self._save_br_forgotten()
             self._drop_br(key)
             self.br_by_name = {k: v for k, v in self.br_by_name.items() if v != key}
         self.emit("br_removed", t("Border router {name} removed from the list", name=label), br=label)
@@ -1592,6 +1633,14 @@ class Watch:
             key = self.br_by_name.get(name)
             if key:
                 self.br_gone(key, reason)
+            else:
+                with self.lock:
+                    # a removed border router withdrew its announcement: its next one is a return
+                    gone = [k for k, f in self.br_forgotten.items() if name in (f.get("names") or [])]
+                    for k in gone:
+                        self.br_forgotten.pop(k, None)
+                    if gone:
+                        self._save_br_forgotten()
         elif type_ == T_MATTER:
             parsed = matter_instance(short(name, T_MATTER))
             # a renamed copy "<fabric>-<node> (5)" going away says nothing about the node: its own

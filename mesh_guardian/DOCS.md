@@ -354,10 +354,11 @@ silent nodes (see below), advice. A click opens the node.
 **Border routers** — online, role, primary, detaches over 24 hours, last contact.
 A card opens a panel with everything known about the border router (Thread
 network, prefix, detaches of the last 7 days, nodes going through it, model,
-addresses). An offline border router that you took away or whose Thread you
-turned off on purpose can be removed there with **Remove**: it leaves the list,
-the quality score and the entities, and comes back by itself if it is heard
-again.
+addresses). A border router that you took away or whose Thread you turned off
+on purpose, online or not, can be removed there with **Remove**: it leaves the
+list, the alerts, the quality score and the entities. It comes back by itself
+as a new border router when its announcement goes away and returns, or when its
+Thread role changes (its Thread turned on again).
 
 **Nodes** — problems first by default. Filters: all, to handle, Thread, Wi-Fi,
 Ethernet, on battery; a search box (name, area, model, id). Default columns:

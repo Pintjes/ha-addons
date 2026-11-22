@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.40.11] - 2026-11-22
+
+### Changed
+
+- **Remove from the list** in the panel of a border router also works for one still online (e.g. a TV whose Thread was turned off on purpose while it keeps announcing itself); until now the button only showed for an offline one. It leaves the list, the alerts, the quality score and its entity (empty retained discovery). Its announcements are then ignored while it is announced as it was (kept across a restart, 30 days at most); it comes back by itself as a new border router when its announcement goes away and returns, or when its Thread role changes.
+
 ## [2.40.10] - 2026-11-22
 
 ### Fixed
