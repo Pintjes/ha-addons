@@ -178,14 +178,17 @@ def command(node_id, cluster, name, payload, timeout=90):
 
 
 r._command = command
+r._is_back = lambda nid: False
+reattach.PING_BACK_WAIT_S = 0
 w.events.clear()
 assert r.recover_node("000000000000004D") == {"result": "pending"}
 deadline = time.time() + 5
 while r.recovering and time.time() < deadline:
     time.sleep(0.05)
 assert calls == [("announce", "000000000000004D", ["fd00:cccc::1"]), ("withdraw", "000000000000004D")], calls
-assert sent == ["ArmFailSafe"] and "recover_proxy" in [k for k, _ in w.events]
-assert r.results["000000000000004D"]["result"] == "unreachable"
+# 2.40.14: it answers the network ping, so nothing heavier is sent (no ArmFailSafe), never "out of reach"
+assert sent == [] and "recover_proxy" in [k for k, _ in w.events], sent
+assert r.results["000000000000004D"]["result"] == "reachable", r.results["000000000000004D"]
 
 # lien USB/IP coupe (add-on USB/IP Link) : note reseau rouge avec la raison ; rien quand il est attache
 ctx = {"now": now, "tried": {}, "forced": {}, "weak_since": {}, "unstable": {}, "history": lambda rid: [],

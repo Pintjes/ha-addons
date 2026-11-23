@@ -43,6 +43,14 @@ PING_BUDGET_S = 100  # s: pings of one recovery cycle (a new ping is not started
 CMD_KEEP_S = 24 * 3600   # commands sent to the Matter Server: counted over this window (in memory only)
 # commands answered from the Matter Server cache: no radio exchange with a node
 CMD_NO_RADIO = frozenset({"get_nodes", "get_node"})
+# after the pings gave up, a node is not left alone: pinged again (counter at zero) at a sign of
+# life, and once every SLOW_RETRY_S while it stays unavailable (twice that during a storm)
+SLOW_RETRY_S = 1800
+# a node back within this time after an action on it (automatic ping, ping from the page,
+# recovery attempt) is counted "back after <that action>", else "back on its own". It only says
+# that the return followed the action, not that the action caused it
+AFTER_ACTION_S = 180
+ACTION_KINDS = ("auto", "manual", "attempt")
 
 NODES_TEMPLATE = (
     "{% set ns = namespace(out=[]) %}"
@@ -116,7 +124,8 @@ class Healer:
         self.storm = None        # storm detector (storm.py), plugged in by watcher
         self.anchor = None       # radio and OMR prefix of the border router of HA (anchor.py), plugged in by watcher
         self.started = time.time()
-        self.session = {"pings_sent": 0, "recovered_by_ping": 0, "back_on_their_own": 0, "gave_up": 0}
+        self.session = {"pings_sent": 0, "recovered_by_ping": 0, "back_on_their_own": 0, "gave_up": 0,
+                        "back_after_auto": 0, "back_after_manual": 0, "back_after_attempt": 0}
         self.recent = []         # [time, kind] of the last 24h (same kinds as self.session)
         self.routing = {"problem": False, "since": None, "announced_unreachable": 0, "details": None}
         self._routing_reported = 0
@@ -278,6 +287,57 @@ class Healer:
                             break
             self.recent = [r for r in self.recent if r[0] >= now - 86400]
 
+    def note_action(self, node_hex, kind):
+        """An action was sent to an unavailable node now ("auto", "manual" or "attempt"): a return
+        that follows it within AFTER_ACTION_S is counted after that action."""
+        with self.lock:
+            n = self.nodes.get(str(node_hex).upper().zfill(16))
+            if n is not None:
+                n["action_t"], n["action"] = time.time(), kind
+
+    def note_sign(self, node_hex, why):
+        """A sign of life of a node (it answered a ping of the page or of a recovery attempt): a node
+        the pings gave up on is pinged again."""
+        with self.lock:
+            n = self.nodes.get(str(node_hex).upper().zfill(16))
+            if n is not None:
+                n["sign_t"], n["sign"] = time.time(), why
+
+    def _signs(self):
+        """What the other parts know of the life of the nodes, read before the cycle takes its lock
+        (no lock held inside another): node hex -> [(time, why)]."""
+        out = {}
+        live = getattr(self.w, "live", None)
+        try:
+            with live.lock:
+                for k, ts in live.contacts.items():
+                    out.setdefault(k, []).append((ts, t("Matter contact")))
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            with self.w.lock:
+                for k, m in self.w.matter.items():
+                    if m.get("online") and m.get("since"):
+                        out.setdefault(k, []).append((m["since"], t("mDNS announcement back")))
+        except Exception:  # noqa: BLE001
+            pass
+        table = getattr(self.w, "table", None)
+        try:
+            for k, (ts, info) in dict(table.last_heard()).items():
+                out.setdefault(k, []).append((ts, t("heard by {by}", by=(info or {}).get("by") or "?")))
+        except Exception:  # noqa: BLE001
+            pass
+        return out
+
+    @staticmethod
+    def sign_of_life(n, signs):
+        """Why a node the pings gave up on shows life again since it gave up, or None."""
+        since = n.get("gave_up_t") or 0
+        if (n.get("sign_t") or 0) > since:
+            return n.get("sign") or t("answers the ping")
+        late = [why for ts, why in signs if ts and ts > since]
+        return late[0] if late else None
+
     def _ping_counted(self):
         with self.lock:
             self.pings_sent += 1
@@ -332,6 +392,8 @@ class Healer:
                 if self.w.stop.is_set():
                     return
                 n = self.nodes.get(node, {})
+                if n.get("available") is False:
+                    self.note_action(node, "manual")
                 try:
                     res = self.matter_command("ping_node", {"node_id": int(node, 16)}, timeout=60)
                     self._answered(node, res)
@@ -630,8 +692,11 @@ class Healer:
     def ping(self, node_hex):
         with self.lock:
             n = self.nodes[node_hex]
-            n["pings"] += 1
+            slow = bool(n.get("gave_up"))   # the slow retry of a node the pings gave up on: not counted in its 6
+            if not slow:
+                n["pings"] += 1
             n["last_ping"] = time.time()
+            n["action_t"], n["action"] = n["last_ping"], "auto"
         self._ping_counted()
         try:
             result = self.matter_command("ping_node", {"node_id": int(node_hex, 16)}, timeout=90)
@@ -644,11 +709,20 @@ class Healer:
         ko = [ip for ip, v in (result or {}).items() if not v]
         n["last_ping_ok"] = bool(ok)
         txt = t("answers") if ok else t("does not answer")
-        self.last_result = f"{hhmm(time.time())} {n['name']}: {txt} (ping {n['pings']}/{self.max_attempts})"
-        self.w.emit("ping", t("Ping {i}/{max} {name}: {result}", i=n["pings"], max=self.max_attempts,
-                              name=n["name"], node=short_id(node_hex), area=n["area"], result=txt),
-                    node=short_id(node_hex), name=n["name"], area=n["area"], attempt=n["pings"],
-                    reachable=ok, unreachable=ko)
+        if slow:
+            self.last_result = f"{hhmm(time.time())} {n['name']}: {txt} (ping {t('every 30 min')})"
+            self.w.emit("ping", t("Ping every 30 min {name}: {result}", name=n["name"], node=short_id(node_hex),
+                                  area=n["area"], result=txt),
+                        node=short_id(node_hex), name=n["name"], area=n["area"], attempt=0, slow=True,
+                        reachable=ok, unreachable=ko)
+            if ok:
+                self.note_sign(node_hex, t("answers the ping"))   # pings again, counter at zero
+        else:
+            self.last_result = f"{hhmm(time.time())} {n['name']}: {txt} (ping {n['pings']}/{self.max_attempts})"
+            self.w.emit("ping", t("Ping {i}/{max} {name}: {result}", i=n["pings"], max=self.max_attempts,
+                                  name=n["name"], node=short_id(node_hex), area=n["area"], result=txt),
+                        node=short_id(node_hex), name=n["name"], area=n["area"], attempt=n["pings"],
+                        reachable=ok, unreachable=ko)
         self._save_state()
 
     # ------------------------------------------------------------- routing (point of view of HA)
@@ -731,6 +805,7 @@ class Healer:
                 self.backfill(data)
             except Exception as err:  # noqa: BLE001
                 LOG.warning(t("Cannot rebuild statistics: {err}", err=err))
+        signs = self._signs()   # read before taking the lock
         now = time.time()
         due = []
         events = []  # (kind, text, data, direction) ; direction = "down" / "up"
@@ -767,15 +842,25 @@ class Healer:
                 if not first and n["available"] != avail:
                     if avail:
                         down = now - n["since"]
-                        if n["last_ping"] and now - n["last_ping"] < 600:
+                        kind = n.get("action") if n.get("action_t") and now - n["action_t"] < AFTER_ACTION_S else None
+                        if kind in ACTION_KINDS:
+                            # back soon after an action: said "after", never "thanks to" (it may have
+                            # come back anyway: the counter of returns on their own tells how often)
                             self.success += 1
                             self.tally("recovered_by_ping")
-                            events.append(("node_recovered_by_ping",
-                                           t("{name} back after ping {i} ({m}min)",
-                                             name=n["name"], area=n["area"], s=int(now - n["last_ping"]),
-                                             i=n["pings"], m=int(down // 60)),
-                                           dict(node=short_id(node), name=n["name"], area=n["area"],
-                                                pings=n["pings"], offline_s=int(down)), "up"))
+                            self.tally("back_after_" + kind)
+                            s = int(now - n["action_t"])
+                            txt = (t("{name} back after ping {i} ({m}min)", name=n["name"], area=n["area"], s=s,
+                                     i=n["pings"], m=int(down // 60)) if kind == "auto" and n["pings"] and not n.get("gave_up")
+                                   else t("{name} back {s} s after a ping every 30 min ({m}min)", name=n["name"], s=s,
+                                          m=int(down // 60)) if kind == "auto"
+                                   else t("{name} back {s} s after a ping from the page ({m}min)", name=n["name"], s=s,
+                                          m=int(down // 60)) if kind == "manual"
+                                   else t("{name} back {s} s after the recovery attempt ({m}min)", name=n["name"], s=s,
+                                          m=int(down // 60)))
+                            events.append(("node_recovered_by_ping", txt,
+                                           dict(node=short_id(node), name=n["name"], area=n["area"], after=kind,
+                                                after_s=s, pings=n["pings"], offline_s=int(down)), "up"))
                         else:
                             self.self_recovered += 1
                             self.tally("back_on_their_own")
@@ -784,9 +869,11 @@ class Healer:
                                              area=n["area"], m=int(down // 60)),
                                            dict(node=short_id(node), name=n["name"], area=n["area"],
                                                 offline_s=int(down)), "up"))
-                        n.update({"pings": 0, "last_ping": None, "gave_up": False, "last_ping_ok": None})
+                        n.update({"pings": 0, "last_ping": None, "gave_up": False, "last_ping_ok": None,
+                                  "action_t": None, "action": None})
                         self._save_state()
                     else:
+                        n["action_t"] = n["action"] = None   # an action before this outage is not one on it
                         events.append(("node_unavailable", t("{name} unavailable",
                                                              name=n["name"], area=n["area"]),
                                        dict(node=short_id(node), name=n["name"], area=n["area"],
@@ -798,9 +885,23 @@ class Healer:
                         lst.append([since, None, False])
                     elif lst and lst[-1][1] is None:
                         lst[-1][1] = since
-                if avail or not self.enabled or n["gave_up"] or now < self.mass_until:
+                if avail or not self.enabled or now < self.mass_until:
                     continue
                 storm = bool(self.storm and self.storm.active)
+                if n["gave_up"]:
+                    # given up: not for good. A sign of life since then -> its pings again (counter at
+                    # zero); else one slow ping every SLOW_RETRY_S. The limits below still apply
+                    why = self.sign_of_life(n, signs.get(node) or [])
+                    if why:
+                        n.update({"gave_up": False, "pings": 0, "last_ping": None})
+                        events.append(("ping_rearmed", t("{name}: sign of life ({why}), pings again", name=n["name"],
+                                                         why=why, area=n["area"]),
+                                       dict(node=short_id(node), name=n["name"], area=n["area"], why=why), "info"))
+                    else:
+                        last = max(n.get("gave_up_t") or 0, n.get("last_ping") or 0)
+                        if now - last >= SLOW_RETRY_S * (2 if storm else 1):
+                            due.append(node)
+                        continue
                 wait = self.ping_after_fast if now < self.fast_until and not storm else self.ping_after
                 if now - n["since"] < wait:
                     continue
@@ -865,14 +966,21 @@ class Healer:
         if len(ups) >= mass:
             # global return after a restart: counted neither as a ping success nor as a self recovery
             own = sum(1 for e in ups if e[0] == "node_back_on_its_own")
-            pinged = sum(1 for e in ups if e[0] == "node_recovered_by_ping")
+            pinged = [e for e in ups if e[0] == "node_recovered_by_ping"]
             self.self_recovered -= own
-            self.success -= pinged
+            self.success -= len(pinged)
             self.tally("back_on_their_own", -own)
-            self.tally("recovered_by_ping", -pinged)
+            self.tally("recovered_by_ping", -len(pinged))
+            for kind in ACTION_KINDS:
+                k = sum(1 for e in pinged if e[2].get("after") == kind)
+                if k:
+                    self.tally("back_after_" + kind, -k)
             self.w.emit("global_return", t("{n} nodes back together", n=len(ups)), count=len(ups))
         else:
             for kind, txt, data, _ in ups:
+                self.w.emit(kind, txt, **data)
+        for kind, txt, data, direction in events:
+            if direction == "info":
                 self.w.emit(kind, txt, **data)
         # at most 5 pings per cycle (2 during a storm), one after the other, and not more than
         # PING_BUDGET_S in all: a ping of a lost node can wait 90 s for its answer, and five in a

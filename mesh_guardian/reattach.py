@@ -72,6 +72,8 @@ PATHS = ["0/53/1", "0/53/7", "0/51/0", "0/49/1", "0/49/65529"]   # table and add
 
 PROXY_SETTLE_S = 5    # s: time left to the Matter Server to hear the announcement made in a node's place
 BACK_WAIT_S = 60      # s: announced in its place on its current address: time left to come back before anything else
+PING_BACK_WAIT_S = 30  # s: recovery attempt on a node that answers the network ping: time left to the Matter
+                       # session to come back (nothing heavier is sent to a node that answers)
 AUTO_EVERY_S = 60     # s: automatic recovery by the Thread diagnostic: candidates looked for this often
 AUTO_NODE_S = 1800    # s: at most one automatic diagnostic per node in this time
 AUTO_PER_HOUR = 5     # nodes at most per hour (automatic)
@@ -816,11 +818,16 @@ class Reattach:
     def _recover(self, nid, name, area, network, ext=None):
         node_id = int(nid, 16)
         proxied = False
+        sent = False
         try:
             try:
                 self.w.emit("recover_node", t("{node}: recovery attempt", node=name, area=area), node=name)
+                if hasattr(self.h, "note_action"):
+                    self.h.note_action(nid, "attempt")   # a return just after is counted "after the recovery attempt"
                 alive = self._alive(nid, node_id, ext)
                 alive_txt = self._alive_text(name, alive)
+                if alive["ok"] and hasattr(self.h, "note_sign"):
+                    self.h.note_sign(nid, t("answers the ping"))
                 self.w.emit("recover_alive", alive_txt, node=name, ping_ok=alive["ok"], ping_ko=alive["ko"],
                             heard=[[w, round(s), r] for w, s, r in alive["heard"]])
                 st = self.w.stale_prefix(nid, thread=True) if hasattr(self.w, "stale_prefix") else None
@@ -865,20 +872,41 @@ class Reattach:
                     return
                 if not proxied and alive["ok"] and announced is False and hasattr(self.w, "proxy_announce"):
                     # TRIAL: it answers on an address but no longer announces itself: announced in
-                    # its place, the Matter Server can find it again and the command can leave
+                    # its place, the Matter Server can find it again
                     proxied = self.w.proxy_announce(nid, alive["ok"])
                     if proxied:
                         self.w.emit("recover_proxy", t("{node}: announced in its place on {ip} (trial), for the recovery attempt",
                                                        node=name, ip=", ".join(alive["ok"])), node=name, ip=alive["ok"])
                         self.w.stop.wait(PROXY_SETTLE_S)
-                sent = self._recover_send(node_id, name, area, network, alive_txt)
+                if alive["ok"]:
+                    # it answers the network ping (the ping of the alive test was sent just now): the
+                    # Matter Server reaches it, its session usually comes back within seconds. Nothing
+                    # heavier is sent: the restart of its Thread is for a node heard on the radio that
+                    # does not answer the ping
+                    sent = "reachable"
+                elif alive["heard"] or not alive["radio_known"]:
+                    sent = self._recover_send(node_id, name, area, network, alive_txt, heard=bool(alive["heard"]))
+                else:
+                    self._recover_result(nid, name, "unreachable", t(
+                        "{node}: not heard on the radio and no answer to the network ping: nothing sent", node=name)
+                        + " · " + alive_txt)
             finally:
-                if proxied:
+                if proxied and sent != "reachable":
                     # withdrawn as soon as the commands are sent: the node announces itself again
                     # when it attaches, and two announcements of one name would conflict
                     self.w.proxy_withdraw(nid)
                     proxied = False
                 self.busy.release()
+            if sent == "reachable":
+                self._recover_result(nid, name, "reachable", t(
+                    "{node}: reachable on the network, Matter session coming back", node=name), state="pending")
+                if self._wait_back(nid, PING_BACK_WAIT_S):
+                    self._recover_result(nid, name, "back_ping", t(
+                        "{node}: back after the ping of the recovery attempt", node=name) + " · " + alive_txt)
+                else:
+                    self._recover_result(nid, name, "reachable", t(
+                        "{node}: reachable on the network, not back in Home Assistant yet", node=name) + " · " + alive_txt)
+                return
             if not sent:
                 return
             self._recover_result(nid, name, "sent", t("{node}: Thread restarted, waiting for it to come back", node=name),
@@ -920,7 +948,7 @@ class Reattach:
             if proxied:
                 self.w.proxy_withdraw(nid)
 
-    def _recover_send(self, node_id, name, area, network, alive_txt=""):
+    def _recover_send(self, node_id, name, area, network, alive_txt="", heard=False):
         """ArmFailSafe and ConnectNetwork (the ping of the alive test, just before, made the
         Matter Server look for the address of the node again). True when the connect command
         left under an armed fail-safe (answered or not: a node that attaches again may not answer)."""
@@ -931,9 +959,11 @@ class Reattach:
         except Exception as err:  # noqa: BLE001 - no session: nothing reaches the node
             LOG.info(t("Recovery of {node}: no answer to ArmFailSafe ({err})", node=name, err=err))
             announced = (self.w.matter.get(nid) or {}).get("online") if hasattr(self.w, "matter") else None
+            # never "out of reach" for a node its neighbors hear: alive on the radio, not reachable in Matter
             self._recover_result(nid, name, "unreachable",
                                  (t("{node}: no longer announced on the network, its address is not known: "
                                     "the recovery attempt could not be sent", node=name) if announced is False
+                                  else t("{node}: heard on the radio but no answer to the recovery attempt", node=name) if heard
                                   else t("{node}: out of reach, the recovery attempt could not be sent", node=name))
                                  + (" · " + alive_txt if alive_txt else ""))
             return False

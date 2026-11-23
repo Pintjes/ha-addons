@@ -257,6 +257,8 @@ class WebUI:
                     h = ui.w.healer
                     t0 = time.time()
                     if act == "ping":
+                        if hasattr(h, "note_action"):
+                            h.note_action(nid, "manual")   # a return just after is counted "after a ping from the page"
                         res = h.matter_command("ping_node", {"node_id": int(nid, 16)}, timeout=60)
                         ok = isinstance(res, dict) and any(res.values())
                         if ok and getattr(ui.w, "live", None):

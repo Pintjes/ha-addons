@@ -129,7 +129,7 @@ minute, border routers browsed again every 5 minutes.
 |---|---|---|---|
 | `sensor.mesh_guardian_matter_nodes_unavailable` | nodes unavailable in Home Assistant; `routing` problem if detected | every 15s | current |
 | `sensor.mesh_guardian_matter_nodes_available` | nodes available in Home Assistant | every 15s | current |
-| `sensor.mesh_guardian_recovered_by_ping` | nodes back thanks to a ping (total); `back_on_their_own`, `gave_up`, `pings_sent`, and the same counters `since_start` and over `last_24h` | every return | total: on reinstall or with the reset button; `since_start`: when the add-on restarts; `last_24h`: sliding |
+| `sensor.mesh_guardian_recovered_by_ping` | nodes back less than 3 min after an action on them: a ping (automatic or from the page) or a recovery attempt (total). This does not prove the action brought them back. Attributes: `back_on_their_own`, `gave_up`, `pings_sent`, and the same counters `since_start` and over `last_24h`, with `back_after_auto` / `back_after_manual` / `back_after_attempt` | every return | total: on reinstall or with the reset button; `since_start`: when the add-on restarts; `last_24h`: sliding |
 | `switch.mesh_guardian_auto_recovery` | automatic recovery on / off (off at first start) | when switched | kept across restarts |
 | `button.mesh_guardian_ping_all_nodes` | pings every node now, battery and unavailable nodes included; result in the `ping_all_done` event | when pressed | — |
 | `sensor.mesh_guardian_network_quality` | network quality in % over the last hour (see [Network quality](#network-quality)); `parts`, `score_24h`, `parts_24h`, `capped`, `median_response_ms` | every minute | with the reset button |
@@ -185,7 +185,7 @@ Every event is written to the add-on log, published on the MQTT topic
 | `node_stale_prefix` | a node missing from mDNS is still on an OMR prefix the border routers no longer publish: it did not take the new prefix, its address is not known (`prefix`, `br`) |
 | `mdns_burst` | services withdrawn then re-announced within seconds (no real absence); only in the event file and on MQTT, counted in `mdns_bursts` |
 | `speaker_appeared`, `speaker_back`, `speaker_offline` | smart speaker / hub online state (restart detection) |
-| `node_unavailable`, `node_recovered_by_ping`, `node_back_on_its_own`, `ping`, `ping_gave_up`, `ping_error` | automatic recovery |
+| `node_unavailable`, `node_recovered_by_ping` (back after an action: `after` = `auto` / `manual` / `attempt`), `node_back_on_its_own`, `ping`, `ping_gave_up`, `ping_rearmed` (sign of life after giving up: pings again), `ping_error` | automatic recovery; after `ping_gave_up`, one ping every 30 min while the node stays unavailable |
 | `global_outage`, `global_return` | many nodes at once (Home Assistant / Matter Server restart) |
 | `server_restart` | restart of the Matter Server or of Home Assistant read in the Supervisor log, with `who` (`matter` / `ha`), `cause` (`requested`, `update`, `crash`, `start`), exit `code` and `version` |
 | `storm_start`, `storm_end` | Thread storm (see below) |

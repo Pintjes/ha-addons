@@ -976,7 +976,18 @@ class NodeTable:
                             "omr_changes_24h": s.get("omr_changes_24h"),
                             "unavailable": unavailable, "nodes": total, "storm": storm.get("state") == "ON",
                             "routing_problem": self.h.routing.get("details") if self.h.routing.get("problem") else None,
-                            "auto_recovery": self.h.enabled}}
+                            "auto_recovery": self.h.enabled,
+                            # nodes back over 24 h: just after an action on them, or on their own
+                            "returns_24h": self._returns_24h()}}
+
+    def _returns_24h(self):
+        try:
+            d = self.h.last_24h()
+        except Exception:  # noqa: BLE001
+            return None
+        return {"after": d.get("recovered_by_ping", 0), "own": d.get("back_on_their_own", 0),
+                "auto": d.get("back_after_auto", 0), "manual": d.get("back_after_manual", 0),
+                "attempt": d.get("back_after_attempt", 0)}
 
     def _restart_note(self, rows, now):
         """After a restart of the Matter Server (or of Home Assistant), the nodes it took down

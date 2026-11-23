@@ -174,7 +174,22 @@ FR = {
     "Recovery cycle failed: {err}": "Cycle de récupération en erreur : {err}",
     '{name} unavailable': '{name} indisponible',
     '{name} back after ping {i} ({m}min)': "{name} de nouveau disponible après le ping {i} ({m} min)",
-    '{name} back on its own ({m}min)': "{name} de nouveau disponible ({m} min)",
+    '{name} back on its own ({m}min)': "{name} de nouveau disponible, sans action juste avant ({m} min)",
+    # 2.40.14: pings again after giving up, returns counted after an action or on their own
+    "{name} back {s} s after a ping every 30 min ({m}min)": "{name} de nouveau disponible {s} s après un ping toutes les 30 min ({m} min)",
+    "{name} back {s} s after a ping from the page ({m}min)": "{name} de nouveau disponible {s} s après un ping depuis la page ({m} min)",
+    "{name} back {s} s after the recovery attempt ({m}min)": "{name} de nouveau disponible {s} s après la tentative de récupération ({m} min)",
+    "{name}: sign of life ({why}), pings again": "{name} : signe de vie ({why}), pings relancés",
+    "Ping every 30 min {name}: {result}": "Ping toutes les 30 min {name} : {result}",
+    "every 30 min": "toutes les 30 min",
+    "Matter contact": "contact Matter",
+    "mDNS announcement back": "annonce mDNS revenue",
+    "heard by {by}": "entendue par {by}",
+    "answers the ping": "répond au ping",
+    "{n} back after an action": "{n} de retour après une action",
+    "{n} back on its own": "{n} revenue seule",
+    "{n} back on their own": "{n} revenues seules",
+    "Back after an action": "Retours après une action",
     'Statistics start from zero': 'Statistiques à zéro',
     # labels
     'Renamed: "{before}" → "{after}"': 'Renommée : « {before} » → « {after} »',
@@ -336,6 +351,14 @@ FR = {
     "{node}: still unavailable after the recovery attempt": "{node} : toujours indisponible après la tentative de récupération",
     "{node}: out of reach, the recovery attempt could not be sent":
         "{node} : hors de portée, la tentative de récupération n'a pas pu être envoyée",
+    "{node}: heard on the radio but no answer to the recovery attempt":
+        "{node} : entendue à la radio, mais pas de réponse à la tentative de récupération",
+    "{node}: not heard on the radio and no answer to the network ping: nothing sent":
+        "{node} : pas entendue à la radio et pas de réponse au ping réseau : rien n'est envoyé",
+    "{node}: reachable on the network, Matter session coming back": "{node} : joignable sur le réseau, session Matter en reprise",
+    "{node}: back after the ping of the recovery attempt": "{node} : de retour après le ping de la tentative",
+    "{node}: reachable on the network, not back in Home Assistant yet":
+        "{node} : joignable sur le réseau, pas encore revenue dans Home Assistant",
     "{node}: recovery attempt refused": "{node} : tentative de récupération refusée",
     "{node}: no longer announced on the network, its address is not known: the recovery attempt could not be sent":
         "{node} : ne s'annonce plus sur le réseau, son adresse n'est pas connue : la tentative de récupération n'a pas pu être envoyée",

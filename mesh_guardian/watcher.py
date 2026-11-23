@@ -80,7 +80,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.40.13"
+VERSION = "2.40.14"
 OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
 OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
@@ -1800,7 +1800,9 @@ class Watch:
         self.disc("sensor", "matter_nodes_available", t("Available nodes"), {
             "state_topic": hs, "value_template": "{{ value_json.available }}",
             "icon": "mdi:lan-connect", "state_class": "measurement"})
-        self.disc("sensor", "recovered_by_ping", t("Recoveries by ping"), {
+        # nodes back just after an action on them (ping or recovery attempt), not "recovered by" it:
+        # the attribute back_on_their_own counts the others
+        self.disc("sensor", "recovered_by_ping", t("Back after an action"), {
             "state_topic": hs, "value_template": "{{ value_json.recovered_by_ping }}",
             "json_attributes_topic": hs,
             "json_attributes_template": "{{ {'back_on_their_own': value_json.back_on_their_own, 'gave_up': value_json.gave_up, "
@@ -1958,7 +1960,8 @@ class Watch:
                  ", ".join((count("{n} border router", "{n} border routers", s["br_online"]),
                             t("leader {leader}", leader=s["leader"]),
                             count("{n} node unavailable", "{n} nodes unavailable", h.get("unavailable", "?")),
-                            count("{n} recovery", "{n} recoveries", h.get("recovered_by_ping", "?")),
+                            count("{n} back after an action", "{n} back after an action", h.get("recovered_by_ping", "?")),
+                            count("{n} back on its own", "{n} back on their own", h.get("back_on_their_own", "?")),
                             count("{n} weak link", "{n} weak links", r.get("weak_links", "?")))))
 
     def publisher(self):

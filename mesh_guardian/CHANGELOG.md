@@ -10,6 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.40.14] - 2026-11-23
+
+### Fixed
+
+- **The recovery no longer stops for good after 6 pings.** A node the pings gave up on is pinged again, its counter at zero, as soon as it shows a sign of life: a Matter contact, its mDNS announcement back, heard by a neighbor, or a ping that it answers. Without any sign, it is pinged once every 30 min (60 min during a storm) while it stays unavailable. The usual limits still apply: 5 pings per cycle, pause after a global outage, recovery paused while the radio or the prefix is out.
+- **Recovery attempt on a node that answers the network ping**: nothing heavier is sent. No fail-safe and no restart of its Thread. It waits up to 30 s for the node, then says "back after the ping of the recovery attempt" or "reachable on the network, not back in Home Assistant yet". The restart of its Thread is kept for a node heard on the radio that does not answer the ping. A node neither heard nor answering gets nothing ("nothing sent"). A node its neighbors hear is no longer called "out of reach".
+
+### Changed
+
+- **Honest count of the returns**: each node back is counted as back after an action (automatic ping, ping from the page, or recovery attempt, less than 3 min before) or as back on its own. Being back after an action does not prove that the action brought it back. Where it shows:
+  - the page: a new fact "Back · 24 h" (both counters, the details in its tip);
+  - the hourly summary: both counters instead of "N recoveries";
+  - the sensor: "Recoveries by ping" is now "Back after an action". It keeps its entity id; the attribute `last_24h` gives `back_after_auto`, `back_after_manual` and `back_after_attempt`.
+  
+  A node back more than 3 min after the last action is counted on its own; before, the window was 10 min, after an automatic ping only.
+
 ## [2.40.13] - 2026-11-22
 
 ### Changed
