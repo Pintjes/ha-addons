@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.40.15] - 2026-11-24
+
+### Fixed
+
+- **The page was empty in 2.40.14** (grey frames, the backend answering): two stray commas in the texts of the new fact "Back · 24 h" (English and French) were a syntax error, so the whole script of the page failed. Fixed. The tests now compile every inline script of the page (`test_page_syntax.js`), so the CI catches such an error.
+
 ## [2.40.14] - 2026-11-23
 
 ### Fixed
