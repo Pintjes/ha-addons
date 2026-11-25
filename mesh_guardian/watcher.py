@@ -69,7 +69,7 @@ from anchor import ANCHOR_AVAIL_TOPIC, ANCHOR_TOPIC, CHILDREN_TOPIC, DIAG_RESULT
 from healer import Healer  # noqa: E402
 from labels import LabelSync  # noqa: E402
 from matterlive import MatterLive  # noqa: E402
-from nodetable import NodeTable  # noqa: E402
+from nodetable import NodeTable, is_thread  # noqa: E402
 from quality import Quality  # noqa: E402
 from reattach import Reattach  # noqa: E402
 from history import History  # noqa: E402
@@ -80,7 +80,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.40.15"
+VERSION = "2.40.16"
 OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
 OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
@@ -1492,7 +1492,7 @@ class Watch:
             node_prefixes = {}
             for k in nodes_on:
                 p = self.matter[k].get("prefix")
-                if p:
+                if p and not self._not_thread(k):   # a Wi-Fi node announces the prefix of the LAN
                     node_prefixes[p] = node_prefixes.get(p, 0) + 1
             casts_on = sorted(c["fn"] for c in self.cast.values() if c["online"])
             casts_off = sorted(c["fn"] for c in self.cast.values() if not c["online"])
@@ -1524,6 +1524,19 @@ class Watch:
                 "events_count": self.events_count,
                 "updated": now_iso(),
             }
+
+    def _not_thread(self, node):
+        """True when the attributes of this node show it is not a Thread node (Wi-Fi, Ethernet):
+        the prefix of its announcement is then that of the LAN, not a Thread one. Remembered, so a
+        lost Matter Server link changes nothing. Unknown (not interviewed yet): False."""
+        known = self.__dict__.setdefault("_lan_nodes", set())
+        n = getattr(getattr(self, "live", None), "nodes", {}).get(node)
+        attrs = (n or {}).get("attributes") or {}
+        if attrs.get("0/53/1") is not None or is_thread(attrs):
+            known.discard(node)
+        elif attrs.get("0/51/0") or any(k.startswith(("0/54/", "0/55/")) for k in attrs):
+            known.add(node)
+        return node in known
 
     def _names_loaded(self):
         """Home Assistant gave the names of the nodes (read about 45 s after the start)."""
@@ -1898,7 +1911,9 @@ class Watch:
         else:
             self.state_sig, self.state_updated = sig, s["updated"]
         self.mqtt.publish(f"{BASE}/state", json.dumps(s, ensure_ascii=False), retain=True)
-        if self.healer:
+        # not before the first read of the nodes from Home Assistant (about 45 s after the start): the
+        # counts would be 0 available, 0 unavailable. The values retained from before stay meanwhile
+        if self.healer and getattr(self.healer, "ha_read", True):
             self.mqtt.publish(f"{BASE}/healer", json.dumps(self.healer.summary(), ensure_ascii=False), retain=True)
         if self.radio:
             self.mqtt.publish(f"{BASE}/radio", json.dumps(self.radio.summary(), ensure_ascii=False), retain=True)

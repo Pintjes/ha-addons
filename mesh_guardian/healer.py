@@ -110,6 +110,7 @@ class Healer:
         self.pings_sent = 0
         self.last_result = t("none")
         self.ha_ok = False
+        self.ha_read = False     # the nodes were read from Home Assistant at least once since the start
         self.matter_ok = None
         self.cmd_lock = threading.Lock()
         self.cmd_log = collections.deque()   # (time, command) of every command sent, CMD_KEEP_S
@@ -921,6 +922,7 @@ class Healer:
                 due.append(node)
             for gone in set(self.nodes) - seen:
                 del self.nodes[gone]
+            self.ha_read = True   # from now on the counts mean something (published to MQTT)
             downs = [e for e in events if e[3] == "down"]
             ups = [e for e in events if e[3] == "up"]
             mass = self.mass_threshold(len(self.nodes))

@@ -137,15 +137,17 @@ class Anchor:
     # ------------------------------------------------------------ persistence
     def _load(self):
         d = load_json(ANCHOR_FILE)
+        self.anchored_prefix = None   # the prefix anchored_since is about
         if isinstance(d, dict):
             try:
                 self.anchored_since = float(d["anchored_since"]) if d.get("anchored_since") else None
+                self.anchored_prefix = d.get("prefix") if isinstance(d.get("prefix"), str) else None
             except (TypeError, ValueError):
                 self.anchored_since = None
 
     def _save(self):
         try:
-            save_json(ANCHOR_FILE, {"anchored_since": self.anchored_since})
+            save_json(ANCHOR_FILE, {"anchored_since": self.anchored_since, "prefix": self.anchored_prefix})
         except Exception as err:  # noqa: BLE001
             LOG.warning(t("Cannot write {file}: {err}", file=ANCHOR_FILE, err=err))
 
@@ -363,10 +365,19 @@ class Anchor:
                 first = omr.get("applied_at")
                 since = told if told is not None else \
                     min(x for x in (now, first if isinstance(first, (int, float)) else None) if x is not None)
-                if self.anchored_since is None or since < self.anchored_since or (told is not None and since != self.anchored_since):
-                    self.anchored_since = since
+                # the report "before / since the anchoring" starts when this prefix was first anchored:
+                # a later date of Thread Anchor for the same prefix (it starts again after a radio cut
+                # or a restart) does not move it; an earlier one is better knowledge. Another prefix
+                # fixed starts a new anchoring
+                prefix = omr.get("wanted")
+                other = bool(self.anchored_prefix and prefix and prefix != self.anchored_prefix)
+                if other or self.anchored_since is None or since < self.anchored_since:
+                    self.anchored_since, self.anchored_prefix = since, prefix
                     self._save()
                     self._report_t = 0
+                elif prefix and not self.anchored_prefix:
+                    self.anchored_prefix = prefix   # file of an older version: the prefix noted now
+                    self._save()
             if reason and self.blocked_since is None:
                 self.blocked_since, self.block_reason = now, reason
                 self.catchup_at = None

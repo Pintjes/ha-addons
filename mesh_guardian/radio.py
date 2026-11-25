@@ -30,7 +30,7 @@ from datetime import datetime
 from i18n import t, tn
 from store import load_json, save_json
 from advice import weak_link
-from nodetable import counter_deltas, ext_of, find_parents, hop_links, routes_to_br
+from nodetable import counter_deltas, ext_of, find_parents, hop_links, is_thread, routes_to_br
 
 LOG = logging.getLogger("mg.radio")
 
@@ -196,8 +196,10 @@ class Radio:
                 attrs = node.get("attributes") or {}
                 if not isinstance(attrs, dict):
                     raise TypeError("attributes")
-                if attrs.get("0/53/1") is None:
+                if attrs.get("0/53/1") is None and not is_thread(attrs):
                     continue  # not Thread (Wi-Fi, or not interviewed yet)
+                # a Thread node without the Thread diagnostics cluster (some locks) is kept: no role,
+                # no neighbors, no counters, but its restarts and uptime count
                 nbs = attrs.get("0/53/7") or []
                 itfs = attrs.get("0/51/0") or []
                 routes = attrs.get("0/53/8") or []
@@ -218,7 +220,7 @@ class Radio:
             info[nid] = {
                 "name": name, "area": area, "floor": floor, "battery": battery, "model": model,
                 "available": node.get("available"),
-                "role": ROLE.get(attrs.get("0/53/1"), str(attrs.get("0/53/1"))),
+                "role": None if attrs.get("0/53/1") is None else ROLE.get(attrs.get("0/53/1"), str(attrs.get("0/53/1"))),
                 "ext": ext, "uptime": attrs.get("0/51/2"), "ext_pan": attrs.get("0/53/4"),
                 "reboots": attrs.get("0/51/1"), "boot": attrs.get("0/51/4"),
                 "counters": {v: attrs.get(f"0/53/{k}") for k, v in COUNTERS.items()},
@@ -304,7 +306,8 @@ class Radio:
         unstable.sort(key=lambda x: -x["score"])
         roles = {}
         for n in info.values():
-            roles[n["role"]] = roles.get(n["role"], 0) + 1
+            if n["role"]:
+                roles[n["role"]] = roles.get(n["role"], 0) + 1
         self.last = {
             "t": now, "thread_nodes": len(info), "roles": roles, "links": len(links),
             "weak_links": weak, "parents": parents, "unstable": unstable, "period_h": span_h,
@@ -440,7 +443,7 @@ class Radio:
             "parents": {k: f"{v['parent']} ({'?' if v['rssi'] is None else v['rssi']}dBm)" for k, v in list(r.get("parents", {}).items())[:60]},
             "unstable": len(r.get("unstable", [])),
             "unstable_list": [t("{name} ({area}, {role}): {d} detaches, {p} parent changes, {q} partition changes",
-                                name=u["name"], area=u["area"], role=t(u["role"]), d=u["detaches"],
+                                name=u["name"], area=u["area"], role=t(u["role"]) if u["role"] else "?", d=u["detaches"],
                                 p=u["parent_changes"], q=u["partition_changes"])
                               + (t(" [rebooted]") if u["rebooted"] else "")
                               for u in r.get("unstable", [])[:15]],

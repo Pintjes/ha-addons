@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.40.16] - 2026-11-25
+
+### Fixed
+
+- **Node prefixes** (sensor OMR prefix) count the Thread nodes only. The prefix a Wi-Fi node announces is that of the LAN: a change of it no longer says "Node prefixes: …" nor speeds the pings up.
+- **Radio survey**: a Thread node without the Thread diagnostics cluster (e.g. a lock) is no longer left out. It is counted, with its restarts and uptime over 24 h; its role, neighbors and counters stay empty.
+- **At each start** the sensors of available and unavailable nodes are no longer 0 for about 50 s: they are published once the nodes were read from Home Assistant. Until then Home Assistant keeps the values from before.
+- **"Before / since the anchoring"** is no longer reset when Thread Anchor starts its date again for the same prefix (radio cut, restart). The date changes only when another prefix is fixed (an earlier date for the same prefix is still taken). A date already reset by an older version is not recovered.
+
 ## [2.40.15] - 2026-11-24
 
 ### Fixed
