@@ -80,7 +80,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.40.16"
+VERSION = "2.40.17"
 OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
 OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
@@ -403,8 +403,10 @@ class Watch:
 
     def _save_known(self):
         try:
+            own = local_addresses()
             with self.lock:
-                nodes = sorted(self.matter)
+                # without the controller of the Matter Server of Home Assistant: not a node
+                nodes = sorted(k for k, n in self.matter.items() if not own_announcement(n, own))
             save_json(KNOWN_FILE, nodes)
         except Exception as err:  # noqa: BLE001
             LOG.warning(t("Cannot write {file}: {err}", file=KNOWN_FILE, err=err))
@@ -1147,7 +1149,10 @@ class Watch:
             own = local_addresses()
             ghosts = sorted(k for k in self.matter if _int16(k) not in ids and self.matter[k].get("online")
                             and not (rt and rt.was_reset(_int16(k))) and not own_announcement(self.matter[k], own))
-        if gone:
+            mine = {k for k, n in self.matter.items() if own_announcement(n, own)}
+        # saved again once its own announcement is recognized (its addresses come after the first save)
+        if gone or mine != getattr(self, "_own_left_out", set()):
+            self._own_left_out = mine
             self._save_known()
         if ghosts != getattr(self, "ghosts", []):
             self.ghosts = ghosts
@@ -1487,8 +1492,9 @@ class Watch:
                 self._save_leader()
             leaders_count = st["leaders_count"]
             omr = sorted({b["omr"] for b in online if b["omr"]})
-            nodes_on = sorted(k for k, n in self.matter.items() if n["online"])
-            nodes_off = sorted(k for k, n in self.matter.items() if not n["online"])
+            mine_k = self._own_nodes()   # the controller of the Matter Server of Home Assistant: not a node
+            nodes_on = sorted(k for k, n in self.matter.items() if n["online"] and k not in mine_k)
+            nodes_off = sorted(k for k, n in self.matter.items() if not n["online"] and k not in mine_k)
             node_prefixes = {}
             for k in nodes_on:
                 p = self.matter[k].get("prefix")
@@ -1512,7 +1518,7 @@ class Watch:
                 "omr_list": omr,
                 "omr_changes_24h": self.omr_episodes_24h(),
                 "matter_online": len(nodes_on),
-                "matter_known": len(self.matter),
+                "matter_known": len(nodes_on) + len(nodes_off),
                 "matter_missing": len(nodes_off),
                 "matter_missing_ids": [f"0x{n.lstrip('0') or '0'}" for n in nodes_off],
                 "node_prefixes": node_prefixes,
@@ -1524,6 +1530,15 @@ class Watch:
                 "events_count": self.events_count,
                 "updated": now_iso(),
             }
+
+    def _own_nodes(self):
+        """Keys of the announcements made from this machine (the controller node of the Matter
+        Server of Home Assistant announces itself on the fabric with the LAN address of the host):
+        not a node of the network (see own_announcement). The addresses are read once a minute."""
+        cached = self.__dict__.get("_own_cache")
+        if not cached or time.time() - cached[0] > 60:
+            cached = self._own_cache = (time.time(), local_addresses())
+        return {k for k, n in self.matter.items() if own_announcement(n, cached[1])}
 
     def _not_thread(self, node):
         """True when the attributes of this node show it is not a Thread node (Wi-Fi, Ethernet):

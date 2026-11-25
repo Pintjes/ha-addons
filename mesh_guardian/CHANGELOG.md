@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
+## [2.40.17] - 2026-11-25
+
+### Fixed
+
+- **The controller node of the Matter Server of Home Assistant is no longer counted as a node**. It announces itself on the fabric from the machine of Home Assistant, with the LAN address of that machine. So it was the last one counted on the Wi-Fi/LAN prefix in the node prefixes, and one too many in "N known Matter nodes loaded" and the sensors of announced nodes. It is left out of all of them and of the file of known nodes. The loaded count is right from the second start after the update.
+
 ## [2.40.16] - 2026-11-25
 
 ### Fixed

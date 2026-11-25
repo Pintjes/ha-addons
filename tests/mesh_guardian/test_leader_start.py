@@ -42,6 +42,7 @@ class Radio:
 def watch(quiet=True, names=False):
     w = ns["W"]()
     w.lock, w.global_lock = threading.RLock(), threading.RLock()
+    w._own_nodes = lambda: set()
     w.br = {"b1": {"online": True, "role": "router", "partition": "p1", "interface": "active", "omr": "fd00::/64"}}
     w.br_relevant = lambda b: True
     w.br_label = lambda b: "BR demo"
