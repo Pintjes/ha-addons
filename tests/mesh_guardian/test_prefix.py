@@ -81,7 +81,8 @@ class W(ns["W"]):
 
 
 w = W()
-at = time.mktime(time.strptime("2026-11-17 06:17:38", "%Y-%m-%d %H:%M:%S"))
+yesterday = time.strftime("%Y-%m-%d", time.localtime(time.time() - 86400))   # a fixed date would age out (7 days)
+at = time.mktime(time.strptime(yesterday + " 06:17:38", "%Y-%m-%d %H:%M:%S"))
 w.omr_left[OLD] = (at, "Routeur tiers A")
 # la node restee sur l'ancien prefixe est reconnue ; celle qui a suivi et la node Wi-Fi non
 st = w.stale_prefix("4D")
