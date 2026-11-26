@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.4] - 2026-11-26
+
+### Fixed
+
+- An attachment the server accepts but whose enumeration hangs (device not ready on the server just after its
+  restart) was said "attached", though no serial port ever appeared; `usbip port` does not show such a port,
+  so the add-on then said "link lost" and attached again on another port, until the server answered
+  `Device busy (exported)` for good. An attachment now counts only once the kernel has finished the
+  enumeration **and**, for a serial device (CDC ACM), its tty exists, within 15 s; else that port is detached
+  and the attachment tried again at the next check.
+- A port taken by a device that never appeared (state of `/sys/devices/platform/vhci_hcd.0/status`) is
+  detached, at the start of the add-on and before any attachment.
+- The restart of the add-ons of `restart_addons` waits for that verification; a refusal with HTTP 400 (the
+  Supervisor does not see the serial port yet) is tried again too, every 15 s for 5 min.
+
 ## [0.4.3] - 2026-11-22
 
 ### Changed

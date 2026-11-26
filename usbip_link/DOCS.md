@@ -21,6 +21,10 @@ attaches the device to it: Home Assistant then sees a USB device, `/dev/ttyACM0`
 Every `check_interval` seconds the add-on checks the link:
 
 - not attached → attached as soon as the server answers;
+- an attachment counts only once the device is really there (and its serial port, for a CDC ACM device such
+  as the ZBT-2), within 15 s; else its port is detached and it is tried again. A port taken by a device that
+  never appeared (`usbip port` does not show it, and the server then answers `Device busy (exported)`) is
+  detached too, at the start of the add-on and before any attachment (0.4.4);
 - server silent three checks in a row → the device is detached (a dead link would keep the
   port busy for a long time) and attached again when the server is back;
 - server silent for less than that (a single check is enough), then back → the device is detached and
@@ -38,8 +42,8 @@ Every `check_interval` seconds the add-on checks the link:
 A restart of the add-on itself does not detach anything, and restarts nothing: a device
 found attached is taken as it is (the log says so), and its state is published only once checked.
 
-A restart that Home Assistant refuses (it answers 503 while it starts) is tried again every
-15 seconds for 5 minutes, and the log says so. Without a MQTT broker at the start, the add-on keeps
+A restart that Home Assistant refuses (503 while it starts, or 400 while it does not see the serial port
+yet) is tried again every 15 seconds for 5 minutes, and the log says so. Without a MQTT broker at the start, the add-on keeps
 looking for it every 30 seconds.
 
 ## 1. Windows: share the device (usbipd-win)

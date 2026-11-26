@@ -18,6 +18,9 @@ Every `check_interval` seconds:
 - when the server answers again after ANY silence, even a single check, the attached device is
   detached and attached again: the kernel does not always see a link die (a virtual machine
   resumed, a restarted usbipd), and the port would stay "in use" on a dead connection;
+- an attachment counts only once the device is there (tty included for a serial one); else its port
+  is detached and it is tried again. A port taken by a device that never appeared (`usbip port` does
+  not show it) is detached before anything else, at the start of the add-on too;
 - after an attachment that follows a loss, the add-ons listed in `restart_addons` are restarted
   (the OpenThread border router opens its radio at start only); after the first attachment, only
   those already running (or in error): at the start of Home Assistant they may have started before
@@ -42,7 +45,7 @@ import time
 import urllib.request
 from datetime import datetime
 
-VERSION = "0.4.3"
+VERSION = "0.4.4"
 LOG = logging.getLogger("usbip_link")
 STATE_TOPIC = "usbip_link/state"
 DISCOVERY = "homeassistant"
@@ -58,6 +61,13 @@ RETRY_MAX_S = 300        # s: a restart is tried again for this long, then given
 MQTT_RETRY_S = 30        # s between two tries to find the MQTT broker, until found
 CLOCK_JUMP_S = 20        # s: a jump of the clock (wall vs monotonic) beyond this = machine paused and resumed
 WATCH_STEP_S = 2         # s: the wait between two checks is cut in steps of this length to see a jump at once
+ENUM_TIMEOUT_S = 15      # s given to the kernel to finish the enumeration of a device just attached
+STUCK_CONFIRM_S = 3      # s a port must stay stuck before it is detached
+VHCI_DIR = "/sys/devices/platform/vhci_hcd.0"
+USB_DIR = "/sys/bus/usb/devices"
+VDEV_NULL, VDEV_NOTASSIGNED, VDEV_USED, VDEV_ERROR = 4, 5, 6, 7   # port states of the vhci `status` file
+# taken, but not shown (NOTASSIGNED) or not usable (ERROR): `usbip port` leaves them out
+STUCK = (VDEV_NOTASSIGNED, VDEV_ERROR)
 
 TEXTS = {
     "fr": {
@@ -98,6 +108,13 @@ TEXTS = {
             "{name} : la machine a été mise en pause, périphérique détaché tout de suite (sa liaison a pu mourir) et "
             "rattaché dès que le serveur répond",
         "{name}: cannot detach port {port}: {err}": "{name} : impossible de détacher le port {port} : {err}",
+        "Port {port} taken but the device never appeared (invisible to `usbip port`): detached":
+            "Port {port} occupé alors que le périphérique n'est jamais apparu (invisible pour `usbip port`) : détaché",
+        "Cannot detach the stuck port {port}: {err}": "Impossible de détacher le port bloqué {port} : {err}",
+        "{name}: attached, but the device did not appear within {s} s: port detached, tried again":
+            "{name} : attaché, mais le périphérique n'est pas apparu en {s} s : port détaché, nouvel essai",
+        "The state of the vhci ports cannot be read: attachments are not checked":
+            "L'état des ports vhci est illisible : les attachements ne sont pas vérifiés",
         "{name}: bus id changed on the server ({old} -> {new})": "{name} : identifiant de bus modifié sur le serveur ({old} -> {new})",
         "Connected to MQTT": "Connecté à MQTT",
         "No MQTT broker yet: the state is only in the log until it answers (trying again every {s} s)":
@@ -174,6 +191,57 @@ def find_port(ports, dev, servers):
     return None
 
 
+def parse_vhci(text):
+    """The vhci `status` file -> [{"port", "status", "local_busid"}] of every port (header skipped)."""
+    out = []
+    for line in (text or "").splitlines():
+        f = line.split()
+        if len(f) >= 7 and f[0] in ("hs", "ss") and f[1].isdigit() and f[2].isdigit():
+            out.append({"port": int(f[1]), "status": int(f[2]), "local_busid": f[6]})
+    return out
+
+
+def read_vhci(root=VHCI_DIR):
+    """Ports of every vhci controller (files status, status.1…); None when they cannot be read."""
+    try:
+        names = sorted(n for n in os.listdir(root) if n == "status" or n.startswith("status."))
+        ports = []
+        for name in names:
+            with open(os.path.join(root, name), encoding="ascii") as f:
+                ports += parse_vhci(f.read())
+    except (OSError, UnicodeError):
+        return None
+    return ports or None
+
+
+def usb_ready(busid, root=USB_DIR):
+    """True once the local USB device `busid` is fully there: identified, with its interfaces, and, for a
+    serial one of the CDC ACM class (ZBT-2, SkyConnect…), its tty created."""
+    if not os.path.isfile(os.path.join(root, busid, "idVendor")):
+        return False
+    try:
+        ifaces = [os.path.join(root, n) for n in os.listdir(root) if n.startswith(busid + ":")]
+        if not ifaces:
+            return False
+        acm, tty = False, False
+        for path in ifaces:
+            entries = os.listdir(path)
+            tty = tty or any(e.startswith("tty") and (e != "tty" or os.listdir(os.path.join(path, e))) for e in entries)
+            cls = [_read(os.path.join(path, n)) for n in ("bInterfaceClass", "bInterfaceSubClass")]
+            acm = acm or cls == ["02", "02"]
+    except OSError:
+        return False
+    return tty or not acm
+
+
+def _read(path):
+    try:
+        with open(path, encoding="ascii") as f:
+            return f.read().strip().lower()
+    except (OSError, UnicodeError):
+        return ""
+
+
 def server_up(host, port=USBIP_PORT, timeout=2.0):
     """Time to open a TCP connection to the server, in ms (the latency of the link); None when it does
     not answer."""
@@ -238,7 +306,11 @@ def run(args, timeout=20):
 
 # ---------------------------------------------------------------- the link
 class Link:
-    def __init__(self, options, runner=run, probe=server_up, clock=time.time, resolver=resolve):
+    def __init__(self, options, runner=run, probe=server_up, clock=time.time, resolver=resolve, vhci=read_vhci,
+                 ready=usb_ready, sleep=time.sleep):
+        self.vhci, self.ready, self.sleep = vhci, ready, sleep
+        self.unverified_said = False
+        self.stuck_failed = set()   # stuck ports whose detach was refused, said once
         self.server = str(options.get("server") or "").strip()
         self.resolver = resolver
         self.servers = {self.server}   # + its addresses, once resolved: `usbip port` shows an address
@@ -271,6 +343,57 @@ class Link:
     def emit(self, kind, text, level=logging.INFO):
         LOG.log(level, text)
         self.events.append((kind, text))
+
+    def _stuck_ports(self):
+        return {p["port"] for p in self.vhci() or [] if p["status"] in STUCK}
+
+    def free_stuck(self):
+        """Detaches the ports taken by a device that never appeared (attach accepted, enumeration hung):
+        `usbip port` does not show them, yet the server keeps the device "busy" as long as they last."""
+        stuck = self._stuck_ports()
+        if not stuck:
+            self.stuck_failed.clear()
+            return
+        self.sleep(STUCK_CONFIRM_S)   # not a port in the middle of an enumeration
+        for port in sorted(stuck & self._stuck_ports()):
+            try:
+                self.run(["usbip", "detach", "-p", str(port)])
+            except Exception as err:  # noqa: BLE001
+                if port not in self.stuck_failed:
+                    self.stuck_failed.add(port)
+                    self.emit("stuck_failed", t("Cannot detach the stuck port {port}: {err}", port=port, err=err),
+                              logging.WARNING)
+                continue
+            self.stuck_failed.discard(port)
+            self.emit("stuck_freed", t("Port {port} taken but the device never appeared (invisible to `usbip port`): "
+                                       "detached", port=port), logging.WARNING)
+
+    def _taken_ports(self):
+        """Ports in use before an attachment; None when they cannot be read (nothing to check then)."""
+        ports = self.vhci()
+        if ports is None:
+            if not self.unverified_said:
+                self.unverified_said = True
+                LOG.warning(t("The state of the vhci ports cannot be read: attachments are not checked"))
+            return None
+        return {p["port"] for p in ports if p["status"] != VDEV_NULL}
+
+    def wait_enumerated(self, before):
+        """Waits for the port taken since `before` to hold a complete device (tty included). On failure,
+        detaches that port only and returns False."""
+        new = []
+        for i in range(ENUM_TIMEOUT_S + 1):
+            new = [p for p in self.vhci() or [] if p["port"] not in before and p["status"] != VDEV_NULL]
+            if any(p["status"] == VDEV_USED and self.ready(p["local_busid"]) for p in new):
+                return True
+            if i < ENUM_TIMEOUT_S:
+                self.sleep(1)
+        for p in new:
+            try:
+                self.run(["usbip", "detach", "-p", str(p["port"])])
+            except Exception as err:  # noqa: BLE001 - freed later by free_stuck if it stays stuck
+                LOG.debug("detach port %s: %s", p["port"], err)
+        return False
 
     def check(self):
         """One pass; returns True when the state changed."""
@@ -305,6 +428,7 @@ class Link:
         if not up and not self.silent:
             self.silent, self.silent_at = True, self.clock()
         detach_failed = False
+        self.free_stuck()   # at the start of the add-on too, and before any new attachment
         try:
             ports = parse_port(self.run(["usbip", "port"]))
         except Exception as err:  # noqa: BLE001 - no port in use, or the module is missing
@@ -377,12 +501,21 @@ class Link:
                         self.emit("not_found", err, logging.WARNING)
                     st["error"] = err
                     continue
+            before = self._taken_ports()
             try:
                 self.run(["usbip", "attach", "-r", self.server, "-b", busid], timeout=30)
             except Exception as err:  # noqa: BLE001
                 txt = t("{name}: attachment refused: {err}", name=d["name"], err=err)
                 if st["error"] != txt:
                     self.emit("refused", txt, logging.WARNING)
+                st["error"] = txt
+                continue
+            # accepted is not attached: said so (and the add-ons restarted) only once the device is there
+            if before is not None and not self.wait_enumerated(before):
+                txt = t("{name}: attached, but the device did not appear within {s} s: port detached, tried again",
+                        name=d["name"], s=ENUM_TIMEOUT_S)
+                if st["error"] != txt:
+                    self.emit("enum_failed", txt, logging.WARNING)
                 st["error"] = txt
                 continue
             again = st["lost_at"] is not None
@@ -618,9 +751,10 @@ def do_restarts(slugs, if_running, sup=None):
 
 
 def retryable(err):
-    """A refusal worth trying again: the Supervisor not ready (5xx) or not reachable; a 4xx will not change."""
+    """A refusal worth trying again: the Supervisor not ready (5xx) or not reachable, or a 400 (it refuses to
+    start an add-on whose serial port it does not see yet); another 4xx will not change."""
     code = getattr(err, "code", None)
-    return code is None or code >= 500
+    return code is None or code == 400 or code >= 500
 
 
 class RestartQueue:

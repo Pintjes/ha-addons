@@ -2,6 +2,7 @@
 Lancer : python tests/usbip_link/test_link.py usbip_link"""
 import os
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "usbip_link"))
 import usbip_link as ul  # noqa: E402
@@ -509,6 +510,147 @@ fail[0] = False
 link11.check()
 assert not link11.resume_pending and f11.attached and link11.public()["devices"][0]["attaches"] == 1
 assert any("attach -r" in c for c in f11.calls)
+
+# 0.4.4 : attachement accepte mais enumeration bloquee (incident du 26/11) : port invisible pour `usbip port`
+STATUS = ("hub port sta spd dev      sockfd local_busid\n"
+          "hs  0000 006 002 00010001 000003 1-1\n"
+          "hs  0001 005 000 00000000 000000 0-0\n"
+          "ss  0008 004 000 00000000 000000 0-0\n")
+assert ul.parse_vhci(STATUS) == [{"port": 0, "status": 6, "local_busid": "1-1"}, {"port": 1, "status": 5, "local_busid": "0-0"},
+                                 {"port": 8, "status": 4, "local_busid": "0-0"}]
+assert ul.parse_vhci("") == [] and ul.read_vhci(os.path.join("nulle", "part")) is None
+
+
+class Kernel:
+    """vhci simule : `outcomes` donne le sort de chaque attachement (ok, stuck : enumeration bloquee, notty)."""
+    def __init__(self, outcomes=()):
+        self.ports = {0: ul.VDEV_NULL, 1: ul.VDEV_NULL}
+        self.kind, self.calls, self.outcomes, self.now, self.slept = {}, [], list(outcomes), 1000.0, 0
+
+    def run(self, args, timeout=20):
+        self.calls.append(" ".join(args[1:]))
+        if args[1] == "port":      # comme le vrai outil : ni les ports libres ni les non enumeres
+            if any(s == ul.VDEV_USED for s in self.ports.values()):
+                return PORT
+            return "Imported USB devices\n====================\n"
+        if args[1] == "list":
+            return LIST
+        if args[1] == "attach":
+            if ul.VDEV_NOTASSIGNED in self.ports.values():
+                raise RuntimeError("usbip: error: Attach Request for 2-3 failed - Device busy (exported)")
+            port = min(p for p, s in self.ports.items() if s == ul.VDEV_NULL)
+            self.kind[port] = self.outcomes.pop(0) if self.outcomes else "ok"
+            self.ports[port] = ul.VDEV_NOTASSIGNED if self.kind[port] == "stuck" else ul.VDEV_USED
+            return ""
+        if args[1] == "detach":
+            self.ports[int(args[3])] = ul.VDEV_NULL
+            return ""
+        raise AssertionError(args)
+
+    def vhci(self):
+        return [{"port": p, "status": s, "local_busid": f"1-{p + 1}" if s == ul.VDEV_USED else "0-0"}
+                for p, s in sorted(self.ports.items())]
+
+    def ready(self, busid):
+        return self.kind.get(int(busid.split("-")[1]) - 1) == "ok"
+
+    def sleep(self, s):
+        self.slept += s
+        self.now += s
+
+    def link(self, **kw):
+        return ul.Link({"server": "192.168.1.10", "devices": [{"name": "ZBT-2", "hardware_id": "303a:831a"}],
+                        "restart_addons": ["core_openthread_border_router"]}, runner=kw.get("runner", self.run),
+                       probe=lambda h, p: True, clock=lambda: self.now, vhci=self.vhci, ready=self.ready, sleep=self.sleep)
+
+
+# enumeration bloquee : pas « attache », seul ce port est detache, aucun redemarrage ; nouvel essai au passage suivant
+k = Kernel(["stuck", "ok"])
+lk = k.link()
+lk.check()
+assert not lk.public()["devices"][0]["attached"] and lk.public()["devices"][0]["attaches"] == 0 and lk.restart == []
+assert [e for e, _ in lk.events] == ["enum_failed"] and "did not appear within 15 s" in lk.events[0][1], lk.events
+assert "detach -p 0" in k.calls and "detach -p 1" not in k.calls and k.ports == {0: 4, 1: 4} and k.slept == ul.ENUM_TIMEOUT_S
+lk.events = []
+lk.check()
+assert lk.public()["devices"][0]["attached"] and [e for e, _ in lk.events] == ["attached"]
+assert lk.restart == ["core_openthread_border_router"] and lk.public()["devices"][0]["error"] is None
+# enumere mais sans tty : meme traitement, dit une seule fois s'il se repete
+k = Kernel(["notty", "notty"])
+lk = k.link()
+lk.check()
+lk.check()
+assert [e for e, _ in lk.events] == ["enum_failed"] and lk.restart == [] and k.ports == {0: 4, 1: 4}
+# port bloque deja la au demarrage de l'add-on : libere avant tout attachement (sinon « busy (exported) »)
+k = Kernel()
+k.ports[0] = ul.VDEV_NOTASSIGNED
+lk = k.link()
+lk.check()
+assert k.calls[:2] == ["detach -p 0", "port"] and [e for e, _ in lk.events] == ["stuck_freed", "attached"], (k.calls, lk.events)
+assert lk.public()["devices"][0]["attached"]
+# port en cours d'enumeration (devient pret pendant la confirmation) : pas touche
+k = Kernel()
+k.ports[1], k.kind[1] = ul.VDEV_NOTASSIGNED, "ok"
+k.sleep = lambda s: k.ports.__setitem__(1, ul.VDEV_USED)
+lk = k.link()
+lk.free_stuck()
+assert k.calls == [] and lk.events == []
+# detachement du port bloque refuse : dit une fois, retente a chaque passage
+k = Kernel()
+k.ports[0] = ul.VDEV_ERROR
+
+
+def run_refuse(a, timeout=20):
+    if a[1] == "detach":
+        k.calls.append("refus")
+        raise RuntimeError("refused")
+    return k.run(a, timeout)
+
+
+lk = k.link(runner=run_refuse)
+lk.free_stuck()
+lk.free_stuck()
+assert [e for e, _ in lk.events] == ["stuck_failed"] and k.calls == ["refus", "refus"]
+
+
+# presence du peripherique dans sysfs : identifie, interfaces, et tty pour un CDC ACM
+def put(root, rel, text=""):
+    path = os.path.join(root, *rel.split("/"))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="ascii") as fh:
+        fh.write(text)
+
+
+with tempfile.TemporaryDirectory() as root:
+    # Windows refuse « : » dans un nom de dossier : l'interface « 1-1:1.0 » est simulee par listdir/chemins
+    assert not ul.usb_ready("1-1", root)
+    put(root, "1-1/idVendor", "303a\n")
+    assert not ul.usb_ready("1-1", root)          # pas encore d'interface
+
+real = (ul.os.listdir, ul.os.path.isfile, ul._read)
+tree = {"/u": ["1-1", "1-1:1.0", "1-1:1.1"], "/u/1-1:1.0": ["bInterfaceClass"], "/u/1-1:1.1": ["bInterfaceClass"]}
+files = {"/u/1-1:1.0/bInterfaceClass": "02", "/u/1-1:1.0/bInterfaceSubClass": "02", "/u/1-1:1.1/bInterfaceClass": "0a"}
+ul.os.listdir = lambda p: tree[p.replace("\\", "/")]
+ul.os.path.isfile = lambda p: p.replace("\\", "/") == "/u/1-1/idVendor"
+ul._read = lambda p: files.get(p.replace("\\", "/"), "")
+try:
+    assert not ul.usb_ready("1-1", "/u")          # CDC ACM sans tty : pas pret
+    tree["/u/1-1:1.0"] = ["bInterfaceClass", "tty"]
+    tree["/u/1-1:1.0/tty"] = []
+    assert not ul.usb_ready("1-1", "/u")
+    tree["/u/1-1:1.0/tty"] = ["ttyACM0"]
+    assert ul.usb_ready("1-1", "/u")
+    files.clear()                                 # pas un port serie CDC : l'enumeration suffit
+    tree["/u/1-1:1.0"] = ["bInterfaceClass"]
+    assert ul.usb_ready("1-1", "/u")
+finally:
+    ul.os.listdir, ul.os.path.isfile, ul._read = real
+
+# redemarrage refuse avec 400 (le Supervisor ne voit pas encore le port serie) : retente
+q3 = ul.RestartQueue(sup=lambda p, method="GET", timeout=30: (_ for _ in ()).throw(Http(400)))
+q3.add(["otbr"], False, 0.0)
+assert q3.run(0.0) == [] and "otbr" in q3.items
+assert ul.retryable(Http(400)) and ul.retryable(Http(503)) and not ul.retryable(Http(404)) and not ul.retryable(Http(403))
 
 # remontage de /sys : un refus (profil AppArmor, droit manquant) est dit dans le journal, sans arreter l'add-on
 calls = []
