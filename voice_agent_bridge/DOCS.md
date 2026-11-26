@@ -192,8 +192,16 @@ conversations in **Logbook** and in **Settings → Voice assistants → ⋮ → 
 **The satellite says Claude is not signed in.** The token is missing, wrong or
 revoked. Create a new one with `claude setup-token`.
 
-**The satellite says the usage limit is reached.** The plan's credit or the
-budget per request is exhausted. Raise **Budget per request** or wait.
+**The satellite says the usage limit is reached.** The plan's credit is
+exhausted for now. Wait, or check your plan.
+
+**The satellite says "I did not finish".** The request went over **Maximum steps**
+or **Budget per request**. Ask something simpler, or raise them.
+
+**The satellite says Claude could not answer.** The add-on log gives the cause
+on the `Claude error` line (kind of error, messages, turns, tools called). A
+failed request that only read the home is tried once more by itself; one that
+already acted on a device never is.
 
 **Extended OpenAI Conversation cannot connect.** Check the hostname and port
 `8791` in the base URL, and that the add-on is started.

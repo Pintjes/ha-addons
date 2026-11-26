@@ -32,6 +32,7 @@ explicit confirmation from the user in this conversation. Ask, then wait for "ye
         "err_limit": "The Claude usage limit has been reached for now. Try again later.",
         "err_timeout": "That took too long, I stopped. Try a simpler request.",
         "err_generic": "Sorry, Claude could not answer. Look at the gateway add-on log.",
+        "err_unfinished": "I did not finish: the request went over the limits set for one request. Try a simpler one.",
         "notes_template": """# House notes
 
 Write here what the voice assistant should know about your home. This file is read at every request,
@@ -81,6 +82,7 @@ Demande, puis attends le « oui ».
         "err_limit": "La limite d'utilisation de Claude est atteinte pour le moment. Réessaie plus tard.",
         "err_timeout": "C'était trop long, j'ai arrêté. Essaie une demande plus simple.",
         "err_generic": "Désolé, Claude n'a pas pu répondre. Regarde le journal de l'add-on passerelle.",
+        "err_unfinished": "Je n'ai pas fini : la demande a dépassé les limites fixées pour une demande. Essaie plus simple.",
         "notes_template": """# Notes de la maison
 
 Écris ici ce que l'assistant vocal doit savoir sur ta maison. Ce fichier est relu à chaque demande :

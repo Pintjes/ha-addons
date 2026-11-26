@@ -4,6 +4,23 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.4] - 2026-11-26
+
+### Fixed
+
+- When Claude fails, the log now says why: the kind of error, the error messages
+  and the end of the Claude Code error output, the number of turns, the time and
+  the tools called. Before, it only said "exit code 1". Secrets (token, key,
+  private server path) are removed from these lines.
+- A tool call refused or failed (for example wrong arguments) is logged as a
+  warning, with the tool name and a short message.
+- When a request goes over the turns or budget set for one request, the speaker
+  says "I did not finish" instead of the general error message.
+- A failed request is tried once more, by itself, only when nothing was said yet
+  and only tools that read were called (search, states, history…): a device is
+  never commanded twice. It is not tried again after a timeout, a sign-in error or
+  a usage limit.
+
 ## [1.1.3] - 2026-11-22
 
 ### Changed

@@ -9,6 +9,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import secrets
 import subprocess
 import sys
@@ -347,8 +348,144 @@ def friendly_error(raw: str) -> str:
     return T["err_generic"]
 
 
-def run_claude(prompt: str, resume: str | None, mcp_config: Path, on_text):
-    """Run Claude, call on_text(delta) for streamed text. Return (text, session_id)."""
+# Tools that only read: a request that called nothing else changed nothing in the home
+# and can be tried again safely.
+READ_ONLY_TOOLS = ("ha_search", "ha_get_", "ha_list_", "ha_config_get_", "ha_config_list_",
+                   "ha_eval_template", "ToolSearch", "WebSearch", "WebFetch")
+UNFINISHED_SUBTYPES = ("error_max_turns", "error_max_budget_usd")
+
+
+def short_tool_name(name: str) -> str:
+    return name.removeprefix("mcp__homeassistant__")
+
+
+def is_read_only_tool(name: str) -> bool:
+    name = short_tool_name(name)
+    return any(name == p or (p.endswith("_") and name.startswith(p)) for p in READ_ONLY_TOOLS)
+
+
+def redact(text: str) -> str:
+    """Remove secrets (configured token or key, MCP secret path) from text sent to the log."""
+    text = text or ""
+    for key in ("claude_token", "anthropic_api_key", "gateway_api_key"):
+        value = (OPTIONS.get(key) or "").strip()
+        if len(value) >= 8:
+            text = text.replace(value, "***")
+    text = re.sub(r"/mcp-[A-Za-z0-9_-]+", "/mcp-***", text)
+    return re.sub(r"sk-ant-[A-Za-z0-9_-]+", "sk-ant-***", text)
+
+
+def one_line(text: str, limit: int) -> str:
+    text = " ".join(redact(str(text)).split())
+    return text if len(text) <= limit else text[:limit - 1] + "…"
+
+
+def tool_result_text(content) -> str:
+    if isinstance(content, list):
+        return " ".join(c.get("text", "") for c in content if isinstance(c, dict))
+    return str(content or "")
+
+
+class Run:
+    """What one `claude -p` run produced."""
+
+    def __init__(self):
+        self.streamed: list[str] = []
+        self.session_id = None
+        self.result = None
+        self.returncode = None
+        self.stderr = ""
+        self.tools: list[str] = []
+        self.tool_names: dict[str, str] = {}
+
+    def feed(self, ev: dict, on_text, state: dict):
+        self.session_id = ev.get("session_id") or self.session_id
+        etype = ev.get("type")
+        if etype == "stream_event":
+            inner = ev.get("event", {})
+            if inner.get("type") == "content_block_start":
+                if self.streamed and inner.get("content_block", {}).get("type") == "text":
+                    state["gap"] = True
+            elif inner.get("type") == "content_block_delta":
+                delta = inner.get("delta", {})
+                if delta.get("type") == "text_delta" and delta.get("text"):
+                    piece = delta["text"]
+                    if state.get("gap"):
+                        piece = " " + piece.lstrip()
+                        state["gap"] = False
+                    self.streamed.append(piece)
+                    on_text(piece)
+        elif etype == "assistant":
+            for block in (ev.get("message") or {}).get("content") or []:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    name = block.get("name") or "?"
+                    self.tools.append(name)
+                    self.tool_names[block.get("id") or ""] = name
+        elif etype == "user":
+            for block in (ev.get("message") or {}).get("content") or []:
+                if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("is_error"):
+                    name = self.tool_names.get(block.get("tool_use_id") or "", "?")
+                    log.warning("Tool refused or failed: %s: %s", short_tool_name(name),
+                                one_line(tool_result_text(block.get("content")), 300))
+        elif etype == "result":
+            self.result = ev
+
+    @property
+    def failed(self) -> bool:
+        return self.result is None or bool(self.result.get("is_error"))
+
+    @property
+    def killed(self) -> bool:
+        return self.result is None and self.returncode in (-9, 137)
+
+    @property
+    def subtype(self) -> str:
+        return (self.result or {}).get("subtype") or ""
+
+    def raw_error(self) -> str:
+        """Every clue the CLI gave about the failure, for the log and friendly_error()."""
+        if self.killed:
+            return "timeout"
+        result = self.result or {}
+        parts = []
+        if result.get("result"):
+            parts.append(str(result["result"]))
+        errors = result.get("errors")
+        if errors:
+            parts.append("; ".join(e if isinstance(e, str) else json.dumps(e, ensure_ascii=False)
+                                   for e in errors))
+        if self.stderr.strip():
+            parts.append(self.stderr.strip()[-500:])
+        return " | ".join(parts) or f"exit code {self.returncode}"
+
+    def describe(self) -> str:
+        result = self.result or {}
+        bits = [f"exit code {self.returncode}"]
+        if self.subtype:
+            bits.insert(0, self.subtype)
+        if result.get("num_turns") is not None:
+            bits.append(f"{result['num_turns']} turn(s)")
+        if result.get("duration_ms") is not None:
+            bits.append(f"{result['duration_ms'] / 1000:.1f} s")
+        tools = ", ".join(short_tool_name(t) for t in self.tools) or "none"
+        return f"{', '.join(bits)}; tools called: {tools}; cause: {one_line(self.raw_error(), 500)}"
+
+    def can_retry(self) -> bool:
+        """True when trying again cannot act twice on the home and may succeed."""
+        if not self.failed or self.killed or self.streamed or self.subtype in UNFINISHED_SUBTYPES:
+            return False
+        if friendly_error(self.raw_error()) in (T["err_auth"], T["err_limit"]):
+            return False
+        return all(is_read_only_tool(t) for t in self.tools)
+
+
+def failure_message(run: Run) -> str:
+    if run.subtype in UNFINISHED_SUBTYPES:
+        return T["err_unfinished"]
+    return friendly_error(run.raw_error())
+
+
+def run_once(prompt: str, resume: str | None, mcp_config: Path, on_text) -> Run:
     cmd = claude_command(prompt, resume, mcp_config)
     log.debug("Running: %s", " ".join(cmd[:3]) + " ...")
     workdir = DATA_DIR / "workspace"
@@ -359,45 +496,44 @@ def run_claude(prompt: str, resume: str | None, mcp_config: Path, on_text):
     )
     timer = threading.Timer(OPTIONS["timeout"], proc.kill)
     timer.start()
-    streamed: list[str] = []
-    session_id = None
-    result = None
-    need_gap = False
+    run = Run()
+    state: dict = {}
     try:
         for line in proc.stdout:
             try:
                 ev = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            session_id = ev.get("session_id") or session_id
-            etype = ev.get("type")
-            if etype == "stream_event":
-                inner = ev.get("event", {})
-                if inner.get("type") == "content_block_start":
-                    if streamed and inner.get("content_block", {}).get("type") == "text":
-                        need_gap = True
-                elif inner.get("type") == "content_block_delta":
-                    delta = inner.get("delta", {})
-                    if delta.get("type") == "text_delta" and delta.get("text"):
-                        piece = delta["text"]
-                        if need_gap:
-                            piece = " " + piece.lstrip()
-                            need_gap = False
-                        streamed.append(piece)
-                        on_text(piece)
-            elif etype == "result":
-                result = ev
+            if isinstance(ev, dict):
+                run.feed(ev, on_text, state)
         proc.wait()
     finally:
         timer.cancel()
-    err = proc.stderr.read() if proc.stderr else ""
+    run.returncode = proc.returncode
+    run.stderr = proc.stderr.read() if proc.stderr else ""
+    return run
 
-    if result is None or result.get("is_error"):
-        raw = (result or {}).get("result") or err or f"exit code {proc.returncode}"
-        if proc.returncode in (-9, 137) and result is None:
-            raw = "timeout"
-        log.error("Claude error: %s", raw.strip()[:500])
-        message = friendly_error(raw)
+
+def run_claude(prompt: str, resume: str | None, mcp_config: Path, on_text, runner=None):
+    """Run Claude, call on_text(delta) for streamed text. Return (text, session_id).
+
+    A failed run is tried once more only when it streamed nothing and called no tool that
+    can change the home (see Run.can_retry), so a device is never commanded twice.
+    """
+    runner = runner or run_once
+    started = time.monotonic()
+    run = runner(prompt, resume, mcp_config, on_text)
+    if run.failed:
+        log.error("Claude error: %s", run.describe())
+        if run.can_retry() and time.monotonic() - started < OPTIONS["timeout"] / 2:
+            log.warning("Trying the request once more (nothing was changed in the home)")
+            run = runner(prompt, resume, mcp_config, on_text)
+            if run.failed:
+                log.error("Claude error again: %s", run.describe())
+    streamed, session_id, result = run.streamed, run.session_id, run.result
+
+    if run.failed:
+        message = failure_message(run)
         if streamed:
             message = " " + message
         on_text(message)

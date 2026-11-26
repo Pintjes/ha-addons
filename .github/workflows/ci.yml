@@ -25,6 +25,8 @@ jobs:
         run: python tests/usbip_link/test_link.py usbip_link
       - name: Tests (Thread Anchor)
         run: python tests/thread_anchor/test_anchor.py thread_anchor
+      - name: Tests (Voice Agent Bridge)
+        run: python tests/voice_agent_bridge/test_gateway.py voice_agent_bridge
       - name: Unit tests (Side Door)
         run: python -m unittest discover -s side_door/tests -p "test_build.py" -v
       - name: YAML
