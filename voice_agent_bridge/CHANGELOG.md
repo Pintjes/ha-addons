@@ -4,6 +4,23 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.5] - 2026-11-26
+
+### Fixed
+
+- **Load tools on demand** now works. The add-on gave Claude Code a list of built-in
+  tools without the tool search tool, so Claude Code turned tool search off and sent
+  every Home Assistant tool in full with each request: more than 100,000 tokens, which
+  also puts Claude Haiku 5.5 on its higher price for long prompts. Now only the tool
+  names are sent and Claude loads the few tools it needs: a request is much smaller
+  and cheaper. If you raised **Budget per request** because requests stopped
+  with "I did not finish", you can lower it again.
+- The log shows the cost of each request. In a continued conversation Claude Code
+  reports the total of the whole conversation; it is now shown apart, for example
+  `$0.0012 (conversation $0.0150)`.
+- When a request stops (budget, steps, timeout) while a tool call is still waiting for
+  its result, the `Claude error` line says so (`no result for: …`) and gives the cost.
+
 ## [1.1.4] - 2026-11-26
 
 ### Fixed

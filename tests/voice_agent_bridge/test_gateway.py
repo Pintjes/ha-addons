@@ -165,11 +165,52 @@ class ErrorHandling(unittest.TestCase):
             ask(runner)
         self.assertIn("exit code 1; tools called: none; cause: exit code 1", "\n".join(logs.output))
 
+    def test_stopped_before_tool_result(self):
+        """The 22:53 case: budget reached after the first turn, the ha_search result never came."""
+        events = [tool_use(HA + "ha_search", "t1"),
+                  result(True, "error_max_budget_usd", num_turns=1, duration_ms=2100,
+                         total_cost_usd=0.1112, errors=["Reached maximum budget ($0.1)"])]
+        runner = Runner((events, 1, ""))
+        with self.assertLogs("voice_agent_bridge", level="ERROR") as logs:
+            text, _, _ = ask(runner)
+        out = "\n".join(logs.output)
+        self.assertIn("error_max_budget_usd, exit code 1, 1 turn(s), 2.1 s, $0.1112; tools called: ha_search; "
+                      "no result for: ha_search; cause: Reached maximum budget ($0.1)", out)
+        self.assertEqual(text, gateway.T["err_unfinished"])
+
+    def test_cost_of_one_request_in_resumed_conversation(self):
+        """Claude Code reports the conversation total on --resume: log the request's own cost."""
+        first = [text_delta("Oui."), result(result="Oui.", session_id="cost-1", total_cost_usd=0.1115)]
+        again = [text_delta("Fait."), result(result="Fait.", session_id="cost-1", total_cost_usd=0.1180)]
+        with self.assertLogs("voice_agent_bridge", level="INFO") as logs:
+            gateway.run_claude("p", None, Path("mcp.json"), lambda _: None, runner=Runner((first, 0, "")))
+            gateway.run_claude("p", "cost-1", Path("mcp.json"), lambda _: None, runner=Runner((again, 0, "")))
+        out = "\n".join(logs.output)
+        self.assertIn("3 turn(s), $0.1115; tokens", out)
+        self.assertIn("3 turn(s), $0.0065 (conversation $0.1180); tokens", out)
+
     def test_success_unchanged(self):
         runner = Runner((SUCCESS, 0, ""))
         text, sid, spoken = ask(runner)
         self.assertEqual((text, sid, spoken), ("La TV est allumée.", "s1", "La TV est allumée."))
         self.assertEqual(runner.calls, 1)
+
+
+class Command(unittest.TestCase):
+    def tools_arg(self, web_search, tool_search):
+        gateway.OPTIONS.update({"web_search": web_search, "tool_search": tool_search})
+        try:
+            cmd = gateway.claude_command("p", None, Path("mcp.json"))
+        finally:
+            gateway.OPTIONS.update({"web_search": True, "tool_search": True})
+        return cmd[cmd.index("--tools") + 1]
+
+    def test_tool_search_kept_in_builtin_tools(self):
+        """Without ToolSearch in --tools, Claude Code turns tool search off (all tools sent in full)."""
+        self.assertEqual(self.tools_arg(True, True), "WebSearch,WebFetch,ToolSearch")
+        self.assertEqual(self.tools_arg(False, True), "ToolSearch")
+        self.assertEqual(self.tools_arg(True, False), "WebSearch,WebFetch")
+        self.assertEqual(self.tools_arg(False, False), "")
 
 
 class Helpers(unittest.TestCase):

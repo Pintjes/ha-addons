@@ -316,6 +316,10 @@ def build_prompt(text: str, ha_context: str, history: list[tuple[str, str]]) -> 
 
 def claude_command(prompt: str, resume: str | None, mcp_config: Path) -> list[str]:
     builtin = ["WebSearch", "WebFetch"] if OPTIONS["web_search"] else []
+    if OPTIONS.get("tool_search", True):
+        # --tools lists the built-in tools Claude Code keeps: without ToolSearch in it,
+        # Claude Code turns tool search off and sends every Home Assistant tool in full.
+        builtin.append("ToolSearch")
     allowed = ["mcp__homeassistant"] + builtin
     cmd = [
         CLAUDE_BIN, "-p", prompt,
@@ -397,6 +401,8 @@ class Run:
         self.stderr = ""
         self.tools: list[str] = []
         self.tool_names: dict[str, str] = {}
+        self.pending: dict[str, str] = {}  # tool calls still waiting for their result
+        self.previous_cost = 0.0  # conversation total before this run (resumed session)
 
     def feed(self, ev: dict, on_text, state: dict):
         self.session_id = ev.get("session_id") or self.session_id
@@ -421,9 +427,13 @@ class Run:
                     name = block.get("name") or "?"
                     self.tools.append(name)
                     self.tool_names[block.get("id") or ""] = name
+                    self.pending[block.get("id") or ""] = name
         elif etype == "user":
             for block in (ev.get("message") or {}).get("content") or []:
-                if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("is_error"):
+                if not isinstance(block, dict) or block.get("type") != "tool_result":
+                    continue
+                self.pending.pop(block.get("tool_use_id") or "", None)
+                if block.get("is_error"):
                     name = self.tool_names.get(block.get("tool_use_id") or "", "?")
                     log.warning("Tool refused or failed: %s: %s", short_tool_name(name),
                                 one_line(tool_result_text(block.get("content")), 300))
@@ -441,6 +451,30 @@ class Run:
     @property
     def subtype(self) -> str:
         return (self.result or {}).get("subtype") or ""
+
+    @property
+    def total_cost(self) -> float | None:
+        """Cost Claude Code reports: the total of the conversation when it was resumed."""
+        cost = (self.result or {}).get("total_cost_usd")
+        return float(cost) if isinstance(cost, (int, float)) else None
+
+    @property
+    def cost(self) -> float | None:
+        """Cost of this run only."""
+        total = self.total_cost
+        if total is None:
+            return None
+        return total - self.previous_cost if total >= self.previous_cost else total
+
+    def cost_text(self) -> str:
+        """'$0.0012', or '$0.0012 (conversation $0.1150)' for a resumed conversation."""
+        cost = self.cost
+        if cost is None:
+            return ""
+        text = f"${cost:.4f}"
+        if self.total_cost - cost > 0.00005:
+            text += f" (conversation ${self.total_cost:.4f})"
+        return text
 
     def raw_error(self) -> str:
         """Every clue the CLI gave about the failure, for the log and friendly_error()."""
@@ -467,8 +501,14 @@ class Run:
             bits.append(f"{result['num_turns']} turn(s)")
         if result.get("duration_ms") is not None:
             bits.append(f"{result['duration_ms'] / 1000:.1f} s")
+        if self.cost_text():
+            bits.append(self.cost_text())
         tools = ", ".join(short_tool_name(t) for t in self.tools) or "none"
-        return f"{', '.join(bits)}; tools called: {tools}; cause: {one_line(self.raw_error(), 500)}"
+        text = f"{', '.join(bits)}; tools called: {tools}"
+        if self.pending:
+            # Stopped (budget, turns, timeout…) before the tool result came back.
+            text += "; no result for: " + ", ".join(short_tool_name(t) for t in self.pending.values())
+        return f"{text}; cause: {one_line(self.raw_error(), 500)}"
 
     def can_retry(self) -> bool:
         """True when trying again cannot act twice on the home and may succeed."""
@@ -514,6 +554,30 @@ def run_once(prompt: str, resume: str | None, mcp_config: Path, on_text) -> Run:
     return run
 
 
+class Costs:
+    """Last total cost Claude Code reported for each session. Claude Code reports the total
+    of the whole conversation when it resumes one: the difference is the cost of the request."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._items: dict[str, float] = {}
+
+    def get(self, session_id: str | None) -> float:
+        with self._lock:
+            return self._items.get(session_id or "", 0.0)
+
+    def put(self, session_id: str | None, total: float | None):
+        if not session_id or total is None:
+            return
+        with self._lock:
+            self._items[session_id] = total
+            while len(self._items) > 500:
+                del self._items[next(iter(self._items))]
+
+
+COSTS = Costs()
+
+
 def run_claude(prompt: str, resume: str | None, mcp_config: Path, on_text, runner=None):
     """Run Claude, call on_text(delta) for streamed text. Return (text, session_id).
 
@@ -521,13 +585,20 @@ def run_claude(prompt: str, resume: str | None, mcp_config: Path, on_text, runne
     can change the home (see Run.can_retry), so a device is never commanded twice.
     """
     runner = runner or run_once
+
+    def attempt() -> Run:
+        one = runner(prompt, resume, mcp_config, on_text)
+        one.previous_cost = COSTS.get(resume) if resume else 0.0
+        COSTS.put(one.session_id, one.total_cost)
+        return one
+
     started = time.monotonic()
-    run = runner(prompt, resume, mcp_config, on_text)
+    run = attempt()
     if run.failed:
         log.error("Claude error: %s", run.describe())
         if run.can_retry() and time.monotonic() - started < OPTIONS["timeout"] / 2:
             log.warning("Trying the request once more (nothing was changed in the home)")
-            run = runner(prompt, resume, mcp_config, on_text)
+            run = attempt()
             if run.failed:
                 log.error("Claude error again: %s", run.describe())
     streamed, session_id, result = run.streamed, run.session_id, run.result
@@ -542,11 +613,11 @@ def run_claude(prompt: str, resume: str | None, mcp_config: Path, on_text, runne
     if not streamed and result.get("result"):
         streamed.append(result["result"])
         on_text(result["result"])
-    cost = result.get("total_cost_usd")
+    cost = run.cost_text()
     usage = result.get("usage") or {}
     log.info("Answered in %.1f s, %s turn(s)%s; tokens in %s, cache write %s, cache read %s, out %s",
              (result.get("duration_ms") or 0) / 1000, result.get("num_turns"),
-             f", ${cost:.4f}" if cost else "", usage.get("input_tokens", "?"),
+             f", {cost}" if cost else "", usage.get("input_tokens", "?"),
              usage.get("cache_creation_input_tokens", "?"), usage.get("cache_read_input_tokens", "?"),
              usage.get("output_tokens", "?"))
     return "".join(streamed), session_id

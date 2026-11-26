@@ -170,7 +170,9 @@ conversations in **Logbook** and in **Settings → Voice assistants → ⋮ → 
 - Each Claude request starts a Claude Code process: count a few seconds, more
   when Claude needs several tools. `haiku` and effort `low` are the fastest.
 - With a Claude plan, requests use the monthly Agent SDK credit of the plan.
-  The log shows the duration, the cost and the tokens of every request.
+  The log shows the duration, the cost and the tokens of every request; in a
+  continued conversation, the total of the conversation follows in brackets.
+  The cost is Claude Code's estimate at API prices.
 - **Load tools on demand** keeps every request small: Claude receives the list
   of tool names and loads a tool only when it needs it.
 - Good house notes save steps: Claude finds the right entity at once.
