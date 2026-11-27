@@ -34,9 +34,9 @@ Something wrong, or an idea? [Open an issue](https://github.com/Pintjes/ha-addon
 
 ## License
 
-© 2026 Pintjes. All rights reserved. Each app is under its own license: see the `LICENSE` file of its folder. The source is public to read and to report issues; except for Side Door (below), it may not be copied, modified or redistributed without permission. **Side Door** is under [GPL-3.0-or-later](side_door/LICENSE) from version 2.8.1: that restriction does not apply to it, and its license says what you may do (version 2.8.0 was published under a proprietary license). Versions published before an app's license change stay under GPL-3.0-or-later.
+© 2026 Pintjes. **Side Door** is open source (GPL-3.0-or-later). **The other apps** are proprietary: currently free to use, source public to read, not to copy, modify or redistribute without permission. See the `LICENSE` file of each app.
 
-These apps are independent projects, not affiliated with or endorsed by Anthropic, the Connectivity Standards Alliance or the Thread Group.
+Not affiliated with or endorsed by Anthropic, the Connectivity Standards Alliance or the Thread Group.
 
 [repo-badge]: https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg
 [repo-link]: https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FPintjes%2Fha-addons
