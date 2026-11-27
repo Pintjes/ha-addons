@@ -1,3 +1,5 @@
+<p align="center"><img src="images/pintjes-logo.png" alt="Pintjes" width="160"></p>
+
 # Home Assistant apps by Pintjes
 
 [![Add repository to my Home Assistant][repo-badge]][repo-link]

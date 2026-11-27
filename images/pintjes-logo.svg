@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <circle cx="256" cy="256" r="256" fill="#1f3348"/>
+  <g transform="translate(256,256) scale(3.37)">
+    <path d="M-42,-42 L-34,52 Q-33,62 -23,62 L23,62 Q33,62 34,52 L42,-42 Z" fill="#d69e2e" stroke="#bccbd6" stroke-width="3.5"/>
+    <path d="M-46,-40 C-50,-58 -36,-64 -26,-60 C-22,-74 -2,-76 6,-66 C14,-76 34,-72 36,-58 C48,-58 50,-44 44,-40 Z" fill="#d8d0c0"/>
+    <line x1="-12" y1="-14" x2="16" y2="7" stroke="#1f3348" stroke-width="5"/>
+    <line x1="16" y1="7" x2="-9" y2="36" stroke="#1f3348" stroke-width="5"/>
+    <line x1="-12" y1="-14" x2="-9" y2="36" stroke="#1f3348" stroke-width="5"/>
+    <circle cx="-12" cy="-14" r="9" fill="#1f3348"/>
+    <circle cx="-9" cy="36" r="9" fill="#1f3348"/>
+    <circle cx="16" cy="7" r="9" fill="#EF3340"/>
+    <path d="M-34.5,50 Q-33,62 -23,62 L-10,62" fill="none" stroke="#1D1D1B" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M-10,62 L10,62" fill="none" stroke="#FDDA24" stroke-width="4.5"/>
+    <path d="M10,62 L23,62 Q33,62 34.5,50" fill="none" stroke="#EF3340" stroke-width="4.5" stroke-linecap="round"/>
+  </g>
+</svg>
