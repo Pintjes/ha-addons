@@ -2,7 +2,8 @@
 
 [![Add repository to my Home Assistant][repo-badge]][repo-link]
 [![CI][ci-badge]][ci-link]
-[![Licence : propriétaire][license-badge]][license-link]
+[![Licence : propriétaire, sauf Side Door][license-badge]][license-link]
+[![Side Door: GPL-3.0][sd-license-badge]][sd-license-link]
 
 Add-on repository for [Home Assistant](https://www.home-assistant.io/).
 
@@ -31,7 +32,7 @@ Something wrong, or an idea? [Open an issue](https://github.com/Pintjes/ha-addon
 
 ## License
 
-© 2026 Pintjes. All rights reserved. Each add-on is under its own license: see the `LICENSE` file of its folder. The source is public to read and to report issues; it may not be copied, modified or redistributed without permission. Versions published before an add-on's license change stay under GPL-3.0-or-later.
+© 2026 Pintjes. All rights reserved. Each add-on is under its own license: see the `LICENSE` file of its folder. The source is public to read and to report issues; except for Side Door (below), it may not be copied, modified or redistributed without permission. **Side Door** is under [GPL-3.0-or-later](side_door/LICENSE) from version 2.8.1: that restriction does not apply to it, and its license says what you may do (version 2.8.0 was published under a proprietary license). Versions published before an add-on's license change stay under GPL-3.0-or-later.
 
 These add-ons are independent projects, not affiliated with or endorsed by Anthropic, the Connectivity Standards Alliance or the Thread Group.
 
@@ -39,8 +40,10 @@ These add-ons are independent projects, not affiliated with or endorsed by Anthr
 [repo-link]: https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FPintjes%2Fha-addons
 [ci-badge]: https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml/badge.svg
 [ci-link]: https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml
-[license-badge]: https://img.shields.io/badge/licence-propri%C3%A9taire-lightgrey
+[license-badge]: https://img.shields.io/badge/licence-propri%C3%A9taire%20(sauf%20Side%20Door)-lightgrey
 [license-link]: https://github.com/Pintjes/ha-addons/blob/main/LICENSE
+[sd-license-badge]: https://img.shields.io/badge/Side%20Door-GPL--3.0-blue
+[sd-license-link]: https://github.com/Pintjes/ha-addons/blob/main/side_door/LICENSE
 [mg-version]: https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FPintjes%2Fha-addons%2Fmain%2Fmesh_guardian%2Fconfig.yaml&query=%24.version&label=&color=blue
 [vab-version]: https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FPintjes%2Fha-addons%2Fmain%2Fvoice_agent_bridge%2Fconfig.yaml&query=%24.version&label=&color=blue
 [sd-version]: https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FPintjes%2Fha-addons%2Fmain%2Fside_door%2Fconfig.yaml&query=%24.version&label=&color=blue
