@@ -1,15 +1,15 @@
-# Home Assistant add-ons by Pintjes
+# Home Assistant apps by Pintjes
 
 [![Add repository to my Home Assistant][repo-badge]][repo-link]
 [![CI][ci-badge]][ci-link]
 [![Licence : propriétaire, sauf Side Door][license-badge]][license-link]
 [![Side Door: GPL-3.0][sd-license-badge]][sd-license-link]
 
-Add-on repository for [Home Assistant](https://www.home-assistant.io/).
+App repository for [Home Assistant](https://www.home-assistant.io/).
 
-## Add-ons
+## Apps
 
-| | Add-on | Version | Description |
+| | App | Version | Description |
 |:-:|---|:-:|---|
 | <img src="mesh_guardian/icon.png" width="48" alt=""> | **[Mesh Guardian](mesh_guardian/)** *(beta)* | ![version][mg-version] | Keeps your Thread / Matter devices online: automatic recovery of lost nodes, a live table of every node, border router monitoring and radio advice. |
 | <img src="thread_anchor/icon.png" width="48" alt=""> | **[Thread Anchor](thread_anchor/)** *(beta)* | ![version][ta-version] | Keeps your Thread network on one OMR prefix: no more Matter devices dropping out when Google, Apple or Amazon border routers change theirs. |
@@ -20,11 +20,11 @@ Add-on repository for [Home Assistant](https://www.home-assistant.io/).
 ## Installation
 
 1. Click the button below, or add `https://github.com/Pintjes/ha-addons` in
-   **Settings → Add-ons → Add-on store → ⋮ → Repositories**.
+   **Settings → Apps → Install app → ⋮ → Repositories**.
 
    [![Add repository to my Home Assistant][repo-badge]][repo-link]
 
-2. Find the add-on in the store and click **Install**.
+2. Find the app in the store and click **Install**.
 
 ## Support
 
@@ -32,9 +32,9 @@ Something wrong, or an idea? [Open an issue](https://github.com/Pintjes/ha-addon
 
 ## License
 
-© 2026 Pintjes. All rights reserved. Each add-on is under its own license: see the `LICENSE` file of its folder. The source is public to read and to report issues; except for Side Door (below), it may not be copied, modified or redistributed without permission. **Side Door** is under [GPL-3.0-or-later](side_door/LICENSE) from version 2.8.1: that restriction does not apply to it, and its license says what you may do (version 2.8.0 was published under a proprietary license). Versions published before an add-on's license change stay under GPL-3.0-or-later.
+© 2026 Pintjes. All rights reserved. Each app is under its own license: see the `LICENSE` file of its folder. The source is public to read and to report issues; except for Side Door (below), it may not be copied, modified or redistributed without permission. **Side Door** is under [GPL-3.0-or-later](side_door/LICENSE) from version 2.8.1: that restriction does not apply to it, and its license says what you may do (version 2.8.0 was published under a proprietary license). Versions published before an app's license change stay under GPL-3.0-or-later.
 
-These add-ons are independent projects, not affiliated with or endorsed by Anthropic, the Connectivity Standards Alliance or the Thread Group.
+These apps are independent projects, not affiliated with or endorsed by Anthropic, the Connectivity Standards Alliance or the Thread Group.
 
 [repo-badge]: https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg
 [repo-link]: https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FPintjes%2Fha-addons
