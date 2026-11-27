@@ -4,7 +4,7 @@ Keeps the Thread network of the house on one OMR prefix, so that border routers
 that change theirs (Google TV, Nest Hub, HomePod…) stop moving every device to
 a new address.
 
-> **Beta.** The add-on reaches the OpenThread border router through the Docker
+> **Beta.** The app reaches the OpenThread border router through the Docker
 > API: **Protection mode** must be turned off in its Info tab.
 
 ## The problem
@@ -17,7 +17,7 @@ number — and when a border router replaces its prefix, every device moves to t
 new one. Matter controllers then lose the devices until they are found again:
 they show as unavailable, sometimes for a long time.
 
-## What the add-on does
+## What the app does
 
 With `omr_prefix`, Thread Anchor gives the OpenThread border router of Home
 Assistant that prefix with the preference `omr_preference` (`high` by default):
@@ -35,13 +35,13 @@ routers follow.
 
 ## Setup
 
-1. The **OpenThread Border Router** add-on runs, on the Thread network of the
+1. The **OpenThread Border Router** app runs, on the Thread network of the
    house (Settings → Thread: it is in the same network as your other border
    routers).
 2. Install Thread Anchor, turn **Protection mode** off, start it **without**
    `omr_prefix`: it only watches. The entity *Favored OMR prefix* (and Mesh
    Guardian) shows the prefix the network uses now, e.g. `fd00:aaaa:bbbb:1::/64`.
-3. Put **that** prefix in `omr_prefix` and restart the add-on. The log says
+3. Put **that** prefix in `omr_prefix` and restart the app. The log says
    `OMR prefix … set on the border router (it was: auto)`, then
    `The network favors … (high)`. The devices keep their addresses: nothing was
    renumbered.
@@ -50,7 +50,7 @@ routers follow.
 |---|---|
 | `omr_prefix` | local `/64` prefix to anchor (ULA, in `fc00::/7`: it starts with `fc` or `fd`); empty: watch only. Any other prefix is refused and nothing is set |
 | `omr_preference` | `high` (default), `med` or `low` |
-| `otbr_addon` | slug of the border router add-on (`core_openthread_border_router`) |
+| `otbr_addon` | slug of the border router app (`core_openthread_border_router`) |
 | `check_interval` | seconds between two readings (30) |
 | `language` | `en` or `fr` |
 
@@ -59,12 +59,12 @@ routers follow.
 - If the Home Assistant border router stops, the other border routers publish
   their own prefixes again, and the network moves until it is back. Thread
   Anchor sets the anchor again as soon as it restarts.
-- To stop: empty `omr_prefix` and restart the border router add-on (or run
+- To stop: empty `omr_prefix` and restart the border router app (or run
   `ot-ctl br omrconfig auto` in it). Its own low-preference prefix then competes
   with the others again.
 - Only one tool should set the prefix: if you used the `omr_prefix` option of
   USB/IP Link 0.2.x, empty it there.
-- The Docker API gives the add-on control over every container: that is why
+- The Docker API gives the app control over every container: that is why
   Home Assistant asks for Protection mode to be off. Thread Anchor only reads
   the state of the border router container and runs `ot-ctl br omrconfig` /
   `ot-ctl br omrprefix` in it.
@@ -82,9 +82,9 @@ With MQTT (state on `thread_anchor/state`, retained):
   with the number of routers it sees in the attribute `thread_routers`. Shown
   only: Thread Anchor never tries to change the role of the border router.
 
-Without a broker at start, the add-on works all the same and looks for it again
+Without a broker at start, the app works all the same and looks for it again
 every 60 s. `thread_anchor/state/available` says `online` / `offline`: `offline`
-is published when the add-on stops; the retained state is then left as it was.
+is published when the app stops; the retained state is then left as it was.
 
 Fields of `thread_anchor/state` (JSON):
 
@@ -93,20 +93,20 @@ Fields of `thread_anchor/state` (JSON):
 | `wanted`, `preference` | prefix and preference of the options (`wanted` empty: watch only) |
 | `mode`, `current`, `current_preference` | what the border router holds (`auto`, `custom`…) |
 | `enforced` | the border router holds the prefix of the options |
-| `anchored_since` | since when it has held it without a break (ISO 8601 with the time zone). Filled when the prefix is found in place, even set by something else; kept over a restart of the add-on and while the border router cannot be read; empty once the prefix is read and is no longer in place |
+| `anchored_since` | since when it has held it without a break (ISO 8601 with the time zone). Filled when the prefix is found in place, even set by something else; kept over a restart of the app and while the border router cannot be read; empty once the prefix is read and is no longer in place |
 | `favored`, `favored_preference`, `local` | prefix the network favors, and the border router's own |
 | `followed` | `enforced`, and the network favors that prefix with that preference. When it is false while `enforced` is true, another border router wins: a warning is in the log |
-| `applied`, `applied_at` | times the prefix was set since the add-on started, and the last time (Unix time) |
+| `applied`, `applied_at` | times the prefix was set since the app started, and the last time (Unix time) |
 | `thread_role`, `thread_routers` | role of the border router in the Thread network (`ot-ctl state`) and number of routers its router table lists (`ot-ctl router list`); two small reads at every check, no radio traffic. `thread_routers` is `null` without a network (`disabled`, `detached`), both are `null` when unreadable |
-| `thread_link` | the link of the border router with the Thread network, read from the border router itself: `ot-ctl rloc16`, `parent`, `neighbor table`, `router table`, `counters mle`, `counters mac`. Local reads, no radio traffic, nothing written; one reading a minute at most (at once when the role changes); `null` when the role is unknown or `disabled`. Content: `rloc16` (of the border router), `parent` (a child's only: `rloc16`, `ext`, `lq_in`, `lq_out` — Thread link quality 0 to 3 —, `quality` (`good` 3, `medium` 2, `weak` 1, `unknown` 0, of the worse direction), `age` in s, `rssi_avg` and `rssi_last` in dBm, `in_neighbor_table`: whether the parent was found in the neighbor table, by RLOC16 then by extended address, `null` when the table could not be read; the RSSI are `null` when it was not, and the raw table is then in the log in Debug mode), `routers_heard` (routers in the neighbor table), `best` (the 3 routers heard with the best average RSSI: `rloc16`, `ext`, `rssi_avg`, `rssi_last`, `age`, `lq_in`, `lq_out`, `path_cost` from the router table, `is_parent`), `counters` (`mle`: `role_detached`, `role_child`, `role_router`, `role_leader`, `attach_attempts`, `partition_id_changes`, `better_partition_attach_attempts`, `parent_changes`; `mac`: `tx_total`, `tx_retry`, `tx_err_cca`, `tx_err_abort`, `tx_err_busy_channel`, `rx_total`, `rx_err_no_frame`, `rx_err_unknown_neighbor`, `rx_err_sec`, `rx_err_fcs`; counted since the start of the radio, only the ones the firmware gives; OpenThread writes them indented under `TxTotal` / `RxTotal`, which is read as is), `parent_history` (the last 10 changes of parent, oldest first: `{"at": time of the reading that saw it, "from": "0x…", "to": "0x…"}`; kept in `/data/parent_history.json` over a restart of the add-on, so a change made while the add-on was off is seen at its first reading; a back and forth between two readings, a minute apart, is not seen: `counters.mle.parent_changes` counts them all since the radio started), `read_at`. A part that cannot be read is left out (`null` or missing), the others are kept. A change of parent is said in the log (`Parent of the border router changed: 0x3400 -> 0x5800`). Ages, RSSI and counters move at every reading: they go out with the next change of the state or the 5-minute heartbeat |
-| `otbr_started_at`, `error` | start of the border router container, last error (a short message; the raw text of a Docker failure is only in the add-on log) |
+| `thread_link` | the link of the border router with the Thread network, read from the border router itself: `ot-ctl rloc16`, `parent`, `neighbor table`, `router table`, `counters mle`, `counters mac`. Local reads, no radio traffic, nothing written; one reading a minute at most (at once when the role changes); `null` when the role is unknown or `disabled`. Content: `rloc16` (of the border router), `parent` (a child's only: `rloc16`, `ext`, `lq_in`, `lq_out` — Thread link quality 0 to 3 —, `quality` (`good` 3, `medium` 2, `weak` 1, `unknown` 0, of the worse direction), `age` in s, `rssi_avg` and `rssi_last` in dBm, `in_neighbor_table`: whether the parent was found in the neighbor table, by RLOC16 then by extended address, `null` when the table could not be read; the RSSI are `null` when it was not, and the raw table is then in the log in Debug mode), `routers_heard` (routers in the neighbor table), `best` (the 3 routers heard with the best average RSSI: `rloc16`, `ext`, `rssi_avg`, `rssi_last`, `age`, `lq_in`, `lq_out`, `path_cost` from the router table, `is_parent`), `counters` (`mle`: `role_detached`, `role_child`, `role_router`, `role_leader`, `attach_attempts`, `partition_id_changes`, `better_partition_attach_attempts`, `parent_changes`; `mac`: `tx_total`, `tx_retry`, `tx_err_cca`, `tx_err_abort`, `tx_err_busy_channel`, `rx_total`, `rx_err_no_frame`, `rx_err_unknown_neighbor`, `rx_err_sec`, `rx_err_fcs`; counted since the start of the radio, only the ones the firmware gives; OpenThread writes them indented under `TxTotal` / `RxTotal`, which is read as is), `parent_history` (the last 10 changes of parent, oldest first: `{"at": time of the reading that saw it, "from": "0x…", "to": "0x…"}`; kept in `/data/parent_history.json` over a restart of the app, so a change made while the app was off is seen at its first reading; a back and forth between two readings, a minute apart, is not seen: `counters.mle.parent_changes` counts them all since the radio started), `read_at`. A part that cannot be read is left out (`null` or missing), the others are kept. A change of parent is said in the log (`Parent of the border router changed: 0x3400 -> 0x5800`). Ages, RSSI and counters move at every reading: they go out with the next change of the state or the 5-minute heartbeat |
+| `otbr_started_at`, `error` | start of the border router container, last error (a short message; the raw text of a Docker failure is only in the app log) |
 | `error_kind` | kind of the last error: `exec_failed` (command impossible in the container), `timeout`, `access_denied` (Docker API refused: turn Protection mode off), `not_found` (container absent or stopped), `other`, `no_answer` (`ot-ctl` busy), `too_old` (no `br omrconfig`); `null` without error |
-| `version`, `updated` | version of the add-on, time of this state |
+| `version`, `updated` | version of the app, time of this state |
 
 ### The change of the counters, hour by hour (`thread_anchor/link_stats` and 7 sensors)
 
 The counters of `thread_link.counters` only say « since the start of the radio »: they hide when things
-happened. The add-on keeps the **change over each hour** (reads nothing more: it uses the counters of the
+happened. The app keeps the **change over each hour** (reads nothing more: it uses the counters of the
 link reading), to follow the health of the radio link over days.
 
 - `thread_link.stats.last`: the last hour that ended, `{"from", "to", "seconds", "role", ...}` with, per counter,
@@ -117,7 +117,7 @@ link reading), to follow the health of the radio link over days.
   `tx_err_cca_pct` (share of `tx_total`). `stats.since`: start of the window in progress.
 - A window runs from a reading just after the hour starts to the next one (about 60 min, 55 to 90 accepted).
   Not counted: the first (partial) hour after a start, an hour in which the border router restarted or a
-  counter went down, a window that is not an hour (add-on stopped for long).
+  counter went down, a window that is not an hour (app stopped for long).
 - `thread_anchor/link_stats` (retained): the last 72 windows (3 days), kept over a restart in
   `/data/link_stats.json`, to correlate over days.
 - 7 sensors in Home Assistant (device *Thread Anchor*, `state_class: measurement`, so Home Assistant keeps
@@ -144,9 +144,9 @@ Answer on `thread_anchor/latency/result/<id>` (not retained; the last good one a
 differences above 50 ms, with their time), `counters` (`before`, `after`, `delta`, `abort_pct`), `started`,
 `seconds`. The log has one line with the median, p95 and max.
 
-### What the add-on knows about the nodes: `thread_anchor/children`
+### What the app knows about the nodes: `thread_anchor/children`
 
-Published retained, JSON, **no reading of its own and no radio traffic**: it is only what the add-on already
+Published retained, JSON, **no reading of its own and no radio traffic**: it is only what the app already
 learns, kept and published as it comes. Nothing new is asked of the network for it.
 
 ```json
@@ -310,7 +310,7 @@ Answer, on `thread_anchor/diag/result/<id>` (not retained, JSON):
 **One `ot-ctl` command at a time.** The command interpreter of OpenThread is
 unique: a command received while an asynchronous one (`meshdiag`,
 `networkdiagnostic get`, `ping`) is waiting is ignored without a word (empty
-output). Every `ot-ctl` command of the add-on, the anchor's and the diagnostic's,
+output). Every `ot-ctl` command of the app, the anchor's and the diagnostic's,
 goes through one gate taken for ONE command (never for a whole scan), so the
 check of the anchor waits only for the command in progress. An empty output is
 asked again (3 tries, 3 s apart), then reported as `ot-ctl: no answer (another

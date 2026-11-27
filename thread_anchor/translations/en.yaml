@@ -10,8 +10,8 @@ configuration:
     name: "Preference"
     description: "high (default) or med: above the prefixes the border routers generate themselves (low)."
   otbr_addon:
-    name: "Border router add-on"
-    description: "Slug of the OpenThread Border Router add-on."
+    name: "Border router app"
+    description: "Slug of the OpenThread Border Router app."
   check_interval:
     name: "Check every (s)"
     description: "Seconds between two readings of the border router. A restart of the border router is seen at once anyway."

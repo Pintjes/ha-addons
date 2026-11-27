@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.15] - 2026-11-27
+
+### Changed
+
+- Texts (README, documentation, option names in English and French) now say **app**, as Home Assistant does
+  (*Settings → Apps*), instead of the former name. No technical name changed, no change in behavior.
+
 ## [0.1.14] - 2026-11-22
 
 ### Changed

@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FPintjes%2Fha-addons"><img src="https://img.shields.io/badge/Home%20Assistant-add--on-41BDF5?logo=home-assistant&logoColor=white" alt="Home Assistant add-on"></a>
+  <a href="https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FPintjes%2Fha-addons"><img src="https://img.shields.io/badge/Home%20Assistant-app-41BDF5?logo=home-assistant&logoColor=white" alt="Home Assistant app"></a>
   <img src="https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FPintjes%2Fha-addons%2Fmain%2Fthread_anchor%2Fconfig.yaml&query=%24.version&label=version&color=blue" alt="Version">
   <img src="https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-informational" alt="Architectures">
   <img src="https://img.shields.io/badge/status-beta-orange" alt="Status: beta">
@@ -19,14 +19,14 @@ border router of Home Assistant anchors it, so the Google, Apple or Amazon
 border routers of the house stop moving it — and your Matter devices stop
 dropping out.
 
-## Why this add-on
+## Why this app
 
 **1. Matter devices that drop out every day.**
 Every Thread device has an address in the OMR prefix of the network, chosen
 among the prefixes the border routers publish. Some border routers (Google TV,
 Nest Hub…) replace theirs now and then: the whole network moves to another
 prefix, and Matter devices become unavailable until they are found again at
-their new address. On the network this add-on was made for, that was **7
+their new address. On the network this app was made for, that was **7
 different OMR prefixes in 3 days**.
 
 **2. One prefix, favored by every border router.**
@@ -48,7 +48,7 @@ moment it is set. The *Favored OMR prefix* entity (or Mesh Guardian) shows it.
   *Favored OMR prefix* and *Thread role* (the role of the border router in the
   network, shown only, never changed). Read by [Mesh Guardian](../mesh_guardian/).
 - Without a prefix set, it only watches: a safe way to look first.
-- Works with any radio of the OpenThread Border Router add-on (ZBT-1, ZBT-2,
+- Works with any radio of the OpenThread Border Router app (ZBT-1, ZBT-2,
   Yellow…), plugged in directly or through [USB/IP Link](../usbip_link/).
 
 Full documentation: [DOCS.md](DOCS.md).

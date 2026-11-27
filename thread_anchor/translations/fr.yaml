@@ -10,8 +10,8 @@ configuration:
     name: "Préférence"
     description: "high (par défaut) ou med : au-dessus des préfixes que les border routers génèrent eux-mêmes (low)."
   otbr_addon:
-    name: "Add-on border router"
-    description: "Slug de l'add-on OpenThread Border Router."
+    name: "App du border router"
+    description: "Slug de l'app OpenThread Border Router."
   check_interval:
     name: "Vérifier toutes les (s)"
     description: "Secondes entre deux lectures du border router. Un redémarrage du border router est vu tout de suite de toute façon."
