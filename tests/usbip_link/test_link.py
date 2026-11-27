@@ -82,9 +82,17 @@ assert not f.attached and not link.public()["devices"][0]["attached"] and "detac
 f.calls.clear()
 link.check()
 assert "attach -r 192.168.1.10 -b 2-3" not in f.calls
-# retour du serveur : rattache, et l'add-on OpenThread est a redemarrer
+# retour du serveur : 0.4.6, il doit d'abord se stabiliser (SETTLE_S), puis rattache et OpenThread est a redemarrer
 f.now += 240
 f.up = True
+link.events = []
+link.check()
+assert not f.attached and [k for k, _ in link.events] == ["server_up", "settling"], link.events
+assert "attached in 30 s" in link.events[1][1] and link.restart == []
+f.now += ul.SETTLE_S - 1
+link.check()
+assert not f.attached
+f.now += 1
 assert link.check() and f.attached
 kinds = [k for k, _ in link.events]
 assert "attached" in kinds and any("4 min" in txt for _, txt in link.events), link.events
@@ -307,9 +315,14 @@ f6.calls.clear()
 link6.events = []
 f6.now += 10
 link6.check()
-assert f6.calls[:3] == ["port", "detach -p 0", "list -r 192.168.1.10"] and "attach -r 192.168.1.10 -b 2-3" in f6.calls
-assert [k for k, _ in link6.events] == ["server_up", "resumed", "attached"], link6.events
-assert "again after 10 s" in link6.events[2][1] and link6.public()["devices"][0]["attaches"] == 1
+assert f6.calls == ["port", "detach -p 0"] and not f6.attached   # detache tout de suite, rattache apres SETTLE_S
+assert [k for k, _ in link6.events] == ["server_up", "settling", "resumed"], link6.events
+f6.now += ul.SETTLE_S
+link6.events = []
+link6.check()
+assert f6.calls[2:4] == ["port", "list -r 192.168.1.10"] and "attach -r 192.168.1.10 -b 2-3" in f6.calls
+assert [k for k, _ in link6.events] == ["attached"], link6.events
+assert "again after 40 s" in link6.events[0][1] and link6.public()["devices"][0]["attaches"] == 1
 assert link6.restart == ["core_openthread_border_router"] and link6.restart_if_running is False and not link6.silent
 f6.calls.clear()
 link6.check()
@@ -326,7 +339,8 @@ link7.check()
 f7.up = True
 link7.events = []
 link7.check()
-assert [k for k, _ in link7.events] == ["server_up", "detach_failed"] and "port 00: busy" in link7.events[1][1] and link7.silent
+assert [k for k, _ in link7.events] == ["server_up", "settling", "detach_failed"] and "port 00: busy" in link7.events[2][1]
+assert link7.silent
 assert link7.public()["devices"][0]["attached"]
 link7.events = []
 link7.check()
@@ -464,10 +478,14 @@ link9.resumed(52.0)
 assert [k for k, _ in link9.events] == ["clock_jump"] and "+52 s" in link9.events[0][1] and link9.resume_pending
 assert f9.calls == []                # rien n'est fait avant le passage
 link9.check()
-assert f9.calls[:2] == ["port", "detach -p 0"] and "attach -r 192.168.1.10 -b 2-3" in f9.calls
-assert [k for k, _ in link9.events] == ["clock_jump", "resumed", "attached"], link9.events
-assert "the machine was paused" in link9.events[1][1] and "again after 52 s" in link9.events[2][1]
-assert link9.restart == ["core_openthread_border_router"] and not link9.resume_pending and not link9.silent
+assert f9.calls == ["port", "detach -p 0"] and not f9.attached   # 0.4.6 : rattache seulement apres SETTLE_S
+assert [k for k, _ in link9.events] == ["clock_jump", "settling", "resumed"], link9.events
+assert "the machine was paused" in link9.events[2][1] and not link9.resume_pending and not link9.silent
+f9.now += ul.SETTLE_S
+link9.check()
+assert "attach -r 192.168.1.10 -b 2-3" in f9.calls and [k for k, _ in link9.events][-1] == "attached"
+assert "again after 82 s" in link9.events[-1][1]
+assert link9.restart == ["core_openthread_border_router"]
 # reprise, serveur pas encore la (reseau pas remonte) : detache quand meme, rattache des qu'il repond
 f10 = Fake()
 f10.attached = True
@@ -486,8 +504,11 @@ f10.up = True
 f10.now += 8
 link10.events = []
 link10.check()
+assert not f10.attached and [k for k, _ in link10.events] == ["server_up", "settling"]   # cas du 27/11 : attendre
+f10.now += ul.SETTLE_S
+link10.check()
 assert f10.attached and link10.restart == ["core_openthread_border_router"] and not link10.silent
-assert [k for k, _ in link10.events] == ["server_up", "attached"] and "again after" in link10.events[1][1]
+assert [k for k, _ in link10.events] == ["server_up", "settling", "attached"] and "again after" in link10.events[2][1]
 # reprise mais detachement refuse : retente au passage suivant
 f11 = Fake()
 f11.attached = True
@@ -507,6 +528,9 @@ link11.resumed(30.0)
 link11.check()
 assert link11.resume_pending and f11.attached
 fail[0] = False
+link11.check()
+assert not link11.resume_pending and not f11.attached
+f11.now += ul.SETTLE_S
 link11.check()
 assert not link11.resume_pending and f11.attached and link11.public()["devices"][0]["attaches"] == 1
 assert any("attach -r" in c for c in f11.calls)
@@ -651,6 +675,166 @@ q3 = ul.RestartQueue(sup=lambda p, method="GET", timeout=30: (_ for _ in ()).thr
 q3.add(["otbr"], False, 0.0)
 assert q3.run(0.0) == [] and "otbr" in q3.items
 assert ul.retryable(Http(400)) and ul.retryable(Http(503)) and not ul.retryable(Http(404)) and not ul.retryable(Http(403))
+
+# 0.4.6 : incident du 27/11, ZBT-2 rattache et tty present mais radio muette, OTBR bloque dans le noyau
+# API REST d'otbr-agent : toute reponse HTTP compte (l'agent tourne), un port ferme non
+import http.server  # noqa: E402
+import socket as _socket  # noqa: E402
+import threading  # noqa: E402
+
+
+class _H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(404 if self.path != "/node/state" else 200)
+        self.end_headers()
+        self.wfile.write(b'"child"')
+
+    def log_message(self, *a):
+        pass
+
+
+srv = http.server.HTTPServer(("127.0.0.1", 0), _H)
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+try:
+    assert ul.rest_up("127.0.0.1", srv.server_address[1])
+finally:
+    srv.shutdown()
+    srv.server_close()
+s_ = _socket.socket()
+s_.bind(("127.0.0.1", 0))
+closed_port = s_.getsockname()[1]
+s_.close()
+assert not ul.rest_up("127.0.0.1", closed_port, timeout=1)
+
+
+class Otbr:
+    """API REST et Supervisor simules pour RadioWatch."""
+    def __init__(self):
+        self.now, self.up, self.state, self.asked = 0.0, {"127.0.0.1": True}, "started", []
+
+    def http(self, host, port):
+        self.asked.append(host)
+        assert port == 8081
+        return self.up.get(host, False)
+
+    def sup(self, path, method="GET", timeout=30):
+        return {"state": self.state}
+
+    def watch(self, slugs=("core_openthread_border_router", "core_zha")):
+        return ul.RadioWatch(list(slugs), http=self.http, sup=self.sup, clock=lambda: self.now)
+
+
+OT = "core_openthread_border_router"
+o = Otbr()
+rw = o.watch()
+assert rw.slugs == [OT] and rw.hosts(OT) == ["127.0.0.1", "[::1]", "core-openthread-border-router"]
+assert rw.poll(True) == [] and rw.host == {OT: "127.0.0.1"}      # appris pendant que tout va bien
+o.asked.clear()
+assert rw.poll(True) == [] and o.asked == []                     # pas avant OTBR_LEARN_S
+rw.restarted([OT, "core_zha"])
+assert list(rw.pending) == [OT]
+o.up["127.0.0.1"] = False                                        # le border router ne repond plus (cas du 27/11)
+o.now += ul.OTBR_UP_S - 1
+assert rw.poll(True) == [] and OT in rw.pending
+o.now += 1
+assert rw.poll(True) == [OT] and rw.pending == {}
+delays = [rw.recovery(OT) for _ in range(len(ul.RECOVER_DELAYS_S))]
+assert delays == list(ul.RECOVER_DELAYS_S) and delays == sorted(delays) and rw.tries == 4   # attentes croissantes
+cap3 = _Cap()
+ul.LOG.addHandler(cap3)
+try:
+    assert rw.recovery(OT) is None and rw.recovery(OT) is None and rw.gave_up   # abandon, dit une seule fois
+    rw.restarted([OT])
+    o.now += ul.OTBR_UP_S
+    assert rw.poll(True) == []                                   # abandonne : plus rien n'est fait
+    o.up["127.0.0.1"] = True                                     # il repond a nouveau (redemarrage de HA...) : remis a zero
+    rw.restarted([OT])
+    assert rw.poll(True) == [] and rw.tries == 0 and not rw.gave_up
+finally:
+    ul.LOG.removeHandler(cap3)
+assert sum("given up" in m for m in cap3.messages) == 1, cap3.messages
+assert any("the border router answers (0 s after its restart)" in m for m in cap3.messages)
+# arrete a la main ou en erreur : pas une radio bloquee
+o.up["127.0.0.1"] = False
+o.state = "stopped"
+rw.restarted([OT])
+o.now += ul.OTBR_UP_S
+assert rw.poll(True) == []
+# peripherique perdu entre-temps : la surveillance s'arrete (le rattachement suivant la relance)
+o.state = "started"
+rw.restarted([OT])
+assert rw.poll(False) == [] and rw.pending == {}
+# API REST jamais joignable depuis le demarrage : prudence, rien n'est fait, dit une fois
+o2 = Otbr()
+o2.up = {}
+rw2 = o2.watch()
+cap4 = _Cap()
+ul.LOG.addHandler(cap4)
+try:
+    rw2.poll(True)
+    for _ in range(2):
+        rw2.restarted([OT])
+        o2.now += ul.OTBR_UP_S
+        assert rw2.poll(True) == []
+finally:
+    ul.LOG.removeHandler(cap4)
+assert sum("never answered" in m and "nothing is done" in m for m in cap4.messages) == 1, cap4.messages
+assert rw2.tries == 0
+# sans OTBR dans restart_addons : rien n'est surveille
+assert ul.RadioWatch(["core_zha"], http=o.http, sup=o.sup).slugs == []
+
+# liberation de la radio : port detache, appareil perdu, rattache apres l'attente, puis OTBR relance comme apres une perte
+k = Kernel()
+lk = k.link()
+lk.check()
+lk.restart, lk.events = [], []
+assert lk.all_attached()
+lk.free_radio(OT, 30, 1, 4)
+assert "detach -p 0" in k.calls and k.ports[0] == ul.VDEV_NULL and not lk.all_attached()
+assert [e for e, _ in lk.events] == ["radio_stuck", "hold"], lk.events
+assert "try 1 of 4" in lk.events[0][1] and "attached again in 30 s" in lk.events[1][1]
+k.calls.clear()
+lk.events = []
+k.now += 29
+lk.check()
+assert not any(c.startswith("attach") for c in k.calls) and lk.events == []   # pas avant l'attente, et sans « lien perdu »
+k.now += 1
+lk.check()
+assert lk.all_attached() and [e for e, _ in lk.events] == ["attached"] and "again after 30 s" in lk.events[0][1]
+assert lk.restart == [OT] and lk.restart_if_running is False
+# detachement qui ne rend pas la main (noyau bloque) : la boucle n'attend pas plus de DETACH_WAIT_S
+gate = threading.Event()
+
+
+def run_hang(a, timeout=20):
+    if a[1] == "detach":
+        gate.wait(5)
+        return ""
+    return k.run(a, timeout)
+
+
+k = Kernel()
+lk = k.link(runner=run_hang)
+lk.check()
+lk.events = []
+old_wait, ul.DETACH_WAIT_S = ul.DETACH_WAIT_S, 0.2
+try:
+    lk.free_radio(OT, 30, 1, 4)
+finally:
+    ul.DETACH_WAIT_S = old_wait
+    gate.set()
+assert [e for e, _ in lk.events] == ["radio_stuck", "detach_failed", "hold"], lk.events
+assert "did not end within 0.2 s" in lk.events[1][1] and lk.all_attached()   # laisse tel quel, pas « repris tel quel »
+# textes du journal : chaque cle utilisee a sa traduction francaise
+import ast  # noqa: E402
+_src = open(os.path.join(os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "usbip_link"), "usbip_link.py"),
+            encoding="utf-8").read()
+_keys = []
+for _n in ast.walk(ast.parse(_src)):
+    if isinstance(_n, ast.Call) and getattr(_n.func, "id", "") == "t" and _n.args:
+        _a = _n.args[0]
+        _keys += [c.value for c in ([_a.body, _a.orelse] if isinstance(_a, ast.IfExp) else [_a]) if isinstance(c, ast.Constant)]
+assert _keys and [k_ for k_ in _keys if k_ not in ul.TEXTS["fr"]] == []
 
 # remontage de /sys : un refus (profil AppArmor, droit manquant) est dit dans le journal, sans arreter l'add-on
 calls = []

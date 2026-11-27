@@ -34,8 +34,14 @@ Every `check_interval` seconds the app checks the link:
   does when Windows restarts with "Save": it is saved, then restored a minute later) → the device is
   detached at once, without waiting for the server, and attached again when it answers, then the apps
   of `restart_addons` are restarted (0.4.2);
+- server back after a silence or a pause → nothing is attached before it has answered for 30 s: right after
+  Windows starts, a device attached too early may never answer (0.4.6);
 - attached again after a loss → the apps of `restart_addons` are restarted (the
   OpenThread border router opens its radio only when it starts);
+- an OpenThread border router of `restart_addons` just restarted → its otbr-agent must answer on its REST API
+  (port 8081) within 90 s. Else its radio hangs: the device is detached, which frees the border router stuck on
+  it, and attached again after 30 s, then 60, 120 and 300 s; after 4 tries the log says to restart the system
+  of Home Assistant. Nothing is done as long as that API has never answered since the start of the app (0.4.6);
 - attached for the first time (start of Home Assistant) → those of them that already run,
   or are in error, are restarted once: they may have started before the device was there.
 

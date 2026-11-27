@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.6] - 2026-11-27
+
+### Fixed
+
+- Device attached again right after a restart of Windows (virtual machine saved, then restored): the serial port
+  was there, but the radio never answered, and the OpenThread border router hung on it for good, in the kernel:
+  it could not even be stopped, only a restart of the system of Home Assistant freed it. Its USB transfers waited
+  for the server to cancel them, which it never did. Three changes:
+  - a server back after a silence or a pause must answer for **30 s** before anything is attached, so that
+    usbipd-win and the device have settled;
+  - after the restart of an OpenThread border router of `restart_addons`, the app checks that its otbr-agent
+    answers on its REST API (port 8081, network only: the serial port is never opened here) within 90 s;
+  - if it does not, the device is detached, which closes the USB/IP connection and gives the waiting transfers
+    back, so that the border router can end; it is attached again after 30 s, then 60 s, 120 s and 300 s at
+    the next tries, the border router restarted each time; after 4 tries it is given up and said in the log.
+    The check acts only once the REST API has answered at least once since the start of the app (else a stuck
+    radio could not be told from an API out of reach: it is said once and nothing is done), and only on a border
+    router in the *started* state.
+- A detach that does not end (kernel stuck) no longer blocks the checks: left running after 20 s, and said.
+
 ## [0.4.5] - 2026-11-27
 
 ### Changed

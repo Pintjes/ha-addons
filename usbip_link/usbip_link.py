@@ -21,6 +21,11 @@ Every `check_interval` seconds:
 - an attachment counts only once the device is there (tty included for a serial one); else its port
   is detached and it is tried again. A port taken by a device that never appeared (`usbip port` does
   not show it) is detached before anything else, at the start of the add-on too;
+- a server back after a silence or a pause of the machine must answer for SETTLE_S before anything is attached:
+  a device attached right after Windows starts may never answer;
+- after a restart of an OpenThread border router of `restart_addons`, its otbr-agent must answer on its REST API
+  within OTBR_UP_S; else its radio hangs: the device is detached (which frees the border router stuck in the
+  kernel on it) and attached again later, a bounded number of times (RadioWatch);
 - after an attachment that follows a loss, the add-ons listed in `restart_addons` are restarted
   (the OpenThread border router opens its radio at start only); after the first attachment, only
   those already running (or in error): at the start of Home Assistant they may have started before
@@ -42,10 +47,11 @@ import socket
 import subprocess
 import threading
 import time
+import urllib.error
 import urllib.request
 from datetime import datetime
 
-VERSION = "0.4.5"
+VERSION = "0.4.6"
 LOG = logging.getLogger("usbip_link")
 STATE_TOPIC = "usbip_link/state"
 DISCOVERY = "homeassistant"
@@ -68,6 +74,13 @@ USB_DIR = "/sys/bus/usb/devices"
 VDEV_NULL, VDEV_NOTASSIGNED, VDEV_USED, VDEV_ERROR = 4, 5, 6, 7   # port states of the vhci `status` file
 # taken, but not shown (NOTASSIGNED) or not usable (ERROR): `usbip port` leaves them out
 STUCK = (VDEV_NOTASSIGNED, VDEV_ERROR)
+SETTLE_S = 30            # s: a server back after a silence (it may have just restarted) must answer this long first
+OTBR_MARK = "openthread_border_router"   # slugs of `restart_addons` whose start is checked (REST API of otbr-agent)
+OTBR_REST_PORT = 8081    # REST API of otbr-agent (host network, like this app)
+OTBR_UP_S = 90           # s given to a border router just restarted to answer on its REST API
+OTBR_LEARN_S = 60        # s between two looks for its REST API, until it has answered once
+RECOVER_DELAYS_S = (30, 60, 120, 300)   # wait before each new attachment after freeing a stuck radio; then given up
+DETACH_WAIT_S = 20       # s: a detach that takes longer is left running (it must never block the checks)
 
 TEXTS = {
     "fr": {
@@ -115,7 +128,29 @@ TEXTS = {
             "{name} : attaché, mais le périphérique n'est pas apparu en {s} s : port détaché, nouvel essai",
         "The state of the vhci ports cannot be read: attachments are not checked":
             "L'état des ports vhci est illisible : les attachements ne sont pas vérifiés",
-        "{name}: bus id changed on the server ({old} -> {new})": "{name} : identifiant de bus modifié sur le serveur ({old} -> {new})",
+        "Server {server} is back: the devices are attached in {s} s, once it has settled (it may have just restarted)":
+            "Le serveur {server} est revenu : les périphériques sont attachés dans {s} s, une fois qu'il s'est stabilisé "
+            "(il vient peut-être de redémarrer)",
+        "{slug}: checking that the border router starts (its REST API, for up to {s} s)":
+            "{slug} : vérification du démarrage du border router (son API REST, pendant {s} s au plus)",
+        "{slug}: the border router answers ({s} s after its restart)":
+            "{slug} : le border router répond ({s} s après son redémarrage)",
+        "{slug}: the border router still does not answer {s} s after its restart: its radio is probably stuck; the "
+        "device is detached to free it (try {n} of {m})":
+            "{slug} : le border router ne répond toujours pas {s} s après son redémarrage : sa radio est sans doute "
+            "bloquée ; le périphérique est détaché pour la libérer (essai {n} sur {m})",
+        "The device is attached again in {s} s": "Le périphérique est rattaché dans {s} s",
+        "{slug}: the border router still does not answer after {n} tries: given up. Restart the system of Home "
+        "Assistant to free it":
+            "{slug} : le border router ne répond toujours pas après {n} essais : abandon. Redémarrer le système de Home "
+            "Assistant pour le libérer",
+        "{slug}: the REST API of the border router never answered ({hosts}, port {port}): its start cannot be "
+        "checked, nothing is done":
+            "{slug} : l'API REST du border router n'a jamais répondu ({hosts}, port {port}) : son démarrage ne peut "
+            "pas être vérifié, rien n'est fait",
+        "Detaching port {port} did not end within {s} s; left running":
+            "Le détachement du port {port} n'a pas fini en {s} s ; laissé en cours",
+        "{name}: bus id changed on the server ({old} -> {new})":"{name} : identifiant de bus modifié sur le serveur ({old} -> {new})",
         "Connected to MQTT": "Connecté à MQTT",
         "No MQTT broker yet: the state is only in the log until it answers (trying again every {s} s)":
             "Pas encore de broker MQTT : l'état n'est que dans le journal tant qu'il ne répond pas (nouvel essai toutes les {s} s)",
@@ -253,6 +288,18 @@ def server_up(host, port=USBIP_PORT, timeout=2.0):
         return None
 
 
+def rest_up(host, port=OTBR_REST_PORT, timeout=3.0):
+    """True when the REST API of otbr-agent answers at host:port, whatever the answer (an HTTP error is an
+    answer: the agent runs). It never touches the serial port: only the network."""
+    try:
+        with urllib.request.urlopen(f"http://{host}:{port}/node/state", timeout=timeout):
+            return True
+    except urllib.error.HTTPError:
+        return True
+    except (OSError, ValueError):
+        return False
+
+
 def resolve(host):
     """Addresses of `host` (a name or an address); empty when it cannot be resolved now."""
     try:
@@ -339,6 +386,7 @@ class Link:
         self.restart = []      # add-ons to restart after this check
         self.restart_if_running = False   # True: only those running or in error (first attachment)
         self.checks = 0        # checks done: nothing is published before the first (attached unknown till then)
+        self.attach_after = None   # no attachment before this time (server settling, radio just freed)
 
     def emit(self, kind, text, level=logging.INFO):
         LOG.log(level, text)
@@ -411,6 +459,7 @@ class Link:
             addrs = self.resolver(self.server)
             self.servers |= addrs
             self.resolved = bool(addrs)
+        was_down = self.server_ok is False
         if up != self.server_ok:
             if up is False:
                 self.emit("server_down", t("Server {server} does not answer (port {port})", server=self.server, port=self.port),
@@ -427,6 +476,12 @@ class Link:
         suspect = force or (up and self.silent)
         if not up and not self.silent:
             self.silent, self.silent_at = True, self.clock()
+        if up and (was_down or suspect) and not self.holding():
+            # back after a silence or a pause: the server (Windows) may have just started, and a device attached
+            # too early may never answer (27/11: the border router then hung on it): let it settle first
+            self.hold(SETTLE_S)
+            self.emit("settling", t("Server {server} is back: the devices are attached in {s} s, once it has settled "
+                                    "(it may have just restarted)", server=self.server, s=SETTLE_S))
         detach_failed = False
         self.free_stuck()   # at the start of the add-on too, and before any new attachment
         try:
@@ -483,7 +538,7 @@ class Link:
             if st["attached"]:
                 self.emit("lost", t("{name}: link lost", name=d["name"]), logging.WARNING)
                 self._lost(st)
-            if not up:
+            if not up or self.holding():
                 continue
             busid = d["bus_id"]
             if not busid:
@@ -552,6 +607,61 @@ class Link:
             self.silent, self.silent_at = True, self.clock() - max(0.0, gap)
         self.emit("clock_jump", t("The clock jumped by {gap} s (machine paused and resumed?): the links are checked at once",
                                   gap=f"{gap:+.0f}"), logging.WARNING)
+
+    def hold(self, seconds):
+        self.attach_after = self.clock() + seconds
+
+    def holding(self):
+        return self.attach_after is not None and self.clock() < self.attach_after
+
+    def all_attached(self):
+        return bool(self.devices) and all(self.state[d["name"]]["attached"] for d in self.devices)
+
+    def detach_bounded(self, port):
+        """Detaches a port without ever blocking the checks: a detach still running after DETACH_WAIT_S is left
+        to end on its own. Returns None when it ended without error, else the error."""
+        res = []
+
+        def work():
+            try:
+                self.run(["usbip", "detach", "-p", str(int(port))])
+                res.append(None)
+            except Exception as err:  # noqa: BLE001
+                res.append(err)
+
+        th = threading.Thread(target=work, daemon=True)
+        th.start()
+        th.join(DETACH_WAIT_S)
+        if th.is_alive():
+            return t("Detaching port {port} did not end within {s} s; left running", port=port, s=DETACH_WAIT_S)
+        return res[0] if res else "?"
+
+    def free_radio(self, slug, delay, n, m):
+        """The border router `slug` hangs on the device (27/11: no answer from the radio, and its process stuck in
+        the kernel, waiting for the server to cancel its USB transfers): the port is detached, which closes the
+        connection and gives those transfers back, so that the process can end; attached again after `delay` s
+        (the restart of `restart_addons` follows, as after any loss)."""
+        self.emit("radio_stuck", t("{slug}: the border router still does not answer {s} s after its restart: its radio "
+                                   "is probably stuck; the device is detached to free it (try {n} of {m})", slug=slug,
+                                   s=OTBR_UP_S, n=n, m=m), logging.WARNING)
+        try:
+            ports = parse_port(self.run(["usbip", "port"]))
+        except Exception as err:  # noqa: BLE001
+            LOG.debug("usbip port: %s", err)
+            ports = []
+        for d in self.devices:
+            st = self.state[d["name"]]
+            p = find_port(ports, d, self.servers)
+            err = self.detach_bounded(p["port"]) if p else None
+            if err is not None:
+                # still attached: left as it is (taken as it is would hide it), said; tried again at the next stuck
+                self.emit("detach_failed", t("{name}: cannot detach port {port}: {err}", name=d["name"], port=p["port"],
+                                             err=err), logging.WARNING)
+                continue
+            if st["attached"]:
+                self._lost(st)
+        self.hold(delay)
+        self.emit("hold", t("The device is attached again in {s} s", s=delay))
 
     def _lost(self, st):
         st.update(attached=False, since=self.clock(), busid=None)
@@ -807,6 +917,104 @@ class RestartQueue:
         return done
 
 
+class RadioWatch:
+    """After a restart of an OpenThread border router of `restart_addons`, checks that it really starts: its
+    otbr-agent answers on its REST API within OTBR_UP_S. On 27/11 the device was attached and its tty there, but the
+    radio never answered and the border router hung for good on it. Only the network is used: the serial port is
+    never opened here (an open that hangs would freeze this app too).
+
+    Cautious: nothing is done while the REST API has never answered since the start of this app (it may be out of
+    reach, and a stuck radio could not be told from it). The number of recoveries is bounded (RECOVER_DELAYS_S,
+    growing waits), then given up and said, until the border router answers again."""
+
+    def __init__(self, slugs, http=rest_up, sup=None, clock=time.monotonic):
+        self.slugs = [s for s in slugs if OTBR_MARK in s]
+        self.http, self.sup, self.clock = http, sup or supervisor, clock
+        self.host = {}          # slug -> address its REST API answered at
+        self.pending = {}       # slug -> time of its restart, while it has not answered
+        self.tries = 0          # recoveries since the border router last answered
+        self.gave_up = False
+        self.next_learn = 0.0
+        self.unknown_said = set()
+
+    @staticmethod
+    def hosts(slug):
+        # host network: local addresses first; the name of the app on the network of the Supervisor last
+        return ["127.0.0.1", "[::1]", slug.replace("_", "-")]
+
+    def answers(self, slug):
+        for host in ([self.host[slug]] if slug in self.host else self.hosts(slug)):
+            if self.http(host, OTBR_REST_PORT):
+                self.host[slug] = host
+                return True
+        return False
+
+    def restarted(self, slugs):
+        now = self.clock()
+        for slug in slugs:
+            if slug in self.slugs:
+                self.pending[slug] = now
+                LOG.info(t("{slug}: checking that the border router starts (its REST API, for up to {s} s)", slug=slug,
+                           s=OTBR_UP_S))
+
+    def state(self, slug):
+        try:
+            return (self.sup(f"/addons/{slug}/info") or {}).get("state")
+        except Exception as err:  # noqa: BLE001 - unknown: checked as if started
+            LOG.debug("%s info: %s", slug, err)
+            return None
+
+    def poll(self, attached):
+        """One look; returns the slugs whose border router hangs (to be freed). `attached`: all the devices are
+        attached (else the device was lost meanwhile and the restart that follows its return starts a new watch)."""
+        now = self.clock()
+        if not attached:
+            self.pending.clear()
+            return []
+        if not self.pending:
+            if now >= self.next_learn:   # learns where its REST API answers, while all is well
+                self.next_learn = now + OTBR_LEARN_S
+                for slug in self.slugs:
+                    if slug not in self.host:
+                        self.answers(slug)
+            return []
+        stuck = []
+        for slug, since in list(self.pending.items()):
+            if self.answers(slug):
+                del self.pending[slug]
+                self.tries, self.gave_up = 0, False
+                LOG.info(t("{slug}: the border router answers ({s} s after its restart)", slug=slug, s=round(now - since)))
+                continue
+            if now - since < OTBR_UP_S:
+                continue
+            del self.pending[slug]
+            if slug not in self.host:
+                if slug not in self.unknown_said:
+                    self.unknown_said.add(slug)
+                    LOG.warning(t("{slug}: the REST API of the border router never answered ({hosts}, port {port}): its "
+                                  "start cannot be checked, nothing is done", slug=slug, hosts=", ".join(self.hosts(slug)),
+                                  port=OTBR_REST_PORT))
+                continue
+            state = self.state(slug)
+            if state not in (None, "started"):   # stopped by hand, or in error for another reason: not a hung radio
+                LOG.debug("%s: %s, its radio is not checked", slug, state)
+                continue
+            if not self.gave_up:
+                stuck.append(slug)
+        return stuck
+
+    def recovery(self, slug):
+        """Wait before the new attachment for the next recovery, or None once given up (said once)."""
+        if self.tries >= len(RECOVER_DELAYS_S):
+            if not self.gave_up:
+                self.gave_up = True
+                LOG.error(t("{slug}: the border router still does not answer after {n} tries: given up. Restart the "
+                            "system of Home Assistant to free it", slug=slug, n=self.tries))
+            return None
+        self.tries += 1
+        return RECOVER_DELAYS_S[self.tries - 1]
+
+
 def main():
     global LANG
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
@@ -830,6 +1038,7 @@ def main():
     interval = max(3, int(options.get("check_interval") or 10))
     last_pub, last_latency = 0.0, None
     queue = RestartQueue()
+    radio = RadioWatch(link.restart_addons)
     watch = ClockWatch()
     while not stop.is_set():
         mq.retry(time.time())
@@ -846,7 +1055,11 @@ def main():
             stop.wait(RESTART_SETTLE_S)
             queue.add(todo, link.restart_if_running, time.time())
         if queue.due(time.time()):
-            queue.run(time.time())
+            radio.restarted(queue.run(time.time()))
+        for slug in radio.poll(link.all_attached()):
+            delay = radio.recovery(slug)
+            if delay is not None:
+                link.free_radio(slug, delay, radio.tries, len(RECOVER_DELAYS_S))
         latency = link.latency()
         if publish_due(changed, link.events, time.time(), last_pub, latency, last_latency):
             link.events = []
