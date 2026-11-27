@@ -1,4 +1,5 @@
-// © 2026 Pintjes. All rights reserved. See LICENSE.
+// © 2026 Pintjes
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Side Door, option "inject_script".
 //
 // An app that builds its addresses in JavaScript believes it lives at "/".

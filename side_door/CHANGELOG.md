@@ -1,8 +1,18 @@
 # Changelog
 
-All notable changes to this add-on are documented here.
+All notable changes to Side Door are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
+
+## [2.8.1] - 2026-11-27
+
+### Changed
+
+- License: GPL-3.0-or-later again. Version 2.8.0 was published under a
+  proprietary license; 2.8.1 and the following versions are under
+  GPL-3.0-or-later, like the versions before 2.8.0.
+- The texts say "app", the word Home Assistant now uses, and show what Side Door
+  does on its own. No change to how the apps are relayed.
 
 ## [2.8.0] - 2026-11-22
 

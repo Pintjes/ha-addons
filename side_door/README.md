@@ -3,12 +3,12 @@
 </p>
 
 <p align="center">
-  <a href="https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FPintjes%2Fha-addons"><img src="https://img.shields.io/badge/Home%20Assistant-add--on-41BDF5?logo=home-assistant&logoColor=white" alt="Home Assistant add-on"></a>
+  <a href="https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FPintjes%2Fha-addons"><img src="https://img.shields.io/badge/Home%20Assistant-app-41BDF5?logo=home-assistant&logoColor=white" alt="Home Assistant app"></a>
   <img src="https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FPintjes%2Fha-addons%2Fmain%2Fside_door%2Fconfig.yaml&query=%24.version&label=version&color=blue" alt="Version">
   <img src="https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-informational" alt="Architectures">
   <img src="https://img.shields.io/badge/status-beta-orange" alt="Status: beta">
   <a href="https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml"><img src="https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/Pintjes/ha-addons/blob/main/side_door/LICENSE"><img src="https://img.shields.io/badge/licence-propri%C3%A9taire-lightgrey" alt="Licence : propriétaire"></a>
+  <a href="https://github.com/Pintjes/ha-addons/blob/main/side_door/LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg" alt="License: GPL-3.0"></a>
 </p>
 
 > **Beta.** Side Door has been tested on one installation only. It rewrites the
@@ -16,11 +16,29 @@
 > welcome: please
 > [open an issue](https://github.com/Pintjes/ha-addons/issues/new/choose).
 
-**Side Door opens a web app of your local network in the Home Assistant
-sidebar.** The app keeps running where it is; Home Assistant becomes its front
-door.
+**Side Door is a Home Assistant app that opens the web apps of your local
+network in the Home Assistant sidebar.** Each app keeps running where it is;
+Home Assistant becomes its front door.
 
-## Why this add-on
+## Automatic: no rule to write
+
+In the usual case you only need to know the address of your web app. Give it to
+Side Door; the rest is done for you:
+
+- links, redirections and cookies are rewritten for Home Assistant, and
+  WebSockets are relayed;
+- apps that build their addresses in JavaScript are handled by a small script,
+  loaded by default;
+- at each start, Side Door looks for the start page of an app whose root
+  redirects to it (the very first time, it only says what it found: restart to
+  apply it);
+- the certificate of an `https://` app given by a name is checked.
+
+The settings that lower a protection (`hide_proxy`, `headers`, `verify_tls`)
+are never set for you: Side Door only suggests them. Some apps need one of them,
+and some may not work (see the beta notice above).
+
+## Why Side Door
 
 **1. No more mixed content.**
 A dashboard iframe to `http://192.168.x.x` stays blank when Home Assistant is
@@ -43,13 +61,12 @@ expects.
 - An eye to hide apps, and a link for each app to open it from a dashboard
   button, with or without the row of tabs.
 - A clear page when the app is off or the address is missing.
-- Extra rewrite rules for the stubborn cases.
+- Optional rewrite rules and per-app settings for the stubborn cases.
 
 Full documentation: [DOCS.md](DOCS.md).
 
 ## License
 
-Proprietary software, © 2026 Pintjes. All rights reserved. Use is governed by the
-end user license agreement in [LICENSE](LICENSE) (French text, with an English
-translation). Versions before 2.8.0 were published under GPL-3.0-or-later and
-remain under that license.
+[GPL-3.0-or-later](LICENSE) © 2026 Pintjes. Version 2.8.0 was published under a
+proprietary license; 2.8.1 and the following versions are under
+GPL-3.0-or-later, like the versions before 2.8.0.

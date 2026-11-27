@@ -1,4 +1,5 @@
-// © 2026 Pintjes. All rights reserved. See LICENSE.
+// © 2026 Pintjes
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Side Door: what nginx changes in the answers of the apps.
 //
 // run.py copies this file and puts the apps of the configuration in APPS:

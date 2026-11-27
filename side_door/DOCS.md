@@ -1,7 +1,9 @@
 # Side Door
 
-Opens web apps of your local network in the Home Assistant sidebar, through
-the Home Assistant ingress.
+Side Door is a Home Assistant app that opens web apps of your local network in
+the Home Assistant sidebar, through the Home Assistant ingress. In the usual case you
+write no rewrite rule: a name and an address are enough (see the limits in
+*What is rewritten*).
 
 ## Contents
 
@@ -29,17 +31,17 @@ Assistant, so:
   (no mixed content);
 - the app is reachable wherever Home Assistant is (Nabu Casa, your own
   tunnel), behind the Home Assistant login;
-- the add-on publishes no port.
+- Side Door publishes no port.
 
 WebSockets are relayed.
 
 ## Installation
 
 1. Add the repository `https://github.com/Pintjes/ha-addons` in
-   **Settings → Add-ons → Add-on store → ⋮ → Repositories**.
+   **Settings → Apps → Install app → ⋮ → Repositories**.
 2. Install **Side Door**.
-3. In the **Configuration** tab, set the address of the app, then start the
-   add-on.
+3. In the **Configuration** tab, set the address of the app, then start
+   Side Door.
 4. Turn on **Show in sidebar**.
 
 Home Assistant must be able to reach the address: check the firewall of the
@@ -93,10 +95,10 @@ Each entry can also have, only when the app needs it:
 
 ### Automatic detection
 
-At each start (and each restart), the add-on looks at every app with a few
+At each start (and each restart), Side Door looks at every app with a few
 plain `GET` requests: no cookie, no login, none of your `headers`. It sends at
 most 4 requests per app, waits 5 seconds at most, and writes what it learnt in
-`/data/detected.json` (inside the add-on).
+`/data/detected.json` (inside Side Door).
 
 - **`start`** is found, and used, when the root of the app redirects to a page
   of the app. It is only applied when every redirection stays on the app and
@@ -124,7 +126,7 @@ most 4 requests per app, waits 5 seconds at most, and writes what it learnt in
   applied; with `off` no request is sent.
 - The very first time the detection runs (no `/data/detected.json` yet, for
   example right after updating to this version), `apply` only says what it
-  found and applies nothing: read the Log tab, then restart the add-on to
+  found and applies nothing: read the Log tab, then restart Side Door to
   apply it.
 
 What detection cannot do:
@@ -140,8 +142,8 @@ What detection cannot do:
 - An app that counts every request sees 1 to 4 more at each start.
 
 A target set with `target_url` takes the default settings. Up to version
-1.10, `rewrite_paths`, `inject_script` and `hide_proxy` were options of the
-whole add-on; they are now settings of each app.
+1.10, `rewrite_paths`, `inject_script` and `hide_proxy` were options of
+Side Door as a whole; they are now settings of each app.
 
 An entry can have `headers`, sent to the app with every request. They are
 written `Name: value` and separated by ` | `. This is for an app behind a
@@ -153,13 +155,13 @@ gate that lets a token in, such as a service token of Cloudflare Access:
     headers: "CF-Access-Client-Id: <id> | CF-Access-Client-Secret: <secret>"
 ```
 
-The gate then lets the add-on in on its own: everyone who can open the panel
+The gate then lets Side Door in on its own: everyone who can open the panel
 goes through it without logging in there.
 
 To hide apps in one browser only, click the eye at the end of the row of
 tabs, then click the apps to hide or show: a hidden app is struck through,
 with a crossed eye. Click the eye again to finish. A hidden app has no tab and
-is not loaded, but the add-on still relays it: an app opened by a dashboard
+is not loaded, but Side Door still relays it: an app opened by a dashboard
 button (`?app=`) still opens. The choice is kept by the browser.
 
 An entry can also be `hidden` in the configuration, for every browser: the
@@ -189,16 +191,16 @@ type: button
 name: Printer
 tap_action:
   action: navigate
-  navigation_path: /app/<slug of the add-on>?app=Printer
+  navigation_path: /app/<slug of Side Door>?app=Printer
 ```
 
 The slug is in the address bar when the panel is open (for example
-`4f047962_side_door`). The `/app/…` path works whether or not the add-on is
+`4f047962_side_door`). The `/app/…` path works whether or not Side Door is
 shown in the sidebar; the sidebar address (`/4f047962_side_door`) only works
 while it is. Upper and lower case do not matter.
 
 The sidebar keeps one entry, named Side Door: Home Assistant gives one panel
-to an add-on and takes its title from the add-on itself. The names you choose
+to each of its apps and takes its title from that app itself. The names you choose
 are the ones on the tabs.
 
 Moving from one app to several (or back) changes the path of the apps: you
@@ -209,7 +211,7 @@ log in to them once more.
 Behind the ingress, the app is not at `/` but under a path such as
 `/api/hassio_ingress/<token>/`. Most apps write links starting with `/`
 (`/static/style.css`, `/login`), which would leave the ingress. With
-`rewrite` on (the default), the add-on:
+`rewrite` on (the default), Side Door:
 
 - rewrites redirections (`Location`) and the path of cookies, and drops the
   `Domain` of cookies (it names the app, not Home Assistant: the browser
@@ -243,8 +245,8 @@ Limits of the rewriting:
 ### Apps that build their addresses in JavaScript
 
 Some apps send an almost empty page and a program that builds every address
-in the browser. Nothing can be rewritten in what the add-on relays, and the
-app stays blank or leaves the panel. With `inject_script` on (the default), the add-on:
+in the browser. Nothing can be rewritten in what Side Door relays, and the
+app stays blank or leaves the panel. With `inject_script` on (the default), Side Door:
 
 - loads a small script before the app. It moves under the ingress path the
   requests of the app (`fetch`, `XMLHttpRequest`, WebSocket), its internal
@@ -277,7 +279,7 @@ with it.
 
 Some apps let the local network in without a login, and ask for one as soon
 as a request was relayed (they look at the `X-Forwarded-For` header). Plex
-does. With `hide_proxy` on, the add-on no longer says the request was
+does. With `hide_proxy` on, Side Door no longer says the request was
 relayed: the app sees a request coming from Home Assistant itself. Set it
 only on the apps that need it. The
 address of Home Assistant must then be one the app lets in without a login

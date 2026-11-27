@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# © 2026 Pintjes. All rights reserved. See LICENSE.
+# © 2026 Pintjes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Side Door: starts nginx in front of web apps of the local network.
 
 Reads the add-on options, writes the nginx configuration and replaces itself
@@ -699,7 +700,7 @@ def read_headers(label, text):
         if not colon or not re.fullmatch(r"[A-Za-z0-9-]+", name) or not value:
             log(f"app {label!r}: a header is ignored (expected \"Name: value\")")
         elif name.lower() in OWN_HEADERS:
-            log(f"app {label!r}: header {name} ignored (set by the add-on)")
+            log(f"app {label!r}: header {name} ignored (set by Side Door)")
         elif not re.fullmatch(r"[\x20-\x7e]+", value) or any(c in value for c in "\"$\\;{}"):
             log(f"app {label!r}: header {name} ignored (its value has a character that is not accepted)")
         else:
@@ -738,8 +739,8 @@ def report_page(report):
     esc = html.escape
     out = ["<h2>Detected settings / Réglages détectés</h2>",
            f'<p>{esc(REPORT_STATES.get(report["state"], REPORT_STATES["none"]))}</p>',
-           '<p class="muted">Seen at the last start of the add-on. '
-           "<b>set</b>: written in the configuration. <b>default</b>: the choice of the add-on. "
+           '<p class="muted">Seen at the last start of Side Door. '
+           "<b>set</b>: written in the configuration. <b>default</b>: the choice of Side Door. "
            "<b>detected</b>: found by the detection. hide_proxy, headers and verify_tls are never set automatically.</p>"]
     for app in report["apps"]:
         out.append(f'<div class="app"><h3>{esc(app["name"])}</h3><table>')
@@ -810,7 +811,7 @@ def build(options, mark="sd0", dns=None, probe=None):
     if not shown:
         head = HEAD % {"port": PORT, "web": WEB, "njs": NJS, "mark": mark, "maps": ""}
         why = "every app is hidden" if apps else "no valid app"
-        return head + NOT_SET, {}, None, f"{why}: set one in the add-on configuration"
+        return head + NOT_SET, {}, None, f"{why}: set one in the configuration of Side Door"
     found, notes, facts = probe(shown) if probe else ({}, [], {"state": "none", "apps": {}})
     for app in shown:
         if found.get(app["target"]) and not app["start"]:
@@ -899,7 +900,7 @@ def settings(app):
 def effective(app):
     """Every setting of an app as it applies, and where it comes from: [(name,
     value, origin)], origin "set" (written in the configuration), "detected"
-    or "default" (the add-on's own choice). The values of 'headers' are
+    or "default" (the choice of Side Door). The values of 'headers' are
     secrets: only their names are given."""
     def origin(key):
         if key in app["set"]:

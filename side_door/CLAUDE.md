@@ -1,4 +1,4 @@
-# Side Door — consignes pour l'agent (add-on Home Assistant)
+# Side Door — consignes pour l'agent (app Home Assistant)
 
 Dépôt public `Pintjes/ha-addons`, dossier `side_door/`. Cette fiche est publique : aucune adresse du réseau privé, aucun secret, aucune donnée personnelle ici ni dans le dépôt. Les consignes générales du dépôt sont dans `../CLAUDE.md`.
 
@@ -8,9 +8,10 @@ Side Door ouvre des applications web du réseau local dans la barre latérale de
 
 ## Règles de travail
 
+- Dans les textes publics, Side Door est une « app » (mot de Home Assistant) ; là où « app » désignerait aussi les applications affichées, écrire « Side Door ».
 - Corriger la famille de comportements, jamais le cas d'une application précise : aucune règle « si c'est Plex » dans le code. Ce qui est propre à l'installation de l'utilisateur reste dans la configuration.
 - Chaque correctif : test unitaire (`tests/test_build.py`) et, si le comportement réseau change, test live (`tests/test_live.py`), puis `CHANGELOG.md`, `DOCS.md`, `translations/` et la version dans `config.yaml`.
-- Commits : auteur et committer `Pintjes <Pintjes@users.noreply.github.com>`, jamais de Co-Authored-By ni de mention d'un assistant. Licence propriétaire © 2026 Pintjes (CLUF dans `LICENSE`, depuis la 2.8.0 ; les versions antérieures restent sous GPL-3.0-or-later). Jamais le vrai nom de l'auteur : seulement « Pintjes ». Aucune dépendance sous GPL.
+- Commits : auteur et committer `Pintjes <Pintjes@users.noreply.github.com>`, jamais de Co-Authored-By ni de mention d'un assistant. Licence GPL-3.0-or-later © 2026 Pintjes (texte officiel dans `LICENSE` ; en-têtes « © 2026 Pintjes » et `SPDX-License-Identifier: GPL-3.0-or-later`). Seule la 2.8.0 a été publiée sous licence propriétaire. Jamais le vrai nom de l'auteur : seulement « Pintjes ». Toute nouvelle dépendance doit avoir une licence compatible avec la GPL-3.0, vérifiée dans ses métadonnées.
 - Avant un commit : `git fetch origin "+refs/heads/main:refs/remotes/origin/main"` puis rebase sur `origin/main`. Jamais `git pull` (historique réécrit le 2026-11-17).
 - Push uniquement avec l'accord de l'utilisateur, ou celui du Leader citant sa réponse.
 
@@ -29,4 +30,4 @@ Test live (docker) : `side_door/tests/upstream.py` (application de test, port 80
 - L'arrêt : le Supervisor envoie SIGQUIT (image nginx) ; `run.py` doit l'attraper (corrigé en 2.4.2).
 - Les réponses compressées, partielles (206) ou non UTF-8 ne sont pas réécrites ; les ETag sont liés à la marque de version.
 - Le stockage du navigateur est cloisonné par application (depuis 2.2.0) : une application ouverte sans compte peut cacher des fonctions tant qu'on ne s'y est pas connecté dans Side Door.
-- Le réglage « barre latérale » de HA n'est pas modifiable par l'API des add-ons.
+- Le réglage « barre latérale » de HA n'est pas modifiable par l'API des apps.
