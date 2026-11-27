@@ -511,7 +511,7 @@ class Anchor:
         opts["omr_prefix"] = str(net)
         sup("POST", f"/addons/{slug}/options", {"options": opts})
         sup("POST", f"/addons/{slug}/restart")
-        self.w.emit("omr_anchor_set", t("Thread Anchor: OMR prefix {p} fixed, add-on restarted", p=str(net)), prefix=str(net))
+        self.w.emit("omr_anchor_set", t("Thread Anchor: OMR prefix {p} fixed, app restarted", p=str(net)), prefix=str(net))
         return {"ok": True, "result": "set", "prefix": str(net)}
 
     # ------------------------------------------------------------ page

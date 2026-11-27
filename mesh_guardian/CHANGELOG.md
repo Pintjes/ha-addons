@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to this add-on are documented here.
+All notable changes to this app are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Act on a node from its panel**: recovery attempt on an unavailable node, reset from a distance, pairing codes kept by the add-on (photo or scan of the label), pairing and naming a new device without leaving the page.
 - **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
 - **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
+
+## [2.40.18] - 2026-11-27
+
+### Changed
+
+- **"add-on" is now "app"** in the texts, as Home Assistant calls them now: README, documentation (the repository is added under **Settings → Apps → Install app → ⋮ → Repositories**), option descriptions, the page and a log message, in English and French. Technical names are unchanged (repository, slug, paths, option keys, event names).
 
 ## [2.40.17] - 2026-11-25
 

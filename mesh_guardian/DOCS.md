@@ -32,10 +32,10 @@ do about them.
                                                      ▼
  Home Assistant ── node availability ──▶  Mesh Guardian ── MQTT ──▶ Home Assistant entities
  Matter Server  ◀── ping_node / get_nodes ──┘        │
-                                                     └──▶ add-on log, /share/mesh_guardian/events.jsonl
+                                                     └──▶ app log, /share/mesh_guardian/events.jsonl
 ```
 
-1. **Listening.** The add-on follows the mDNS announcements of the Thread border
+1. **Listening.** The app follows the mDNS announcements of the Thread border
    routers (`_meshcop._udp`, any vendor), of the Matter nodes of your Home
    Assistant fabric (`_matter._tcp`) and of smart speakers / hubs (`_googlecast._tcp`,
    `_airplay._tcp`). Every known service is also probed actively, so a device
@@ -48,7 +48,7 @@ do about them.
    Matter Server restart), pinging pauses for 5 minutes.
 3. **Radio survey.** Every 30 minutes it reads the Thread diagnostics that the
    Matter Server already has in cache (no radio traffic): neighbor tables,
-   parents, roles and counters. After a start of the add-on, the neighbor and
+   parents, roles and counters. After a start of the app, the neighbor and
    route tables of the mains-powered nodes are first read again, one node every
    few seconds (the cache can be hours old); the first survey waits for it
    (5 to 10 minutes, at most 20). Battery nodes are not read then: the values
@@ -66,20 +66,20 @@ border routers of other networks (e.g. a neighbor's) are ignored.
 
 ## Installation
 
-> **Requirements:** an MQTT broker (the **Mosquitto broker** add-on) and the
+> **Requirements:** an MQTT broker (the **Mosquitto broker** app) and the
 > **MQTT** integration. Without them no entity is created.
 
-1. Add the repository `https://github.com/Pintjes/ha-addons` to the add-on store
-   (**Settings → Add-ons → Add-on store → ⋮ → Repositories**).
+1. Add the repository `https://github.com/Pintjes/ha-addons` to Home Assistant
+   (**Settings → Apps → Install app → ⋮ → Repositories**).
 2. Install **Mesh Guardian** and start it.
-3. Pick your **language** in the *Configuration* tab and restart the add-on.
+3. Pick your **language** in the *Configuration* tab and restart the app.
 4. Enable **Start on boot** and **Watchdog**.
 
 After about 2½ minutes the log shows `Monitoring ready`, and a **Mesh
 Guardian** device with its entities appears in the MQTT integration.
 
 **Requirements:** Home Assistant OS or Supervised, the Matter integration with
-the Matter Server add-on, the Mosquitto broker add-on and the MQTT integration.
+the Matter Server app, the Mosquitto broker app and the MQTT integration.
 
 ## Configuration
 
@@ -95,13 +95,13 @@ the Matter Server add-on, the Mosquitto broker add-on and the MQTT integration.
 | `all_thread_networks` | `false` | Also follow Thread networks not used by your Matter nodes. |
 | `log_events_to_file` | `true` | Also write events to `/share/mesh_guardian/events.jsonl` (rotated at 5 MB). |
 | `advice` | `true` | Give advice for the available nodes (*Find a new link*, *Add a router*…): cards, *Advice* column, log and `advice` events. Off: none of them. An unavailable node keeps what to do about it, and the notes about the network stay. |
-| `thread_diag_recovery` | `true` | With the Thread Anchor add-on: an unavailable mains node that a neighbor hears, whose address is not known or on an old prefix, is reached through the mesh and announced in its place on its current address (its radio is not restarted). At most once per node every 30 min and 5 nodes per hour, not during a pause (radio or prefix out) or a Thread storm. |
+| `thread_diag_recovery` | `true` | With the Thread Anchor app: an unavailable mains node that a neighbor hears, whose address is not known or on an old prefix, is reached through the mesh and announced in its place on its current address (its radio is not restarted). At most once per node every 30 min and 5 nodes per hour, not during a pause (radio or prefix out) or a Thread storm. |
 | `passive_contact` | `false` | Count every IPv6 packet sent by a node and seen on the host as a contact (*Last contact*), including the reports the Matter Server does not forward because their value did not change, and the answers to pings sent by Home Assistant. Only the source address of the packets is read. Uses the `NET_RAW` privilege. |
 | `matter_fabric` | *(empty)* | Advanced: compressed fabric id of Home Assistant. Detected automatically when empty. |
-| `matter_server_url` | *(empty)* | Advanced: WebSocket address of the Matter Server (e.g. `ws://192.168.1.10:5580/ws`) when it does not run as the Matter Server add-on (Docker container, other machine). Defaults to the Matter Server add-on. |
+| `matter_server_url` | *(empty)* | Advanced: WebSocket address of the Matter Server (e.g. `ws://192.168.1.10:5580/ws`) when it does not run as the Matter Server app (Docker container, other machine). Defaults to the Matter Server app. |
 
 Automatic recovery is switched on and off with
-`switch.mesh_guardian_auto_recovery` (off at first start: turn it on to let the add-on ping lost nodes).
+`switch.mesh_guardian_auto_recovery` (off at first start: turn it on to let the app ping lost nodes).
 
 ## Entities
 
@@ -121,7 +121,7 @@ minute, border routers browsed again every 5 minutes.
 | `binary_sensor.mesh_guardian_thread_network_partitioned` | problem when there is more than one partition or leader | same | current |
 | `sensor.mesh_guardian_omr_prefix` | OMR prefix(es); several at once is an anomaly | same | current |
 | `binary_sensor.mesh_guardian_thread_storm` | problem during a Thread storm; start, duration, nodes, border routers detached, prefixes | every 5s over a sliding 15 minutes | ends after 15 quiet minutes |
-| `sensor.mesh_guardian_last_event` | text of the last event (its history is the event log) | every event | event counter reset when the add-on restarts |
+| `sensor.mesh_guardian_last_event` | text of the last event (its history is the event log) | every event | event counter reset when the app restarts |
 
 **Recovery** — Home Assistant read every 15 seconds.
 
@@ -129,7 +129,7 @@ minute, border routers browsed again every 5 minutes.
 |---|---|---|---|
 | `sensor.mesh_guardian_matter_nodes_unavailable` | nodes unavailable in Home Assistant; `routing` problem if detected | every 15s | current |
 | `sensor.mesh_guardian_matter_nodes_available` | nodes available in Home Assistant | every 15s | current |
-| `sensor.mesh_guardian_recovered_by_ping` | nodes back less than 3 min after an action on them: a ping (automatic or from the page) or a recovery attempt (total). This does not prove the action brought them back. Attributes: `back_on_their_own`, `gave_up`, `pings_sent`, and the same counters `since_start` and over `last_24h`, with `back_after_auto` / `back_after_manual` / `back_after_attempt` | every return | total: on reinstall or with the reset button; `since_start`: when the add-on restarts; `last_24h`: sliding |
+| `sensor.mesh_guardian_recovered_by_ping` | nodes back less than 3 min after an action on them: a ping (automatic or from the page) or a recovery attempt (total). This does not prove the action brought them back. Attributes: `back_on_their_own`, `gave_up`, `pings_sent`, and the same counters `since_start` and over `last_24h`, with `back_after_auto` / `back_after_manual` / `back_after_attempt` | every return | total: on reinstall or with the reset button; `since_start`: when the app restarts; `last_24h`: sliding |
 | `switch.mesh_guardian_auto_recovery` | automatic recovery on / off (off at first start) | when switched | kept across restarts |
 | `button.mesh_guardian_ping_all_nodes` | pings every node now, battery and unavailable nodes included; result in the `ping_all_done` event | when pressed | — |
 | `sensor.mesh_guardian_network_quality` | network quality in % over the last hour (see [Network quality](#network-quality)); `parts`, `score_24h`, `parts_24h`, `capped`, `median_response_ms` | every minute | with the reset button |
@@ -166,18 +166,18 @@ Pick any notification action; the text is in the variable `message`.
 
 ## Events
 
-Every event is written to the add-on log, published on the MQTT topic
+Every event is written to the app log, published on the MQTT topic
 `mesh_guardian/event` (JSON) and, optionally, appended to
 `/share/mesh_guardian/events.jsonl`.
 
 | Event | Meaning |
 |---|---|
-| `startup`, `addon_stop` | monitoring ready (with the version and the state of the automatic recovery), add-on stopping (with the signal received) |
+| `startup`, `addon_stop` | monitoring ready (with the version and the state of the automatic recovery), app stopping (with the signal received) |
 | `br_appeared`, `br_back`, `br_offline`, `br_change`, `br_renamed`, `br_removed` | border router life (role, partition, prefix…); a role change is reported once it held 60s |
 | `br_detach` | a border router left the network and came back within 30s (alone in its own partition): reported as a short detach of that border router, counted in its `detached_24h` and as a partition split for storms |
 | `leader_change`, `partition_change`, `omr_change`, `node_prefix_change` | network-wide changes — the usual cause of lost nodes; leader and partitions once the new state held 30s |
 | `matter_offline`, `matter_back`, `matter_appeared` | Matter node missing from / back in mDNS (not reported for a battery node still available in Home Assistant) |
-| `usb_link_lost`, `usb_link_back` | the USB/IP Link add-on lost / attached again a device (a radio plugged into another computer) |
+| `usb_link_lost`, `usb_link_back` | the USB/IP Link app lost / attached again a device (a radio plugged into another computer) |
 | `recovery_paused`, `recovery_resumed`, `recovery_catchup` | lost nodes not pinged while the radio of the border router is cut off (USB/IP Link) or its fixed OMR prefix is out with an error; once back, one targeted ping of the nodes that dropped meanwhile |
 | `omr_takeover`, `omr_takeover_end` | the other border routers favor their own OMR prefix instead of the one Thread Anchor fixes (`favored`, `wanted`) / the fixed one is favored again |
 | `omr_anchor_set` | the proposed OMR prefix was written into the options of Thread Anchor from the page |
@@ -280,12 +280,12 @@ advice, the node unavailable again). The table and the summary still show
 everything.
 
 Every parent change is then reported with the signal before / after (✅ better,
-≈ similar, ⚠️ worse, ? when a signal is unknown) and its probable cause. Over time, the add-on also learns
+≈ similar, ⚠️ worse, ? when a signal is unknown) and its probable cause. Over time, the app also learns
 which battery models change parent on their own.
 
 ## Names Home Assistant → Matter
 
-Every 5 minutes the add-on compares the name of every device **you renamed in
+Every 5 minutes the app compares the name of every device **you renamed in
 Home Assistant** with the name stored in its Matter node (NodeLabel attribute,
 Basic Information cluster), without writing anything:
 `sensor.mesh_guardian_nodes_to_rename` gives the nodes that differ. Press
@@ -340,7 +340,7 @@ What to know:
 ## Node table
 
 Open **Mesh Guardian** in the Home Assistant sidebar (tick **Show in sidebar**
-on the *Info* tab of the add-on if it is not there). The page follows the light
+on the *Info* tab of the app if it is not there). The page follows the light
 or dark theme of Home Assistant and adapts to phones.
 
 **At the top** — a one-line verdict (*All good*, *1 node unavailable*, *2
@@ -394,12 +394,12 @@ sort, again to reverse; the column menu brings the default order back. Sort,
 filter, columns and their order are remembered by your browser. The page
 refreshes itself every minute; **Refresh** does it at once.
 
-Opening the page and **Refresh** also make the add-on read every available node
+Opening the page and **Refresh** also make the app read every available node
 again, battery ones included: response time, uptime and contact, plus role and
 Thread tables (a battery node only gives its role and parent link, and only if it
 answers). Three nodes at a time, mains nodes first, at most once every
 5 minutes, never during a storm. The green dot blinks while the nodes are read
-(also after a start of the add-on, see Radio survey); the lines update as the
+(also after a start of the app, see Radio survey); the lines update as the
 answers come in.
 
 **Node panel** — click a node. On top, always shown: its name, area and model,
@@ -438,14 +438,14 @@ names, areas, addresses or prefixes) to copy or download and paste in an issue.
   soon as the node is a router again (its role is read every 20 seconds), and
   after 3 minutes at the latest.
 - **Recovery attempt** — replaces "Find a new link" on a Thread node that is
-  unavailable (router or end device). The add-on pings the node, then sends it
+  unavailable (router or end device). The app pings the node, then sends it
   the same command: if it gets through, the node restarts its
   Thread connection and picks its neighbors again. "Unavailable" means the
   Matter Server could not set up its subscription again, a long exchange; one
   command is much shorter and can get through a link that loses most messages.
   The result comes within a few minutes: back, still unavailable, or out of
   reach (nothing got through: cut its power for 10 s). Needs the Matter Server
-  based on matter.js (add-on 9 and later): the older one refuses any command
+  based on matter.js (app 9 and later): the older one refuses any command
   to an unavailable node, and the result is then "out of reach".
 - **Interview** — the Matter Server reads again everything the node describes
   (endpoints, clusters, attributes); useful after a firmware update.
@@ -477,9 +477,9 @@ The panel then shows the QR code and the code in digits, with a Copy button.
 From a typed code only the digits are shown: they do not hold what a QR code
 needs.
 
-The codes are kept by the add-on (`/data/pairing_codes.json`), not in the
+The codes are kept by the app (`/data/pairing_codes.json`), not in the
 Matter Server: they survive the reset or the removal of the node, an update
-and a restart of the add-on. They are lost if the add-on is uninstalled, and
+and a restart of the app. They are lost if the app is uninstalled, and
 they are part of its backup. They are never written to the log, the events or
 the report.
 
@@ -524,7 +524,7 @@ The **Reset** button of the node panel makes a node go back to its factory
 state without touching it. Matter has no reset command, but a node that
 leaves its last fabric (its last ecosystem) erases everything it learnt since
 it was paired, and most devices then restart, ready to be paired again. The
-add-on removes the node from every fabric it is in — the other ecosystems
+app removes the node from every fabric it is in — the other ecosystems
 first (Google Home, Apple Home…), Home Assistant last.
 
 - Only for an available node whose pairing code is kept (see above): the
@@ -558,7 +558,7 @@ first (Google Home, Apple Home…), Home Assistant last.
 
 A node gives a sign of life at a steady pace (about every minute for most mains
 nodes, the liveness interval of its Matter subscription). With
-`passive_contact` the add-on sees every packet and learns that pace (*Sign of
+`passive_contact` the app sees every packet and learns that pace (*Sign of
 life* in the technical details). A node silent for much longer is shown
 **silent** — probably without power — minutes before the Matter Server declares
 it unavailable. No radio traffic is added. The availability, the outages and the
@@ -566,7 +566,7 @@ quality score still follow the Matter Server.
 
 ### Where the values come from
 
-The add-on keeps a live link with the Matter Server and receives every report as
+The app keeps a live link with the Matter Server and receives every report as
 it arrives. Some nodes stop reporting their Thread diagnostics (role, neighbors)
 after a change of role, so the Matter Server keeps old values: mains nodes are
 read again once an hour (role, neighbor and route tables, addresses, counters).
@@ -577,7 +577,7 @@ minutes (mains) or every hour (battery); after a failed read the node is read
 again 2 minutes after it is back. A contact is any report, event, read, ping
 answer or (with `passive_contact`) packet of the node.
 
-**Old values.** The add-on remembers when a node gave each value (a report or
+**Old values.** The app remembers when a node gave each value (a report or
 a read). A value given more than 2 hours ago, or taken from the Matter Server
 cache without anyone knowing when the node gave it, is old: it is shown in
 grey, without colour or signal bars, with its age in the tooltip, and no
@@ -638,7 +638,7 @@ detached and the prefixes seen.
 
 ## Supervisor access
 
-The add-on asks for the Supervisor role `manager` (security rating 4 instead
+The app asks for the Supervisor role `manager` (security rating 4 instead
 of 5), because the Supervisor log cannot be read with a lower role.
 
 What it reads:
@@ -646,20 +646,20 @@ What it reads:
 - the Supervisor log, through one stream kept open (no polling). Only the
   lines about a stop, an exit, an update or a start of the Matter Server or of
   Home Assistant are used; nothing else is kept;
-- the name, version and log level of the Matter Server add-on;
+- the name, version and log level of the Matter Server app;
 - the log of the Matter Server, through one stream kept open. A line is read,
   counted and dropped: no text of the log is kept, only numbers per node and
   per hour, and the last address the Matter Server used for the node.
 
-What it never does: start, stop, restart, update or configure another add-on,
-or read another add-on's options.
+What it never does: start, stop, restart, update or configure another app,
+or read another app's options.
 
-If the log cannot be read, restarts are still detected by the add-on's live
+If the log cannot be read, restarts are still detected by the app's live
 link to the Matter Server, without the cause.
 
 **Matter Server · 24h** (node panel, and the optional *Losses 24h* column).
 Home Assistant only shows a node as unavailable after a while. Before that,
-the Matter Server already wrote what went wrong; the add-on counts it per node
+the Matter Server already wrote what went wrong; the app counts it per node
 over 24 hours:
 
 | Count | Meaning |
@@ -681,10 +681,10 @@ found.
 
 **No entities appear.**
 Check that the MQTT integration is set up with the Mosquitto broker, and look at
-the add-on log for `Connected to MQTT`.
+the app log for `Connected to MQTT`.
 
 **"Matter Server unreachable".**
-The Matter Server add-on must be running. If you run it elsewhere, set
+The Matter Server app must be running. If you run it elsewhere, set
 `matter_server_url` (for example `ws://192.0.2.10:5580/ws`).
 
 **A border router has a technical name such as "Speaker #92ED".**
@@ -709,7 +709,7 @@ again when you press **Find better parents**, **Find a new link** or
 **A border router shows offline although it works.**
 Some border routers do not always answer mDNS queries. A border router is only
 reported offline when it stops answering mDNS **and** no Matter node has heard
-it over the radio for 3 minutes; to know it, the add-on reads the neighbor table
+it over the radio for 3 minutes; to know it, the app reads the neighbor table
 of one or two routers next to it.
 
 **Why is the parent of a node "?".**
@@ -737,5 +737,5 @@ at the same time no longer swap names.
   does not publish them, the role shows `?` and only presence is followed.
 - Matter over Wi-Fi nodes are recovered and counted, but have no Thread radio
   data.
-- During the first 2½ minutes after start, the add-on stays quiet while it
+- During the first 2½ minutes after start, the app stays quiet while it
   discovers the network.

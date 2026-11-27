@@ -41,4 +41,4 @@ configuration:
     description: "Laisser vide : détection automatique."
   matter_server_url:
     name: "Adresse du Matter Server"
-    description: "Laisser vide : add-on Matter Server."
+    description: "Laisser vide : app Matter Server."

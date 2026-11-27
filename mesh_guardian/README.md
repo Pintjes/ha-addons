@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FPintjes%2Fha-addons"><img src="https://img.shields.io/badge/Home%20Assistant-add--on-41BDF5?logo=home-assistant&logoColor=white" alt="Home Assistant add-on"></a>
+  <a href="https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FPintjes%2Fha-addons"><img src="https://img.shields.io/badge/Home%20Assistant-app-41BDF5?logo=home-assistant&logoColor=white" alt="Home Assistant app"></a>
   <img src="https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FPintjes%2Fha-addons%2Fmain%2Fmesh_guardian%2Fconfig.yaml&query=%24.version&label=version&color=blue" alt="Version">
   <img src="https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-informational" alt="Architectures">
   <img src="https://img.shields.io/badge/status-beta-orange" alt="Status: beta">
@@ -22,13 +22,13 @@ node of your mesh in one table, and tells you what to fix — in plain language.
 
 
 > **Requirements:** Home Assistant OS or Supervised, the Matter integration,
-> an **MQTT broker** (Mosquitto broker add-on) and the **MQTT** integration.
+> an **MQTT broker** (Mosquitto broker app) and the **MQTT** integration.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Pintjes/ha-addons/main/mesh_guardian/images/screenshot.png" alt="Mesh Guardian page (demo data)" width="900">
 </p>
 
-## Why this add-on
+## Why this app
 
 **1. Lost nodes come back on their own.**
 Thread devices rarely die: they get *lost*. When a border router restarts or
@@ -86,14 +86,14 @@ All three only act when you press them, never automatically.
 - English and French.
 
 **Requirements:** Home Assistant OS or Supervised, the **Matter** integration
-(Matter Server add-on), the **Mosquitto broker** add-on and the **MQTT**
+(Matter Server app), the **Mosquitto broker** app and the **MQTT**
 integration. See the **Documentation** tab for installation, options and
 entities.
 
 ## Contributing
 
 Bug reports and ideas are welcome: [open an issue](https://github.com/Pintjes/ha-addons/issues/new/choose).
-Please include the add-on version and the relevant lines of the log. The code is not open for
+Please include the app version and the relevant lines of the log. The code is not open for
 reuse and contributions of code are not accepted: see the license below.
 
 ## License

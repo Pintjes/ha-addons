@@ -41,4 +41,4 @@ configuration:
     description: "Leave empty: detected automatically."
   matter_server_url:
     name: "Matter Server address"
-    description: "Leave empty: Matter Server add-on."
+    description: "Leave empty: Matter Server app."

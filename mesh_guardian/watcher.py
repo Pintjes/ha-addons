@@ -80,7 +80,7 @@ from suplog import SupervisorLog  # noqa: E402
 from store import load_json, save_json  # noqa: E402
 from webui import WebUI  # noqa: E402
 
-VERSION = "2.40.17"
+VERSION = "2.40.18"
 OMR_LEFT_KEEP_S = 7 * 86400   # an OMR prefix left by the border routers is remembered this long
 OMR_EPISODE_S = 1800          # OMR prefix changes closer than this count as one episode
 
@@ -182,7 +182,7 @@ DEVICE = {
     "identifiers": [BASE],
     "name": "Mesh Guardian",
     "manufacturer": "Pintjes",
-    "model": "Mesh Guardian (add-on)",
+    "model": "Mesh Guardian (app)",
     "configuration_url": "https://github.com/Pintjes/ha-addons",
     "sw_version": VERSION,
 }

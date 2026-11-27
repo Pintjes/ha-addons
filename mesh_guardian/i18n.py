@@ -390,7 +390,7 @@ FR = {
         "Les autres border routers ont repris la main sur le préfixe OMR : {fav} au lieu de {wanted}",
     "OMR prefix {wanted} favored again on the network ({m} min)":
         "Préfixe OMR {wanted} de nouveau retenu sur le réseau ({m} min)",
-    "Thread Anchor: OMR prefix {p} fixed, add-on restarted": "Thread Anchor : préfixe OMR {p} imposé, add-on redémarré",
+    "Thread Anchor: OMR prefix {p} fixed, app restarted": "Thread Anchor : préfixe OMR {p} imposé, app redémarrée",
     "Sweep skipped: {why}": "Balayage sauté : {why}",
     "Catch-up after the cut: every node that dropped is back": "Rattrapage après la coupure : toutes les nodes tombées sont revenues",
     "Catch-up after the cut: {n} nodes pinged ({names})": "Rattrapage après la coupure : {n} nodes relancées ({names})",
