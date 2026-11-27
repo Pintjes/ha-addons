@@ -26,7 +26,7 @@ controls your home, like a smart speaker.
                                  └─ otherwise ──▶ Extended OpenAI Conversation
                                                       │  (OpenAI-compatible request)
                                                       ▼
-                                          Voice Agent Bridge (this add-on)
+                                          Voice Agent Bridge (this app)
                                                       │  claude -p (Claude Code)
                                                       ▼
                                           ha-mcp ──▶ Home Assistant (states, history,
@@ -34,9 +34,9 @@ controls your home, like a smart speaker.
  Satellite ◀── text-to-speech ◀── streamed answer ◀──┘
 ```
 
-The add-on runs the official Claude Code CLI in non-interactive mode. Claude
+The app runs the official Claude Code CLI in non-interactive mode. Claude
 reaches your home through [ha-mcp](https://github.com/homeassistant-ai/ha-mcp),
-started inside the add-on with the add-on's own Home Assistant access: you do
+started inside the app with the app's own Home Assistant access: you do
 not create a long-lived access token.
 
 The answer is streamed, so the satellite starts speaking before Claude has
@@ -45,9 +45,9 @@ Claude session.
 
 ## What you need
 
-- Home Assistant OS or Supervised (add-ons).
+- Home Assistant OS or Supervised (apps).
 - [Extended OpenAI Conversation](https://github.com/jekalmin/extended_openai_conversation)
-  3.x (HACS). It is the bridge between Assist and this add-on.
+  3.x (HACS). It is the bridge between Assist and this app.
 - One of:
   - a **Claude Pro or Max plan** and a token from `claude setup-token`; usage is
     counted on the plan's Agent SDK credit;
@@ -58,7 +58,7 @@ something for other people, use an API key.
 
 ## Installation
 
-1. Add the repository and install **Voice Agent Bridge**.
+1. In **Settings → Apps**, add the repository and install **Voice Agent Bridge**.
 2. Get a token. On any computer with [Claude Code](https://code.claude.com)
    installed, run:
 
@@ -68,7 +68,7 @@ something for other people, use an API key.
 
    Sign in with your Claude account and copy the token (`sk-ant-oat01-…`).
 3. Paste it in **Configuration → Claude token**, choose the **Language**, save
-   and start the add-on.
+   and start the app.
 4. In the **Log** tab, check for `Voice Agent Bridge listening on port 8791`.
 
 ## Connect it to Assist
@@ -76,7 +76,7 @@ something for other people, use an API key.
 1. **Settings → Devices & services → Add integration → Extended OpenAI Conversation**:
    - **API key**: anything (for example `claude`), or the **Gateway key** if you set one;
    - **Base URL**: `http://<hostname>:8791/v1`, where `<hostname>` is shown on the
-     add-on **Info** tab (for example `abcd1234-voice-agent-bridge`).
+     app **Info** tab (for example `abcd1234-voice-agent-bridge`).
 2. Add a conversation agent to this entry:
    - **Model**: `claude`;
    - **Prompt**: keep it short; the gateway gives Claude its own instructions. A good
@@ -97,7 +97,7 @@ Say the wake word and ask: *"Which lights are on downstairs?"*
 
 ## House notes
 
-At first start the add-on creates `CLAUDE.md` in its configuration folder
+At first start the app creates `CLAUDE.md` in its configuration folder
 (`/addon_configs/<hostname>/CLAUDE.md`, reachable with the File editor or Samba).
 Describe your home there: who lives there, how you name rooms and devices,
 habits, rules. The file is read at every request: changes apply immediately.
@@ -107,14 +107,14 @@ Edit the notes straight from the **Claude** panel with the **✎ House notes**
 button (Ctrl+S saves).
 
 Prefer the File editor? Set **House notes file** to a path in your Home
-Assistant configuration folder, for example `claude_notes.md`. The add-on maps
+Assistant configuration folder, for example `claude_notes.md`. The app maps
 the Home Assistant configuration folder only to read and save that one file;
 Claude itself has no file access.
 
 ## Conversation history
 
-The add-on adds a **Claude** panel to the sidebar (tick **Show in sidebar** on
-the add-on Info tab). It shows every conversation, Claude on the left and you on
+The app adds a **Claude** panel to the sidebar (tick **Show in sidebar** on
+the app Info tab). It shows every conversation, Claude on the left and you on
 the right, whatever the source: a voice satellite (with its room), the panel
 itself, or Assist in the Home Assistant app.
 
@@ -127,7 +127,7 @@ microphone with the selected assistant (it works on local `http://` addresses to
 the exchange then appears in the panel, but voice and typed requests are separate
 conversations.
 Commands answered by Home Assistant itself (local intents) appear with a 🏠
-label. Home Assistant does not send them to the add-on: the panel reads them from
+label. Home Assistant does not send them to the app: the panel reads them from
 the Assist debug data when it opens, then every 10 seconds while it stays open.
 Home Assistant keeps only the last runs of each assistant in memory and clears
 them when it restarts, so open the panel now and then if you want all of them.
@@ -136,7 +136,7 @@ them when it restarts, so open the panel now and then if you want all of them.
 For the room of each satellite, keep the first line of the agent prompt as
 `Satellite room: {{ area_name(current_device_id) }}`.
 
-Each question and answer is written to the add-on log and, with **Logbook** on,
+Each question and answer is written to the app log and, with **Logbook** on,
 to the Home Assistant logbook (name *Claude*), so you find your voice
 conversations in **Logbook** and in **Settings → Voice assistants → ⋮ → Debug**.
 
@@ -179,7 +179,7 @@ conversations in **Logbook** and in **Settings → Voice assistants → ⋮ → 
 
 ## Security
 
-- Claude can do what the add-on's Home Assistant access allows, unless
+- Claude can do what the app's Home Assistant access allows, unless
   **Read-only** is on.
 - The instructions ask Claude never to unlock, open or disarm locks, garage
   doors, gates, alarms, vehicles or pool covers without your explicit "yes".
@@ -200,13 +200,13 @@ exhausted for now. Wait, or check your plan.
 **The satellite says "I did not finish".** The request went over **Maximum steps**
 or **Budget per request**. Ask something simpler, or raise them.
 
-**The satellite says Claude could not answer.** The add-on log gives the cause
+**The satellite says Claude could not answer.** The app log gives the cause
 on the `Claude error` line (kind of error, messages, turns, tools called). A
 failed request that only read the home is tried once more by itself; one that
 already acted on a device never is.
 
 **Extended OpenAI Conversation cannot connect.** Check the hostname and port
-`8791` in the base URL, and that the add-on is started.
+`8791` in the base URL, and that the app is started.
 
 **Answers are slow.** Use `haiku`, keep effort `low`, keep the house notes short
 and leave **Prefer handling commands locally** on.
@@ -215,14 +215,14 @@ and leave **Prefer handling commands locally** on.
 ## Contributing
 
 Bug reports and ideas are welcome: [open an issue](https://github.com/Pintjes/ha-addons/issues/new/choose).
-Please include the add-on version and the relevant lines of the log.
+Please include the app version and the relevant lines of the log.
 
 ## License
 
 Proprietary, see the [license agreement](https://github.com/Pintjes/ha-addons/blob/main/voice_agent_bridge/LICENSE) (French, with an English translation). © 2026 Pintjes. All rights reserved.
 Versions before 1.1.3 were published under GPL-3.0-or-later and stay under that license.
 
-Claude Code, which this add-on downloads when its image is built, is proprietary
+Claude Code, which this app downloads when its image is built, is proprietary
 software of Anthropic subject to Anthropic's terms. The agent's answers and
 actions come with no guarantee: do not rely on it for safety, alarm or access control.
 

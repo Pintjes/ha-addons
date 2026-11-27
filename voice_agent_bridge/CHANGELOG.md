@@ -4,6 +4,14 @@ All notable changes to this add-on are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.6] - 2026-11-27
+
+### Changed
+
+- Home Assistant now calls add-ons "apps" (**Settings → Apps**): the documentation,
+  the option descriptions, the spoken error messages and the log say "app"
+  (also in French: « l'app »). No change to how the app works.
+
 ## [1.1.5] - 2026-11-26
 
 ### Fixed

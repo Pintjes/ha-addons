@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FPintjes%2Fha-addons"><img src="https://img.shields.io/badge/Home%20Assistant-add--on-41BDF5?logo=home-assistant&logoColor=white" alt="Home Assistant add-on"></a>
+  <a href="https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FPintjes%2Fha-addons"><img src="https://img.shields.io/badge/Home%20Assistant-app-41BDF5?logo=home-assistant&logoColor=white" alt="Home Assistant app"></a>
   <img src="https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FPintjes%2Fha-addons%2Fmain%2Fvoice_agent_bridge%2Fconfig.yaml&query=%24.version&label=version&color=blue" alt="Version">
   <img src="https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-informational" alt="Architectures">
   <img src="https://img.shields.io/badge/status-beta-orange" alt="Status: beta">
@@ -19,7 +19,7 @@
 (Home Assistant Voice, ESPHome, the companion app): say the wake word, Claude
 answers out loud and runs your home.
 
-## Why this add-on
+## Why this app
 
 **1. Your Claude plan, no API key.**
 Already on Claude Pro or Max? Use it. Requests are counted on your plan's Agent SDK
@@ -28,7 +28,7 @@ credit: nothing else to pay, no API key to manage. (An Anthropic API key works t
 **2. Claude really understands your home.**
 Not only "turn on / turn off". Claude runs the official Claude Code agent with the
 full [ha-mcp](https://github.com/homeassistant-ai/ha-mcp) toolset: history,
-statistics, automation traces, logs, calendars, add-ons… It chains several steps,
+statistics, automation traces, logs, calendars, apps… It chains several steps,
 loads only the tools it needs (fast and cheap) and keeps the thread of the
 conversation. Ask *"why did the office heating stop last night?"* and it finds out.
 Simple commands still go to local intents first: instant and free.
@@ -53,14 +53,14 @@ See the **Documentation** tab for installation and setup.
 ## Contributing
 
 Bug reports and ideas are welcome: [open an issue](https://github.com/Pintjes/ha-addons/issues/new/choose).
-Please include the add-on version and the relevant lines of the log.
+Please include the app version and the relevant lines of the log.
 
 ## License
 
 Proprietary, see the [license agreement](https://github.com/Pintjes/ha-addons/blob/main/voice_agent_bridge/LICENSE) (French, with an English translation). © 2026 Pintjes. All rights reserved.
 Versions before 1.1.3 were published under GPL-3.0-or-later and stay under that license.
 
-Claude Code, which this add-on downloads when its image is built, is proprietary
+Claude Code, which this app downloads when its image is built, is proprietary
 software of Anthropic subject to Anthropic's terms. The agent's answers and
 actions come with no guarantee: do not rely on it for safety, alarm or access control.
 

@@ -94,7 +94,7 @@ def start_ha_mcp() -> str | None:
 
     def watch():
         code = proc.wait()
-        log.error("ha-mcp stopped (exit code %s), restarting the add-on", code)
+        log.error("ha-mcp stopped (exit code %s), restarting the app", code)
         os._exit(1)
 
     threading.Thread(target=watch, daemon=True).start()
@@ -733,7 +733,7 @@ class Handler(BaseHTTPRequestHandler):
                     text = ""
                 shown = ("/config/" + str(notes.relative_to(HA_CONFIG_DIR))
                          if HA_CONFIG_DIR in notes.parents else
-                         "/addon_configs/<add-on>/" + notes.name)
+                         "/addon_configs/<hostname>/" + notes.name)
                 self._json(200, {"path": shown, "text": text})
             return
         if path == "/health":

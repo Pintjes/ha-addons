@@ -43,7 +43,7 @@ configuration:
     description: all, ou une liste de modules ha-mcp séparés par des virgules (avancé).
   notes_file:
     name: Fichier de notes de la maison
-    description: Facultatif. Chemin dans le dossier de configuration de Home Assistant (par exemple claude_notes.md), modifiable avec le File editor. Vide = CLAUDE.md dans le dossier de configuration de l'add-on.
+    description: Facultatif. Chemin dans le dossier de configuration de Home Assistant (par exemple claude_notes.md), modifiable avec le File editor. Vide = CLAUDE.md dans le dossier de configuration de l'app.
   logbook:
     name: Journal de bord
     description: Inscrit chaque question et réponse dans le journal de bord de Home Assistant.

@@ -28,15 +28,15 @@ explicit confirmation from the user in this conversation. Ask, then wait for "ye
                          "the user refers to something said before, never mention this list otherwise):",
         "recent_user": "User",
         "recent_local": "Home Assistant",
-        "err_auth": "Claude is not signed in. Check the token in the gateway add-on configuration.",
+        "err_auth": "Claude is not signed in. Check the token in the gateway app configuration.",
         "err_limit": "The Claude usage limit has been reached for now. Try again later.",
         "err_timeout": "That took too long, I stopped. Try a simpler request.",
-        "err_generic": "Sorry, Claude could not answer. Look at the gateway add-on log.",
+        "err_generic": "Sorry, Claude could not answer. Look at the gateway app log.",
         "err_unfinished": "I did not finish: the request went over the limits set for one request. Try a simpler one.",
         "notes_template": """# House notes
 
 Write here what the voice assistant should know about your home. This file is read at every request,
-so changes apply immediately, without restarting the add-on. Keep it short: every line costs tokens.
+so changes apply immediately, without restarting the app. Keep it short: every line costs tokens.
 
 ## Who lives here
 
@@ -78,15 +78,15 @@ Demande, puis attends le « oui ».
                          "sinon ne mentionne jamais cette liste) :",
         "recent_user": "Utilisateur",
         "recent_local": "Home Assistant",
-        "err_auth": "Claude n'est pas connecté. Vérifie le jeton dans la configuration de l'add-on passerelle.",
+        "err_auth": "Claude n'est pas connecté. Vérifie le jeton dans la configuration de l'app passerelle.",
         "err_limit": "La limite d'utilisation de Claude est atteinte pour le moment. Réessaie plus tard.",
         "err_timeout": "C'était trop long, j'ai arrêté. Essaie une demande plus simple.",
-        "err_generic": "Désolé, Claude n'a pas pu répondre. Regarde le journal de l'add-on passerelle.",
+        "err_generic": "Désolé, Claude n'a pas pu répondre. Regarde le journal de l'app passerelle.",
         "err_unfinished": "Je n'ai pas fini : la demande a dépassé les limites fixées pour une demande. Essaie plus simple.",
         "notes_template": """# Notes de la maison
 
 Écris ici ce que l'assistant vocal doit savoir sur ta maison. Ce fichier est relu à chaque demande :
-les changements s'appliquent tout de suite, sans redémarrer l'add-on. Reste bref : chaque ligne coûte des jetons.
+les changements s'appliquent tout de suite, sans redémarrer l'app. Reste bref : chaque ligne coûte des jetons.
 
 ## Qui habite ici
 

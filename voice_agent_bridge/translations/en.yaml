@@ -43,7 +43,7 @@ configuration:
     description: all, or a comma-separated list of ha-mcp modules (advanced).
   notes_file:
     name: House notes file
-    description: Optional. Path in the Home Assistant config folder (for example claude_notes.md), editable with the File editor. Empty uses CLAUDE.md in the add-on config folder.
+    description: Optional. Path in the Home Assistant config folder (for example claude_notes.md), editable with the File editor. Empty uses CLAUDE.md in the app config folder.
   logbook:
     name: Logbook
     description: Write each question and answer in the Home Assistant logbook.
