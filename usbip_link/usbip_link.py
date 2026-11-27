@@ -45,7 +45,7 @@ import time
 import urllib.request
 from datetime import datetime
 
-VERSION = "0.4.4"
+VERSION = "0.4.5"
 LOG = logging.getLogger("usbip_link")
 STATE_TOPIC = "usbip_link/state"
 DISCOVERY = "homeassistant"
@@ -84,17 +84,17 @@ TEXTS = {
         "{name}: attachment refused: {err}": "{name} : attachement refusé : {err}",
         "Server {server} does not answer (port {port})": "Le serveur {server} ne répond pas (port {port})",
         "Server {server} answers again": "Le serveur {server} répond à nouveau",
-        "Add-on {slug} restarted": "Add-on {slug} redémarré",
-        "Add-on {slug} restarted: it started before the device was attached":
-            "Add-on {slug} redémarré : il avait démarré avant l'attachement du périphérique",
-        "Cannot restart the add-on {slug}: {err}": "Impossible de redémarrer l'add-on {slug} : {err}",
-        "Cannot restart the add-on {slug}: {err} (trying again for up to {m} min)":
-            "Impossible de redémarrer l'add-on {slug} : {err} (nouvel essai pendant {m} min au plus)",
-        "Add-on {slug} restarted after {n} tries": "Add-on {slug} redémarré au bout de {n} essais",
-        "Add-on {slug} not restarted after {m} min: {err}. It may be stuck on the dead device: stop it, then start it "
+        "App {slug} restarted": "App {slug} redémarrée",
+        "App {slug} restarted: it started before the device was attached":
+            "App {slug} redémarrée : elle avait démarré avant l'attachement du périphérique",
+        "Cannot restart the app {slug}: {err}": "Impossible de redémarrer l'app {slug} : {err}",
+        "Cannot restart the app {slug}: {err} (trying again for up to {m} min)":
+            "Impossible de redémarrer l'app {slug} : {err} (nouvel essai pendant {m} min au plus)",
+        "App {slug} restarted after {n} tries": "App {slug} redémarrée au bout de {n} essais",
+        "App {slug} not restarted after {m} min: {err}. It may be stuck on the dead device: stop it, then start it "
         "again by hand":
-            "Add-on {slug} non redémarré après {m} min : {err}. Il est peut-être bloqué sur le périphérique mort : "
-            "l'arrêter puis le redémarrer à la main",
+            "App {slug} non redémarrée après {m} min : {err}. Elle est peut-être bloquée sur le périphérique mort : "
+            "l'arrêter puis la redémarrer à la main",
         "{name}: already attached (port {port}, {server} {busid}), taken as it is":
             "{name} : déjà attaché (port {port}, {server} {busid}), repris tel quel",
         "{name}: server {server} answers again after a silence, the device is detached and attached again (the link may "
@@ -119,8 +119,8 @@ TEXTS = {
         "Connected to MQTT": "Connecté à MQTT",
         "No MQTT broker yet: the state is only in the log until it answers (trying again every {s} s)":
             "Pas encore de broker MQTT : l'état n'est que dans le journal tant qu'il ne répond pas (nouvel essai toutes les {s} s)",
-        "omr_prefix is set but no longer used here: the fixed OMR prefix moved to the Thread Anchor add-on":
-            "omr_prefix est rempli mais ne sert plus ici : le préfixe OMR fixe est passé dans l'add-on Thread Anchor",
+        "omr_prefix is set but no longer used here: the fixed OMR prefix moved to the Thread Anchor app":
+            "omr_prefix est rempli mais ne sert plus ici : le préfixe OMR fixe est passé dans l'app Thread Anchor",
     },
 }
 LANG = "en"
@@ -742,11 +742,11 @@ def do_restarts(slugs, if_running, sup=None):
     for slug in slugs:
         res = restart_one(slug, if_running, sup)
         if res == "done":
-            LOG.info(t("Add-on {slug} restarted: it started before the device was attached" if if_running
-                       else "Add-on {slug} restarted", slug=slug))
+            LOG.info(t("App {slug} restarted: it started before the device was attached" if if_running
+                       else "App {slug} restarted", slug=slug))
             done.append(slug)
         elif res != "skipped":
-            LOG.warning(t("Cannot restart the add-on {slug}: {err}", slug=slug, err=res[1]))
+            LOG.warning(t("Cannot restart the app {slug}: {err}", slug=slug, err=res[1]))
     return done
 
 
@@ -785,23 +785,23 @@ class RestartQueue:
             if res == "skipped":
                 del self.items[slug]
             elif res == "done":
-                LOG.info(t("Add-on {slug} restarted: it started before the device was attached" if it["if_running"]
-                           else "Add-on {slug} restarted", slug=slug))
+                LOG.info(t("App {slug} restarted: it started before the device was attached" if it["if_running"]
+                           else "App {slug} restarted", slug=slug))
                 if it["tries"] > 1:
-                    LOG.info(t("Add-on {slug} restarted after {n} tries", slug=slug, n=it["tries"]))
+                    LOG.info(t("App {slug} restarted after {n} tries", slug=slug, n=it["tries"]))
                 del self.items[slug]
                 done.append(slug)
             else:
                 err = res[1]
                 if not retryable(err):
-                    LOG.warning(t("Cannot restart the add-on {slug}: {err}", slug=slug, err=err))
+                    LOG.warning(t("Cannot restart the app {slug}: {err}", slug=slug, err=err))
                     del self.items[slug]
                 elif now >= it["until"]:
-                    LOG.warning(t("Add-on {slug} not restarted after {m} min: {err}. It may be stuck on the dead device: "
+                    LOG.warning(t("App {slug} not restarted after {m} min: {err}. It may be stuck on the dead device: "
                                   "stop it, then start it again by hand", slug=slug, m=RETRY_MAX_S // 60, err=err))
                     del self.items[slug]
                 elif it["tries"] == 1:   # said at the first refusal only
-                    LOG.warning(t("Cannot restart the add-on {slug}: {err} (trying again for up to {m} min)", slug=slug,
+                    LOG.warning(t("Cannot restart the app {slug}: {err} (trying again for up to {m} min)", slug=slug,
                                   err=err, m=RETRY_MAX_S // 60))
         self.next_try = now + RETRY_S
         return done
@@ -823,7 +823,7 @@ def main():
     load_module()
     link = Link(options)
     if str(options.get("omr_prefix") or "").strip():
-        LOG.warning(t("omr_prefix is set but no longer used here: the fixed OMR prefix moved to the Thread Anchor add-on"))
+        LOG.warning(t("omr_prefix is set but no longer used here: the fixed OMR prefix moved to the Thread Anchor app"))
     mq = Mqtt(link)
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())

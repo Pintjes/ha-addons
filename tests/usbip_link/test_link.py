@@ -384,9 +384,9 @@ try:
 finally:
     ul.LOG.removeHandler(cap2)
 msgs = cap2.messages
-assert sum("Cannot restart the add-on otbr: HTTP Error 503 (trying again for up to 5 min)" in m for m in msgs) == 1, msgs
-assert any("Cannot restart the add-on gone: HTTP Error 404" in m and "trying again" not in m for m in msgs)
-assert any("Add-on otbr restarted after 4 tries" in m for m in msgs) and any("Add-on zha not restarted after 5 min" in m for m in msgs)
+assert sum("Cannot restart the app otbr: HTTP Error 503 (trying again for up to 5 min)" in m for m in msgs) == 1, msgs
+assert any("Cannot restart the app gone: HTTP Error 404" in m and "trying again" not in m for m in msgs)
+assert any("App otbr restarted after 4 tries" in m for m in msgs) and any("App zha not restarted after 5 min" in m for m in msgs)
 # un nouvel ordre pendant l'attente : fusionne ; « seulement ceux qui tournent » ne l'emporte pas sur « toujours »
 q2 = ul.RestartQueue(sup=lambda p, method="GET", timeout=30: {"state": "started"})
 q2.add(["a"], True, 0.0)

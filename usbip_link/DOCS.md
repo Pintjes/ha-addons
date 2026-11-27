@@ -6,7 +6,7 @@ device is attached again by itself as soon as it is back. Made for Home Assistan
 virtual machine that has no USB (Hyper-V on Windows 11 Pro), with a radio such as the
 Home Assistant Connect ZBT-2 plugged into the host.
 
-> **Beta.** The add-on loads a kernel module and writes to `/sys`: it keeps the `SYS_ADMIN` and
+> **Beta.** The app loads a kernel module and writes to `/sys`: it keeps the `SYS_ADMIN` and
 > `SYS_MODULE` rights, but no longer asks for full access to the devices, so **Protection mode
 > can stay on** (0.4.0). It has its own AppArmor profile, `apparmor.txt`, in *complain* mode for
 > now: it only logs what it would refuse, nothing is blocked.
@@ -14,17 +14,17 @@ Home Assistant Connect ZBT-2 plugged into the host.
 ## How it works
 
 The computer the device is plugged into shares it with **USB/IP** (TCP port 3240). The
-add-on loads the `vhci-hcd` module of Home Assistant OS (a virtual USB controller) and
+app loads the `vhci-hcd` module of Home Assistant OS (a virtual USB controller) and
 attaches the device to it: Home Assistant then sees a USB device, `/dev/ttyACM0` and
-`/dev/serial/by-id/…` included, and the other add-ons use it as usual.
+`/dev/serial/by-id/…` included, and the other apps use it as usual.
 
-Every `check_interval` seconds the add-on checks the link:
+Every `check_interval` seconds the app checks the link:
 
 - not attached → attached as soon as the server answers;
 - an attachment counts only once the device is really there (and its serial port, for a CDC ACM device such
   as the ZBT-2), within 15 s; else its port is detached and it is tried again. A port taken by a device that
   never appeared (`usbip port` does not show it, and the server then answers `Device busy (exported)`) is
-  detached too, at the start of the add-on and before any attachment (0.4.4);
+  detached too, at the start of the app and before any attachment (0.4.4);
 - server silent three checks in a row → the device is detached (a dead link would keep the
   port busy for a long time) and attached again when the server is back;
 - server silent for less than that (a single check is enough), then back → the device is detached and
@@ -32,18 +32,18 @@ Every `check_interval` seconds the add-on checks the link:
   never notice that the link is dead (0.4.2);
 - Home Assistant's own clock jumps by more than 20 seconds (the virtual machine was paused, as Hyper-V
   does when Windows restarts with "Save": it is saved, then restored a minute later) → the device is
-  detached at once, without waiting for the server, and attached again when it answers, then the add-ons
+  detached at once, without waiting for the server, and attached again when it answers, then the apps
   of `restart_addons` are restarted (0.4.2);
-- attached again after a loss → the add-ons of `restart_addons` are restarted (the
+- attached again after a loss → the apps of `restart_addons` are restarted (the
   OpenThread border router opens its radio only when it starts);
 - attached for the first time (start of Home Assistant) → those of them that already run,
   or are in error, are restarted once: they may have started before the device was there.
 
-A restart of the add-on itself does not detach anything, and restarts nothing: a device
+A restart of the app itself does not detach anything, and restarts nothing: a device
 found attached is taken as it is (the log says so), and its state is published only once checked.
 
 A restart that Home Assistant refuses (503 while it starts, or 400 while it does not see the serial port
-yet) is tried again every 15 seconds for 5 minutes, and the log says so. Without a MQTT broker at the start, the add-on keeps
+yet) is tried again every 15 seconds for 5 minutes, and the log says so. Without a MQTT broker at the start, the app keeps
 looking for it every 30 seconds.
 
 ## 1. Windows: share the device (usbipd-win)
@@ -75,26 +75,26 @@ password.
 > Get-NetFirewallRule -DisplayName "usbipd" | Set-NetFirewallRule -RemoteAddress <IP of Home Assistant>
 > ```
 
-## 2. Home Assistant: the add-on
+## 2. Home Assistant: the app
 
 | Option | |
 |---|---|
 | `server` | address (or name) of the computer that shares the device |
 | `devices` | one entry per device: `name`, and `hardware_id` (`VID:PID`, recommended: the USB port can change) or `bus_id` |
 | `check_interval` | seconds between two checks (10) |
-| `restart_addons` | add-ons restarted after the device is attached again, e.g. `core_openthread_border_router` |
+| `restart_addons` | apps restarted after the device is attached again, e.g. `core_openthread_border_router` |
 | `language` | `en` or `fr` |
 
 `omr_prefix`, `omr_preference` and `otbr_addon` of 0.2.x are no longer used: see below.
 
-Start the add-on: the log says `ZBT-2: attached (… 2-3)`. If it says `Cannot remount /sys
+Start the app: the log says `ZBT-2: attached (… 2-3)`. If it says `Cannot remount /sys
 writable`, turn **Protection mode** off in the Info tab and start it again, then tell us.
-An add-on installed before 0.4.0 keeps the Protection mode it had (off): turn it on in the Info
+An app installed before 0.4.0 keeps the Protection mode it had (off): turn it on in the Info
 tab when you want to try it.
 
 ## 3. The radio: OpenThread Border Router
 
-In the OpenThread Border Router add-on, choose the device (`/dev/serial/by-id/…ZBT-2…`),
+In the OpenThread Border Router app, choose the device (`/dev/serial/by-id/…ZBT-2…`),
 baud rate **460800**, **hardware flow control** on (ZBT-2 with the OpenThread firmware).
 To join an existing Thread network (Google, Apple…) instead of creating a new one, share
 its credentials first (Home Assistant companion app → Troubleshooting → Sync Thread
@@ -102,7 +102,7 @@ credentials), then **Settings → Thread → join**.
 
 ## 4. A stable OMR prefix: Thread Anchor
 
-The fixed OMR prefix of 0.2.x (`omr_prefix`) moved to its own add-on,
+The fixed OMR prefix of 0.2.x (`omr_prefix`) moved to its own app,
 [Thread Anchor](../thread_anchor/): it serves any OpenThread border router, with or without
 USB/IP. Coming from 0.2.x: set the same prefix in Thread Anchor, check that its *OMR prefix
 anchored* entity is on, then empty `omr_prefix` here (a filled one only gives a warning in the

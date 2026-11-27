@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.5] - 2026-11-27
+
+### Changed
+
+- Wording: Home Assistant now says "app" instead of "add-on" (**Settings → Apps**): the presentation page,
+  the documentation, the option labels (English and French) and the messages of the log follow. No change to
+  the behaviour; names of options and technical names are unchanged.
+
 ## [0.4.4] - 2026-11-26
 
 ### Fixed

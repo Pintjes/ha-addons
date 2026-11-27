@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FPintjes%2Fha-addons"><img src="https://img.shields.io/badge/Home%20Assistant-add--on-41BDF5?logo=home-assistant&logoColor=white" alt="Home Assistant add-on"></a>
+  <a href="https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FPintjes%2Fha-addons"><img src="https://img.shields.io/badge/Home%20Assistant-app-41BDF5?logo=home-assistant&logoColor=white" alt="Home Assistant app"></a>
   <img src="https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FPintjes%2Fha-addons%2Fmain%2Fusbip_link%2Fconfig.yaml&query=%24.version&label=version&color=blue" alt="Version">
   <img src="https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-informational" alt="Architectures">
   <img src="https://img.shields.io/badge/status-beta-orange" alt="Status: beta">
@@ -11,7 +11,7 @@
   <a href="https://github.com/Pintjes/ha-addons/blob/main/usbip_link/LICENSE"><img src="https://img.shields.io/badge/licence-propri%C3%A9taire-lightgrey" alt="Licence : propriétaire"></a>
 </p>
 
-> **Beta.** The add-on loads a kernel module and attaches devices (`SYS_ADMIN`, `SYS_MODULE`),
+> **Beta.** The app loads a kernel module and attaches devices (`SYS_ADMIN`, `SYS_MODULE`),
 > with its own AppArmor profile and without full access to the devices: **Protection mode can
 > stay on** (0.4.0).
 
@@ -20,7 +20,7 @@ and keeps them plugged in.** Made for Home Assistant in a virtual machine
 without USB (Hyper-V on Windows), with a radio such as the Home Assistant
 Connect ZBT-2 plugged into the host and shared with usbipd-win.
 
-## Why this add-on
+## Why this app
 
 **1. You don't wake up without a radio.**
 A USB/IP client that attaches once at start works until the computer that
@@ -42,7 +42,7 @@ suffers.
 ## Also
 
 - For Home Assistant the device is a local one: `/dev/serial/by-id/…`, usable
-  by any add-on or integration.
+  by any app or integration.
 - One entity per device (attached or not, number of attachments, last error)
   and one for the latency of the link, on MQTT.
 - A Thread network that keeps changing its OMR prefix (Matter devices dropping
@@ -50,7 +50,7 @@ suffers.
   any OpenThread border router, through USB/IP Link or not.
 - Read by [Mesh Guardian](../mesh_guardian/), which says when the radio of a
   border router is cut off.
-- A restart of the add-on detaches nothing.
+- A restart of the app detaches nothing.
 
 Full documentation: [DOCS.md](DOCS.md).
 

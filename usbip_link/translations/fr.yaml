@@ -16,16 +16,16 @@ configuration:
     name: "Vérifier toutes les (s)"
     description: "Secondes entre deux vérifications du lien."
   restart_addons:
-    name: "Add-ons à redémarrer"
-    description: "Redémarrés après un nouvel attachement, p. ex. core_openthread_border_router."
+    name: "Apps à redémarrer"
+    description: "Redémarrées après un nouvel attachement, p. ex. core_openthread_border_router."
   omr_prefix:
     name: "Préfixe OMR (obsolète)"
-    description: "Ne sert plus : le préfixe OMR fixe est passé dans l'add-on Thread Anchor. Laisser vide."
+    description: "Ne sert plus : le préfixe OMR fixe est passé dans l'app Thread Anchor. Laisser vide."
   omr_preference:
     name: "Préférence OMR (obsolète)"
     description: "Ne sert plus (voir Thread Anchor)."
   otbr_addon:
-    name: "Add-on border router (obsolète)"
+    name: "App border router (obsolète)"
     description: "Ne sert plus (voir Thread Anchor)."
   debug:
     name: "Débogage"

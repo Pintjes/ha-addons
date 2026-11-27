@@ -16,16 +16,16 @@ configuration:
     name: "Check every (s)"
     description: "Seconds between two checks of the link."
   restart_addons:
-    name: "Add-ons to restart"
+    name: "Apps to restart"
     description: "Restarted after the device is attached again, e.g. core_openthread_border_router."
   omr_prefix:
     name: "OMR prefix (no longer used)"
-    description: "No longer used: the fixed OMR prefix moved to the Thread Anchor add-on. Leave empty."
+    description: "No longer used: the fixed OMR prefix moved to the Thread Anchor app. Leave empty."
   omr_preference:
     name: "OMR preference (no longer used)"
     description: "No longer used (see Thread Anchor)."
   otbr_addon:
-    name: "Border router add-on (no longer used)"
+    name: "Border router app (no longer used)"
     description: "No longer used (see Thread Anchor)."
   debug:
     name: "Debug"
