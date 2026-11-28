@@ -1,10 +1,11 @@
 name: Mesh Guardian
-version: "2.40.18"
+version: "2.40.19"
 slug: mesh_guardian
 url: https://github.com/Pintjes/ha-addons
 description: >-
-  Keeps your Thread / Matter devices online: automatic recovery of lost nodes,
-  a live table of every node, border router monitoring and radio advice.
+  Helps keep your Thread / Matter devices online: recovery of lost nodes (off by
+  default), a live table of every node, border router monitoring and radio
+  advice. Beta.
 arch:
   - amd64
   - aarch64

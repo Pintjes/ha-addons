@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-informational" alt="Architectures">
   <img src="https://img.shields.io/badge/status-beta-orange" alt="Status: beta">
   <a href="https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml"><img src="https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/Pintjes/ha-addons/blob/main/mesh_guardian/LICENSE"><img src="https://img.shields.io/badge/licence-propri%C3%A9taire-lightgrey" alt="Licence : propriétaire"></a>
+  <a href="https://github.com/Pintjes/ha-addons/blob/main/mesh_guardian/LICENSE"><img src="https://img.shields.io/badge/license-proprietary-lightgrey" alt="License: proprietary"></a>
 </p>
 
 > **Beta.** Mesh Guardian has been tested on one installation only. Testers with
@@ -20,9 +20,9 @@
 **Mesh Guardian keeps your Thread / Matter devices online**, shows you every
 node of your mesh in one table, and tells you what to fix — in plain language.
 
-
-> **Requirements:** Home Assistant OS or Supervised, the Matter integration,
-> an **MQTT broker** (Mosquitto broker app) and the **MQTT** integration.
+> **Requirements:** Home Assistant OS or Supervised, the **Matter** integration
+> (Matter Server app), an **MQTT broker** (Mosquitto broker app) and the
+> **MQTT** integration.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Pintjes/ha-addons/main/mesh_guardian/images/screenshot.png" alt="Mesh Guardian page (demo data)" width="900">
@@ -30,13 +30,13 @@ node of your mesh in one table, and tells you what to fix — in plain language.
 
 ## Why this app
 
-**1. Lost nodes come back on their own.**
+**1. Lost nodes can come back on their own**, once you turn on the
+*Automatic recovery* switch (off by default).
 Thread devices rarely die: they get *lost*. When a border router restarts or
 hands over the leader role, the network prefix can change; the device still
 works in the mesh, but Home Assistant shows it *unavailable* until you restart
 something. Mesh Guardian notices it and pings the node through the Matter
-Server, which finds it again — within minutes, without restarting
-anything. It holds back during Home Assistant restarts and Thread
+Server, which can then find it again, without restarting anything. It holds back during Home Assistant restarts and Thread
 storms, when pinging would only add traffic.
 
 **2. Your whole mesh in one page.**
@@ -47,25 +47,26 @@ and signal, the border router it reaches Home Assistant through and in how many
 hops, its response time, power and battery, last contact and a one-line advice
 such as *Remove the battery 10s*. Ping a node, make it look for a new link or
 interview it again from its line; keep the pairing code of each device and pair
-a device again from the page. A node that suddenly goes silent is
-flagged minutes before Home Assistant marks it unavailable. Sort, filter, pick
+a device again from the page. A node that suddenly goes silent can be
+flagged minutes before Home Assistant marks it unavailable (with the *Passive
+contact* option). Sort, filter, pick
 and move the columns; 7-day curves for every node; light and dark theme, phone
 layout.
 
 **3. Know what your border routers really do.**
-Any brand — Google, Apple, Amazon, Home Assistant Connect… Mesh Guardian
-follows each border router (online, role, partition, network prefix), the
+Any border router that announces itself over mDNS (tested so far with Google).
+Mesh Guardian follows each border router (online, role, partition, network prefix), the
 leader, network splits and Thread storms, and recognizes when Home Assistant
 has lost its route to the Thread network (border router on another VLAN,
 IPv6 routing blocked).
 
-**4. Three buttons you will not find elsewhere.**
+**4. Three manual actions.**
 **Ping all nodes** checks every node at once, battery-powered ones included.
 **Rename nodes** writes the names you gave your devices in Home Assistant into
 the Matter nodes themselves, so tools that read the node show the same names.
 **Find better parents** asks the battery devices stuck on a poor parent to
 attach again and pick a better one, without removing a battery.
-All three only act when you press them, never automatically.
+All three act only when you press them.
 
 ## Also
 
@@ -85,17 +86,13 @@ All three only act when you press them, never automatically.
 - Local only: no cloud, no telemetry.
 - English and French.
 
-**Requirements:** Home Assistant OS or Supervised, the **Matter** integration
-(Matter Server app), the **Mosquitto broker** app and the **MQTT**
-integration. See the **Documentation** tab for installation, options and
-entities.
+See the **Documentation** tab for installation, options and entities.
 
 ## Contributing
 
 Bug reports and ideas are welcome: [open an issue](https://github.com/Pintjes/ha-addons/issues/new/choose).
-Please include the app version and the relevant lines of the log. The code is not open for
-reuse and contributions of code are not accepted: see the license below.
+Please include the app version and the relevant lines of the log.
 
 ## License
 
-© 2026 Pintjes. All rights reserved. See [LICENSE](https://github.com/Pintjes/ha-addons/blob/main/mesh_guardian/LICENSE) (end user license agreement, French text prevails). Versions before 2.40.13 stay under GPL-3.0-or-later.
+Proprietary, © 2026 Pintjes: see the [EULA](https://github.com/Pintjes/ha-addons/blob/main/mesh_guardian/LICENSE) (French text prevails, English translation included). Versions before 2.40.13 were published under GPL-3.0-or-later and keep that license.

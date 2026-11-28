@@ -1,7 +1,8 @@
 # Mesh Guardian
 
-Mesh Guardian watches over your Thread / Matter network, brings lost Matter
-nodes back automatically and tells you which radio links are weak and what to
+Mesh Guardian watches over your Thread / Matter network, can bring lost Matter
+nodes back (once you turn on the *Automatic recovery* switch, off by default)
+and tells you which radio links are weak and what to
 do about them.
 
 ## Contents
@@ -66,8 +67,9 @@ border routers of other networks (e.g. a neighbor's) are ignored.
 
 ## Installation
 
-> **Requirements:** an MQTT broker (the **Mosquitto broker** app) and the
-> **MQTT** integration. Without them no entity is created.
+> **Requirements:** Home Assistant OS or Supervised, the Matter integration with
+> the Matter Server app, an MQTT broker (the **Mosquitto broker** app) and the
+> **MQTT** integration. Without MQTT no entity is created.
 
 1. Add the repository `https://github.com/Pintjes/ha-addons` to Home Assistant
    (**Settings → Apps → Install app → ⋮ → Repositories**).
@@ -77,9 +79,6 @@ border routers of other networks (e.g. a neighbor's) are ignored.
 
 After about 2½ minutes the log shows `Monitoring ready`, and a **Mesh
 Guardian** device with its entities appears in the MQTT integration.
-
-**Requirements:** Home Assistant OS or Supervised, the Matter integration with
-the Matter Server app, the Mosquitto broker app and the MQTT integration.
 
 ## Configuration
 
@@ -196,8 +195,8 @@ Every event is written to the app log, published on the MQTT topic
 | `radio_survey`, `radio_advice`, `parent_change` | radio quality and advice (also shown in the node table) |
 | `names`, `name_synced` | names Home Assistant → Matter (Rename nodes button) |
 | `reattach`, `reattach_node`, `reattach_result`, `reattach_done` | parent search (Find better parents button): start, node asked to attach again, its link before and after (`result`: `better`, `worse`, `similar`, `same`, `unknown`, then `noanswer` if the node never answered; `unsupported` or `failed` when the node refuses; `restarted` for the Thread restart of a router, a trial), summary |
-| `recover_node`, `recover_alive`, `recover_proxy`, `recover_result` | recovery attempt on an unavailable node (button of the node table): start; alive test (`heard`: routers that hear it on the radio, `ping_ok` / `ping_ko`: addresses); announcement in its place when it answers the ping without announcing itself (trial), or on the address the Thread diagnostic of Thread Anchor found (a node heard on the radio whose address is not known or on an old prefix: reached through the mesh by its RLOC16 or its mesh-local EID; that announcement is kept until the node announces itself again on the prefix of the network); once the Thread diagnostic ran, the fail-safe and ConnectNetwork are never sent; then `result`: `back_announce` (back once announced in its place), `announced` (announced in its place, not back yet: the announcement stays), `unknown` (the Thread diagnostic gave no way to reach it), `back`, `noanswer` (command sent, node still unavailable), `unreachable` (nothing got through), `failed` (refused by the node), `stale` (still on an old OMR prefix: not sent), `old_prefix_only` (the Thread diagnostic finds only old-prefix addresses: a remedy on the border router is possible, with the user's agreement), `frozen` (heard on the radio, no answer through the mesh: only then is cutting its power suggested, as the last resort) |
-| `auto_diag` | automatic recovery by the Thread diagnostic (option `thread_diag_recovery`): an unavailable mains node whose address is not known or on an old prefix, heard by a neighbor in the last 15 min (every 30 min at most) or, when nobody hears it, asked by its mesh-local EID (every 2 h at most); then the announcement in its place on its current address. Never the restart of its radio; 5 nodes per hour, not during a pause or a storm. Cutting the power of a node is only ever suggested after the diagnostic proved its network stack stuck (`frozen`: heard by a neighbor in the last 15 min, no answer through the mesh) |
+| `recover_node`, `recover_alive`, `recover_proxy`, `recover_result` | recovery attempt on an unavailable node; `result`: `back_ping`, `reachable`, `back`, `back_announce`, `announced`, `noanswer`, `unreachable`, `failed`, `stale`, `old_prefix_only`, `frozen` (only then is cutting its power suggested), `unknown` |
+| `auto_diag` | automatic Thread diagnostic of an unavailable mains node (option `thread_diag_recovery`) |
 | `proxy_released`, `proxy_expired` | an announcement made in a node's place is withdrawn: the node announces itself again on the prefix of the network / still not after 24 h |
 | `node_reset` | a node was reset from a distance (Reset button of the node panel), with the fabrics it left and `result` (`reset`, or `unsure` when it did not confirm leaving Home Assistant) |
 | `node_removed` | a node was removed from Home Assistant (Remove button) |
@@ -252,7 +251,7 @@ unstable when it crashed at least twice in 24h or detached at least 3 times
 (detaches shared by many nodes in one survey interval are a network episode and
 are not counted). The advice is hidden for 24h after a search.
 
-**Restarts** — a power cut is never instability. A restart counts as a crash
+**Restarts** — a power cut is not counted as instability. A restart counts as a crash
 when the node reports one (watchdog, brown-out, software reset); *power on*, a
 software update, or several mains nodes restarting within 5 minutes are a power
 cut and are ignored. Without any reason reported, an isolated restart is not
@@ -318,8 +317,8 @@ What to know:
 - Thread chooses the parent, not Mesh Guardian. The new link is usually
   better, sometimes the same parent is kept (no better router in range), and
   it can be weaker. There is no way back to the previous parent. This is why
-  nodes with a good link are never touched.
-- This button never touches a router: a router has no parent. A mains-powered
+  nodes with a good link are not touched.
+- This button does not touch a router: a router has no parent. A mains-powered
   device attached as a child (*End* in the table) has one and can be moved.
   (*Find a new link* in the node table can restart the Thread interface of a
   router, as a trial: see *Actions on one node*.)
@@ -398,7 +397,7 @@ Opening the page and **Refresh** also make the app read every available node
 again, battery ones included: response time, uptime and contact, plus role and
 Thread tables (a battery node only gives its role and parent link, and only if it
 answers). Three nodes at a time, mains nodes first, at most once every
-5 minutes, never during a storm. The green dot blinks while the nodes are read
+5 minutes, not during a storm. The green dot blinks while the nodes are read
 (also after a start of the app, see Radio survey); the lines update as the
 answers come in.
 
@@ -480,7 +479,7 @@ needs.
 The codes are kept by the app (`/data/pairing_codes.json`), not in the
 Matter Server: they survive the reset or the removal of the node, an update
 and a restart of the app. They are lost if the app is uninstalled, and
-they are part of its backup. They are never written to the log, the events or
+they are part of its backup. They are not written to the log, the events or
 the report.
 
 A device that is paired again gets a new node id. Its code follows it when
@@ -638,8 +637,9 @@ detached and the prefixes seen.
 
 ## Supervisor access
 
-The app asks for the Supervisor role `manager` (security rating 4 instead
-of 5), because the Supervisor log cannot be read with a lower role.
+The app asks for the Supervisor role `manager`, because the Supervisor log
+cannot be read with a lower role. This role lowers the security rating of the
+app by one point: Home Assistant shows 4.
 
 What it reads:
 
@@ -651,7 +651,7 @@ What it reads:
   counted and dropped: no text of the log is kept, only numbers per node and
   per hour, and the last address the Matter Server used for the node.
 
-What it never does: start, stop, restart, update or configure another app,
+What it does not do: start, stop, restart, update or configure another app,
 or read another app's options.
 
 If the log cannot be read, restarts are still detected by the app's live
@@ -685,7 +685,7 @@ the app log for `Connected to MQTT`.
 
 **"Matter Server unreachable".**
 The Matter Server app must be running. If you run it elsewhere, set
-`matter_server_url` (for example `ws://192.0.2.10:5580/ws`).
+`matter_server_url` (for example `ws://192.168.1.10:5580/ws`).
 
 **A border router has a technical name such as "Speaker #92ED".**
 Friendly names come from Google Cast or Apple AirPlay announcements at the same
@@ -697,7 +697,7 @@ That is a global outage: pings are paused for 5 minutes and these outages are
 not counted in the per-node statistics.
 
 **Does pinging drain batteries?**
-Recovery pings only target unavailable nodes; the periodic sweep never pings
+Recovery pings only target unavailable nodes; the periodic sweep does not ping
 battery-powered nodes.
 
 **Can I turn off a feature?**

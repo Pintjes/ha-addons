@@ -4,11 +4,17 @@ All notable changes to this app are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## Highlights of 2.9 to 2.35 (16 November 2026)
+## [2.40.19] - 2026-11-28
 
-- **Act on a node from its panel**: recovery attempt on an unavailable node, reset from a distance, pairing codes kept by the add-on (photo or scan of the label), pairing and naming a new device without leaving the page.
-- **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
-- **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
+### Changed
+
+- **Public texts cleaned up** (no change of behavior):
+  - corrected: lost nodes come back on their own only once the *Automatic recovery* switch is on (off by default); silent nodes need the *Passive contact* option;
+  - calmer wording (no "any brand", no "buttons you will not find elsewhere", fewer "never");
+  - one requirements section in the README and in the documentation; the two long rows of the events table shortened, with the current results of a recovery attempt;
+  - license badge and section in English;
+  - the app description ends with "Beta."; the sentence on the security rating made exact; one example address;
+  - the highlights of 2.9 to 2.35 moved under 2.35 in this changelog.
 
 ## [2.40.18] - 2026-11-27
 
@@ -193,6 +199,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **Panel of a border router put in order**, in the sections of the panel of a node (they fold, kept in the browser): on top its state, Thread network and role; then **OMR prefix** (shown once: the fixed prefix, anchored since, before / since side by side; another border router: the prefix it announces), **Stability** (detaches of the last day and the list of the last 7 days together), **Network** (same subnet, primary, last contact, radio over USB/IP), the nodes that go through it or are attached to it (only when there are some), technical details. A small "i" says what "End device" and "Primary" mean for a border router. "Remove" says what it does ("Remove from the list"), sits at the bottom and only shows for an offline border router (it is confirmed, as before).
 - **Border router cards**: one grid, same width, the same lines in every card (name; role; seen when and radio link), the fixed OMR prefix as a badge under them on the card of Home Assistant: "OMR forced: On" (or "Off" when it is not in place), the same words in the panel beside the prefix. Same colors and text sizes as before.
+
+## Highlights of 2.9 to 2.35 (16 November 2026)
+
+- **Act on a node from its panel**: recovery attempt on an unavailable node, reset from a distance, pairing codes kept by the add-on (photo or scan of the label), pairing and naming a new device without leaving the page.
+- **A node panel in sections**: facts and everyday actions on top, then signal, pairing, history and technical details, each one folding.
+- **Robustness** (after an audit): files written whole or not at all, a sweep that no longer stops at one node, a reset checked with the device, threads that start again after an error, tests in the repository run by the CI.
 
 ## [2.35.2] - 2026-11-17
 
