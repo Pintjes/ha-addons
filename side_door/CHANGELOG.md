@@ -4,6 +4,16 @@ All notable changes to Side Door are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.8.2] - 2026-11-28
+
+### Changed
+
+- Shorter, calmer texts: the description of the app (now marked beta), the
+  descriptions of the `apps` and `auto_settings` options (the details are in the
+  Documentation tab), the README (no argument said twice, links that do not
+  depend on where it is read) and the documentation (outdated note on version
+  1.10 removed). No change to how the apps are relayed.
+
 ## [2.8.1] - 2026-11-27
 
 ### Changed

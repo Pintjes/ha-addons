@@ -141,9 +141,7 @@ What detection cannot do:
   keep writing it.
 - An app that counts every request sees 1 to 4 more at each start.
 
-A target set with `target_url` takes the default settings. Up to version
-1.10, `rewrite_paths`, `inject_script` and `hide_proxy` were options of
-Side Door as a whole; they are now settings of each app.
+A target set with `target_url` takes the default settings.
 
 An entry can have `headers`, sent to the app with every request. They are
 written `Name: value` and separated by ` | `. This is for an app behind a

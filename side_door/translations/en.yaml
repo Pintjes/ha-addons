@@ -5,13 +5,13 @@ configuration:
     description: "For a single app: the address Home Assistant uses to reach it, for example http://192.168.1.10:8000."
   apps:
     name: Several apps
-    description: "One entry per app, with the name shown on its tab and its address. Only these two are needed: a setting left out takes its default (the Log tab says each setting and whether it is set or default). Optional 'start': the page the tab opens on, when it is not the root of the app (web/index.html for Plex). Optional 'headers': headers sent to the app with every request, written 'Name: value' and separated by ' | ', for an app behind a gate that lets a token in. Optional 'hidden': the app is put aside, it has no tab and is not loaded. Optional, for apps that need them: 'rewrite' (on by default: off for an app that already handles the X-Ingress-Path header), 'inject_script' (on by default, needed by apps that build their addresses in JavaScript: off for an app that behaves badly with it), 'hide_proxy' (for an app that asks for a login through Side Door but not on the local network), 'verify_tls' (auto by default: the certificate of an https address is checked when the app is given by a name, not by an IP address; on or off to decide). With two apps or more, the panel shows a row of tabs. When this list is filled, the address above is ignored."
+    description: "One entry per app: the name of its tab and its address are enough, and when this list is filled the address above is ignored. The other settings are explained in the Documentation tab."
   rewrite_prefixes:
     name: More texts to rewrite
     description: "Advanced. Text found right before a path starting with / that Side Door does not rewrite by itself, for example data-url=\"."
   auto_settings:
     name: Automatic detection
-    description: "At each start, Side Door looks at each app (a few plain GET requests, no cookie, no login) and finds the start page when the root of the app redirects to it. apply (default): the start page found is used, unless 'start' is set. report: only said in the Log tab. off: no request. hide_proxy, headers and verify_tls are never set automatically, only suggested in the Log tab."
+    description: "Looks for the start page of each app at each start: apply (default) uses it, report only writes it in the Log tab, off sends no request. hide_proxy, headers and verify_tls are never set automatically (see the Documentation tab)."
   max_body_mb:
     name: Largest upload (MB)
     description: Largest file that can be sent to the app.

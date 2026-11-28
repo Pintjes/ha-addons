@@ -48,14 +48,12 @@ opened in HTTPS. Through the ingress, the browser only talks to Home Assistant.
 No port, no tunnel, no DNS record for the app: it sits behind the Home
 Assistant login.
 
-**3. Works with apps that know nothing about ingress.**
-Links, redirections and cookies are rewritten for the ingress path, WebSockets
-are relayed, and the headers the app checks (`Host`, `Origin`) are the ones it
-expects.
+**3. Meant for apps that know nothing about ingress.**
+The rewriting above is made for them, and the headers they check (`Host`,
+`Origin`) are the ones they expect.
 
 ## Also
 
-- One option to set: the address of the app.
 - Several apps in the same panel, each on a tab with the name you choose, and
   settings of their own.
 - An eye to hide apps, and a link for each app to open it from a dashboard
@@ -63,10 +61,12 @@ expects.
 - A clear page when the app is off or the address is missing.
 - Optional rewrite rules and per-app settings for the stubborn cases.
 
-Full documentation: [DOCS.md](DOCS.md).
+Full documentation: the **Documentation** tab in Home Assistant, or
+[DOCS.md on GitHub](https://github.com/Pintjes/ha-addons/blob/main/side_door/DOCS.md).
 
 ## License
 
-[GPL-3.0-or-later](LICENSE) © 2026 Pintjes. Version 2.8.0 was published under a
-proprietary license; 2.8.1 and the following versions are under
-GPL-3.0-or-later, like the versions before 2.8.0.
+[GPL-3.0-or-later](https://github.com/Pintjes/ha-addons/blob/main/side_door/LICENSE)
+© 2026 Pintjes. Version 2.8.0 was published under a proprietary license; 2.8.1
+and the following versions are under GPL-3.0-or-later, like the versions before
+2.8.0.
