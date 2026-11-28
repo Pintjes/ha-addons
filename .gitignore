@@ -1,2 +1,6 @@
 __pycache__/
 *.pyc
+
+# Development notes, kept out of the repository
+/CLAUDE.md
+*/CLAUDE.md
