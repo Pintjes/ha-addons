@@ -6,10 +6,12 @@ device is attached again by itself as soon as it is back. Made for Home Assistan
 virtual machine that has no USB (Hyper-V on Windows 11 Pro), with a radio such as the
 Home Assistant Connect ZBT-2 plugged into the host.
 
-> **Beta.** The app loads a kernel module and writes to `/sys`: it keeps the `SYS_ADMIN` and
-> `SYS_MODULE` rights, but no longer asks for full access to the devices, so **Protection mode
-> can stay on** (0.4.0). It has its own AppArmor profile, `apparmor.txt`, in *complain* mode for
-> now: it only logs what it would refuse, nothing is blocked.
+> **Beta.** The app loads a kernel module and writes to `/sys`. It asks for the `NET_ADMIN`,
+> `SYS_ADMIN`, `SYS_MODULE` and `SYS_RAWIO` rights (`SYS_ADMIN` and `SYS_MODULE` are the ones it
+> uses: attach through `/sys`, load `vhci-hcd`; the other two are kept for now) and the `manager`
+> role of the Supervisor (to restart the apps of `restart_addons`), but not full access to the
+> devices, so Protection mode can stay on. Its AppArmor profile, `apparmor.txt`, is in *complain*
+> mode for now: it only logs what it would refuse and blocks nothing, so it does not protect yet.
 
 ## How it works
 
@@ -24,24 +26,24 @@ Every `check_interval` seconds the app checks the link:
 - an attachment counts only once the device is really there (and its serial port, for a CDC ACM device such
   as the ZBT-2), within 15 s; else its port is detached and it is tried again. A port taken by a device that
   never appeared (`usbip port` does not show it, and the server then answers `Device busy (exported)`) is
-  detached too, at the start of the app and before any attachment (0.4.4);
+  detached too, at the start of the app and before any attachment;
 - server silent three checks in a row → the device is detached (a dead link would keep the
   port busy for a long time) and attached again when the server is back;
 - server silent for less than that (a single check is enough), then back → the device is detached and
   attached again all the same: after a virtual machine pause or a restart of usbipd the kernel may
-  never notice that the link is dead (0.4.2);
+  never notice that the link is dead;
 - Home Assistant's own clock jumps by more than 20 seconds (the virtual machine was paused, as Hyper-V
   does when Windows restarts with "Save": it is saved, then restored a minute later) → the device is
   detached at once, without waiting for the server, and attached again when it answers, then the apps
-  of `restart_addons` are restarted (0.4.2);
+  of `restart_addons` are restarted;
 - server back after a silence or a pause → nothing is attached before it has answered for 30 s: right after
-  Windows starts, a device attached too early may never answer (0.4.6);
+  Windows starts, a device attached too early may never answer;
 - attached again after a loss → the apps of `restart_addons` are restarted (the
   OpenThread border router opens its radio only when it starts);
 - an OpenThread border router of `restart_addons` just restarted → its otbr-agent must answer on its REST API
   (port 8081) within 90 s. Else its radio hangs: the device is detached, which frees the border router stuck on
   it, and attached again after 30 s, then 60, 120 and 300 s; after 4 tries the log says to restart the system
-  of Home Assistant. Nothing is done as long as that API has never answered since the start of the app (0.4.6);
+  of Home Assistant. Nothing is done as long as that API has never answered since the start of the app;
 - attached for the first time (start of Home Assistant) → those of them that already run,
   or are in error, are restarted once: they may have started before the device was there.
 
@@ -86,17 +88,20 @@ password.
 | Option | |
 |---|---|
 | `server` | address (or name) of the computer that shares the device |
+| `server_port` | USB/IP port of that computer; empty: 3240 |
 | `devices` | one entry per device: `name`, and `hardware_id` (`VID:PID`, recommended: the USB port can change) or `bus_id` |
 | `check_interval` | seconds between two checks (10) |
 | `restart_addons` | apps restarted after the device is attached again, e.g. `core_openthread_border_router` |
 | `language` | `en` or `fr` |
+| `debug` | more details in the log |
 
-`omr_prefix`, `omr_preference` and `otbr_addon` of 0.2.x are no longer used: see below.
+`omr_prefix`, `omr_preference` and `otbr_addon` are no longer used (the fixed OMR prefix moved to
+Thread Anchor): see below.
 
 Start the app: the log says `ZBT-2: attached (… 2-3)`. If it says `Cannot remount /sys
 writable`, turn **Protection mode** off in the Info tab and start it again, then tell us.
-An app installed before 0.4.0 keeps the Protection mode it had (off): turn it on in the Info
-tab when you want to try it.
+An app installed from an older version, which needed full access, keeps the Protection mode it
+had (off): turn it on in the Info tab when you want to try it.
 
 ## 3. The radio: OpenThread Border Router
 
@@ -108,9 +113,10 @@ credentials), then **Settings → Thread → join**.
 
 ## 4. A stable OMR prefix: Thread Anchor
 
-The fixed OMR prefix of 0.2.x (`omr_prefix`) moved to its own app,
-[Thread Anchor](../thread_anchor/): it serves any OpenThread border router, with or without
-USB/IP. Coming from 0.2.x: set the same prefix in Thread Anchor, check that its *OMR prefix
+The fixed OMR prefix of the first versions (`omr_prefix`) moved to its own app,
+[Thread Anchor](https://github.com/Pintjes/ha-addons/tree/main/thread_anchor): it serves any
+OpenThread border router, with or without USB/IP. With `omr_prefix` still set: set the same
+prefix in Thread Anchor, check that its *OMR prefix
 anchored* entity is on, then empty `omr_prefix` here (a filled one only gives a warning in the
 log now). USB/IP Link no longer needs the Docker API.
 

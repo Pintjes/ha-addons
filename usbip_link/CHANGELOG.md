@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.7] - 2026-11-28
+
+### Docs
+
+- License stated the same way everywhere: versions 0.1.0–0.2.0 were published under MIT and versions
+  0.2.1–0.4.2 under GPL-3.0-or-later (the presentation page and the 0.4.3 entry below only said GPL);
+  license badge in English.
+- The four kernel rights the app asks for are listed (`NET_ADMIN`, `SYS_ADMIN`, `SYS_MODULE`, `SYS_RAWIO`),
+  with the `manager` role; the AppArmor profile is said to be in complain mode, so not a protection yet.
+- `server_port` and `debug` added to the table of options; version numbers taken out of the documentation
+  (this changelog keeps them); links to the other apps made absolute; calmer presentation page.
+- No change to the behaviour.
+
 ## [0.4.6] - 2026-11-27
 
 ### Fixed
@@ -48,8 +61,8 @@
 ### Changed
 
 - License changed: proprietary from this version (© 2026 Pintjes, all rights reserved, end user license
-  agreement in `LICENSE`, French text and English translation); earlier versions stay under
-  GPL-3.0-or-later. No change to the behaviour of the add-on.
+  agreement in `LICENSE`, French text and English translation); earlier versions keep their license
+  (0.1.0–0.2.0: MIT; 0.2.1–0.4.2: GPL-3.0-or-later). No change to the behaviour of the add-on.
 
 ## [0.4.2] - 2026-11-20
 
