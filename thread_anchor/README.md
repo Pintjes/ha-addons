@@ -8,26 +8,25 @@
   <img src="https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-informational" alt="Architectures">
   <img src="https://img.shields.io/badge/status-beta-orange" alt="Status: beta">
   <a href="https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml"><img src="https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/Pintjes/ha-addons/blob/main/thread_anchor/LICENSE"><img src="https://img.shields.io/badge/licence-propri%C3%A9taire-lightgrey" alt="Licence : propriétaire"></a>
+  <a href="https://github.com/Pintjes/ha-addons/blob/main/thread_anchor/LICENSE"><img src="https://img.shields.io/badge/license-proprietary-lightgrey" alt="License: proprietary"></a>
 </p>
 
 > **Beta.** Thread Anchor reaches the OpenThread border router through the
 > Docker API: **Protection mode** must be turned off.
 
 **Thread Anchor keeps your Thread network on one OMR prefix.** The OpenThread
-border router of Home Assistant anchors it, so the Google, Apple or Amazon
-border routers of the house stop moving it — and your Matter devices stop
-dropping out.
+border router of Home Assistant anchors it, so your Matter devices are less
+likely to drop out when another border router (Google, Apple, Amazon…)
+changes its prefix.
 
 ## Why this app
 
-**1. Matter devices that drop out every day.**
+**1. Matter devices that drop out.**
 Every Thread device has an address in the OMR prefix of the network, chosen
 among the prefixes the border routers publish. Some border routers (Google TV,
 Nest Hub…) replace theirs now and then: the whole network moves to another
 prefix, and Matter devices become unavailable until they are found again at
-their new address. On the network this app was made for, that was **7
-different OMR prefixes in 3 days**.
+their new address. On one network, that was **7 different OMR prefixes in 3 days**.
 
 **2. One prefix, favored by every border router.**
 Thread Anchor gives the Home Assistant border router a prefix with a **high**
@@ -46,13 +45,15 @@ moment it is set. The *Favored OMR prefix* entity (or Mesh Guardian) shows it.
   routers follow.
 - Entities on MQTT: *OMR prefix anchored* (on / off, with the reason),
   *Favored OMR prefix* and *Thread role* (the role of the border router in the
-  network, shown only, never changed). Read by [Mesh Guardian](../mesh_guardian/).
+  network, shown only, never changed). Read by [Mesh Guardian](https://github.com/Pintjes/ha-addons/tree/main/mesh_guardian).
 - Without a prefix set, it only watches: a safe way to look first.
-- Works with any radio of the OpenThread Border Router app (ZBT-1, ZBT-2,
-  Yellow…), plugged in directly or through [USB/IP Link](../usbip_link/).
+- Should work with any OpenThread radio (tested with ZBT-2) used by the
+  OpenThread Border Router app, plugged in directly or through
+  [USB/IP Link](https://github.com/Pintjes/ha-addons/tree/main/usbip_link).
 
-Full documentation: [DOCS.md](DOCS.md).
+Full documentation: see the Documentation tab.
 
 ## License
 
-© 2026 Pintjes. All rights reserved. See [LICENSE](LICENSE).
+Proprietary, © 2026 Pintjes: see the [EULA](LICENSE) (French text prevails, English translation included).
+Versions before 0.1.14 were published under GPL-3.0-or-later and keep that license.

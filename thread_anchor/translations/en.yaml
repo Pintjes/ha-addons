@@ -8,7 +8,7 @@ configuration:
     description: "/64 prefix the border router is kept on. Take the one the network uses now (Mesh Guardian shows it, or the Favored OMR prefix entity): the devices keep their addresses. Empty: the border router is only watched."
   omr_preference:
     name: "Preference"
-    description: "high (default) or med: above the prefixes the border routers generate themselves (low)."
+    description: "high (default), med or low. high and med are above the prefixes the border routers generate themselves (low)."
   otbr_addon:
     name: "Border router app"
     description: "Slug of the OpenThread Border Router app."

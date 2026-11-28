@@ -1,5 +1,22 @@
 # Changelog
 
+All notable changes to this app are documented here.
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+and this project adheres to [Semantic Versioning](https://semver.org/).
+
+## [0.1.16] - 2026-11-28
+
+### Changed
+
+- Documentation cleaned up, no change in behavior: the MQTT reference (state fields, hourly link statistics,
+  known nodes, node diagnostic, radio chip latency) moved from the documentation to `API.md` in the
+  repository; license badge and section in English; more careful wording about the supported radios and the effect on Matter devices;
+  links that work outside the repository.
+
+### Fixed
+
+- The preference option now says that `low` is accepted too, and the table of options lists `debug`.
+
 ## [0.1.15] - 2026-11-27
 
 ### Changed
@@ -14,6 +31,7 @@
 - License changed: proprietary from this version (end user license agreement in `LICENSE`, French text
   prevailing, with an English translation; © 2026 Pintjes. All rights reserved); earlier versions stay under
   GPL-3.0-or-later. No change in behavior.
+
 ## [0.1.13] - 2026-11-22
 
 ### Changed
@@ -27,6 +45,7 @@
 
 - `error_kind` in the state, next to `error`: `exec_failed`, `timeout`, `access_denied`, `not_found`, `other`,
   `no_answer`, `too_old`; `null` when there is no error. `error` stays a string, so readers that copy it keep working.
+
 ## [0.1.12] - 2026-11-17
 
 ### Added

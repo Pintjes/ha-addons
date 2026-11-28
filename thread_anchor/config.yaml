@@ -1,11 +1,11 @@
 name: Thread Anchor
-version: "0.1.15"
+version: "0.1.16"
 slug: thread_anchor
 url: https://github.com/Pintjes/ha-addons
 description: >-
   Keeps your Thread network on one OMR prefix: the OpenThread border router of Home Assistant
-  anchors it, so Google, Apple or Amazon border routers stop moving it and Matter devices stop
-  dropping out. Beta.
+  anchors it, so Matter devices are less likely to drop out when another border router changes
+  its prefix. Beta.
 arch:
   - amd64
   - aarch64
