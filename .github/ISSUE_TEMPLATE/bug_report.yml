@@ -4,27 +4,31 @@ labels: [bug]
 body:
   - type: markdown
     attributes:
-      value: Thanks for taking the time to report a problem! Please remove any personal information (names, addresses) from logs before posting.
+      value: Thanks for taking the time to report a problem! Please remove any personal information (names, addresses, passwords, tokens) before posting.
   - type: dropdown
     id: addon
     attributes:
-      label: Add-on
+      label: App
       options:
         - Mesh Guardian
+        - Thread Anchor
+        - Voice Agent Bridge
+        - Side Door
+        - USB/IP Link
     validations:
       required: true
   - type: input
     id: version
     attributes:
-      label: Add-on version
-      placeholder: "1.0.0"
+      label: App version
+      placeholder: "x.y.z"
     validations:
       required: true
   - type: input
     id: ha
     attributes:
       label: Home Assistant version
-      placeholder: "2026.11.0"
+      placeholder: "year.month.patch"
   - type: textarea
     id: what
     attributes:
@@ -35,16 +39,17 @@ body:
   - type: textarea
     id: setup
     attributes:
-      label: Your setup
-      description: Border routers (brand / number), approximate number of Matter nodes, Matter Server version.
+      label: Your setup (optional)
+      description: Anything about your installation that may matter, such as the devices, the web app or the hardware concerned.
   - type: textarea
     id: log
     attributes:
-      label: Add-on log
-      description: The relevant lines of the add-on log (Settings → Add-ons → Mesh Guardian → Log).
+      label: App log
+      description: "The relevant lines of the log of the app (`Settings → Apps → <app> → Log`)."
       render: text
   - type: textarea
     id: config
     attributes:
-      label: Add-on configuration
+      label: App configuration
+      description: Remove passwords, tokens and personal addresses.
       render: yaml

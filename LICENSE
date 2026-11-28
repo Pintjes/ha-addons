@@ -1,19 +1,14 @@
-Chaque add-on est sous sa propre licence : voir le fichier LICENSE de son dossier.
+Home Assistant apps by Pintjes
+© 2026 Pintjes
 
-© 2026 Pintjes. Tous droits réservés.
+Each app is under its own license: see the LICENSE file of its folder.
 
-Les versions publiées avant le changement de licence de chaque add-on l'ont été
-sous la licence GPL-3.0-ou-ultérieure et restent régies par cette licence (voir
-le CHANGELOG de l'add-on et l'article « Versions antérieures » de son LICENSE).
+- Side Door: open source, GPL-3.0-or-later.
+- Mesh Guardian, Thread Anchor, USB/IP Link and Voice Agent Bridge:
+  proprietary, all rights reserved, under the end user license agreement of
+  their folder (French text, which prevails, with an English translation).
 
-----------------------------------------------------------------------------
-English translation (the French text prevails)
-----------------------------------------------------------------------------
-
-Each add-on is under its own license: see the LICENSE file of its folder.
-
-© 2026 Pintjes. All rights reserved.
-
-The versions published before the license change of each add-on were published
-under the GPL-3.0-or-later license and remain governed by that license (see the
-CHANGELOG of the add-on and the "Earlier versions" article of its LICENSE).
+Versions already published keep the license they were published under. Before
+its license change, each app was under GPL-3.0-or-later, except USB/IP Link
+0.1.0 to 0.2.0, which were under the MIT license. Side Door 2.8.0 was published
+under a proprietary license. See the CHANGELOG and the LICENSE file of each app.

@@ -5,9 +5,13 @@ body:
   - type: dropdown
     id: addon
     attributes:
-      label: Add-on
+      label: App
       options:
         - Mesh Guardian
+        - Thread Anchor
+        - Voice Agent Bridge
+        - Side Door
+        - USB/IP Link
     validations:
       required: true
   - type: textarea

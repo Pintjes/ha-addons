@@ -4,8 +4,7 @@
 
 [![Add repository to my Home Assistant][repo-badge]][repo-link]
 [![CI][ci-badge]][ci-link]
-[![Licence : propriétaire, sauf Side Door][license-badge]][license-link]
-[![Side Door: GPL-3.0][sd-license-badge]][sd-license-link]
+[![License: proprietary, Side Door GPL-3.0+][license-badge]][license-link]
 
 App repository for [Home Assistant](https://www.home-assistant.io/).
 
@@ -13,11 +12,11 @@ App repository for [Home Assistant](https://www.home-assistant.io/).
 
 | | App | Version | Description |
 |:-:|---|:-:|---|
-| <img src="mesh_guardian/icon.png" width="48" alt=""> | **[Mesh Guardian](mesh_guardian/)** *(beta)* | ![version][mg-version] | Keeps your Thread / Matter devices online: automatic recovery of lost nodes, a live table of every node, border router monitoring and radio advice. |
-| <img src="thread_anchor/icon.png" width="48" alt=""> | **[Thread Anchor](thread_anchor/)** *(beta)* | ![version][ta-version] | Keeps your Thread network on one OMR prefix: no more Matter devices dropping out when Google, Apple or Amazon border routers change theirs. |
-| <img src="voice_agent_bridge/icon.png" width="48" alt=""> | **[Voice Agent Bridge](voice_agent_bridge/)** *(beta)* | ![version][vab-version] | Talk to Claude through Assist and your voice satellites, with your Claude plan (no API key), the full Home Assistant toolset and a conversation panel. |
-| <img src="side_door/icon.png" width="48" alt=""> | **[Side Door](side_door/)** | ![version][sd-version] | Opens a web app of your local network in the Home Assistant sidebar: HTTPS and Home Assistant login for free, nothing exposed to the Internet. |
-| <img src="usbip_link/icon.png" width="48" alt=""> | **[USB/IP Link](usbip_link/)** *(beta)* | ![version][ul-version] | A radio plugged into another computer (usbipd-win on Windows) for Home Assistant in a virtual machine without USB, attached again by itself after every restart of that computer, the OpenThread border router restarted on it. |
+| <img src="mesh_guardian/icon.png" width="48" alt=""> | **[Mesh Guardian](mesh_guardian/)** *(beta)* | ![version][mg-version] | Watches your Thread / Matter network: a table of the nodes, border router monitoring, radio advice and optional recovery of lost nodes. |
+| <img src="thread_anchor/icon.png" width="48" alt=""> | **[Thread Anchor](thread_anchor/)** *(beta)* | ![version][ta-version] | Keeps your Thread network on one stable OMR prefix, through the OpenThread border router. |
+| <img src="voice_agent_bridge/icon.png" width="48" alt=""> | **[Voice Agent Bridge](voice_agent_bridge/)** *(beta)* | ![version][vab-version] | Talk to Claude through Assist, voice satellites or a conversation panel, with your Claude plan (no API key). |
+| <img src="side_door/icon.png" width="48" alt=""> | **[Side Door](side_door/)** *(beta)* | ![version][sd-version] | Opens web apps of your local network in the Home Assistant sidebar, behind the Home Assistant login. |
+| <img src="usbip_link/icon.png" width="48" alt=""> | **[USB/IP Link](usbip_link/)** *(beta)* | ![version][ul-version] | Lets Home Assistant use a USB radio plugged into another computer, over the network (USB/IP). |
 
 ## Installation
 
@@ -42,10 +41,8 @@ Not affiliated with or endorsed by Anthropic, the Connectivity Standards Allianc
 [repo-link]: https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FPintjes%2Fha-addons
 [ci-badge]: https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml/badge.svg
 [ci-link]: https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml
-[license-badge]: https://img.shields.io/badge/licence-propri%C3%A9taire%20(sauf%20Side%20Door)-lightgrey
+[license-badge]: https://img.shields.io/badge/license-proprietary%2C%20Side%20Door%20GPL--3.0%2B-lightgrey
 [license-link]: https://github.com/Pintjes/ha-addons/blob/main/LICENSE
-[sd-license-badge]: https://img.shields.io/badge/Side%20Door-GPL--3.0-blue
-[sd-license-link]: https://github.com/Pintjes/ha-addons/blob/main/side_door/LICENSE
 [mg-version]: https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FPintjes%2Fha-addons%2Fmain%2Fmesh_guardian%2Fconfig.yaml&query=%24.version&label=&color=blue
 [vab-version]: https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FPintjes%2Fha-addons%2Fmain%2Fvoice_agent_bridge%2Fconfig.yaml&query=%24.version&label=&color=blue
 [sd-version]: https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FPintjes%2Fha-addons%2Fmain%2Fside_door%2Fconfig.yaml&query=%24.version&label=&color=blue
