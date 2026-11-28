@@ -1,8 +1,24 @@
 # Changelog
 
-All notable changes to this add-on are documented here.
+All notable changes to this app are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
+
+## [1.1.7] - 2026-11-28
+
+### Changed
+
+- Shorter, factual texts: README (license badge and License section in English,
+  the same format as the other apps), DOCS (full menu path to add the
+  repository, Conversation history in the contents, Log level in the options
+  table, License section replaced by a link to the README) and app description.
+- The Log level option has a description.
+
+### Fixed
+
+- The path of the house notes folder: it is named after the app ID
+  (`abcd1234_voice_agent_bridge`), not the hostname. The panel shows
+  `/addon_configs/<app ID>/CLAUDE.md`.
 
 ## [1.1.6] - 2026-11-27
 

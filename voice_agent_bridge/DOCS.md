@@ -11,6 +11,7 @@ controls your home, like a smart speaker.
 - [Installation](#installation)
 - [Connect it to Assist](#connect-it-to-assist)
 - [House notes](#house-notes)
+- [Conversation history](#conversation-history)
 - [Configuration](#configuration)
 - [Cost and speed](#cost-and-speed)
 - [Security](#security)
@@ -58,7 +59,8 @@ something for other people, use an API key.
 
 ## Installation
 
-1. In **Settings → Apps**, add the repository and install **Voice Agent Bridge**.
+1. **Settings → Apps → Install app → ⋮ → Repositories**: add
+   `https://github.com/Pintjes/ha-addons`, then install **Voice Agent Bridge**.
 2. Get a token. On any computer with [Claude Code](https://code.claude.com)
    installed, run:
 
@@ -89,7 +91,8 @@ something for other people, use an API key.
    - **Functions**: empty (`[]`). Claude uses its own tools.
 3. **Settings → Voice assistants → Add assistant**:
    - **Conversation agent**: the new agent;
-   - **Prefer handling commands locally**: on (simple commands stay instant);
+   - **Prefer handling commands locally**: on (simple commands are answered by
+     Home Assistant without Claude);
    - speech-to-text and text-to-speech: as you like.
 4. On the satellite device page, choose this assistant.
 
@@ -97,8 +100,10 @@ Say the wake word and ask: *"Which lights are on downstairs?"*
 
 ## House notes
 
-At first start the app creates `CLAUDE.md` in its configuration folder
-(`/addon_configs/<hostname>/CLAUDE.md`, reachable with the File editor or Samba).
+At first start the app creates `CLAUDE.md` in its configuration folder, reachable
+with the File editor or Samba. The folder is named after the app ID, for example
+`addon_configs/abcd1234_voice_agent_bridge/CLAUDE.md` (the app ID is not the
+hostname: it uses `_`, not `-`).
 Describe your home there: who lives there, how you name rooms and devices,
 habits, rules. The file is read at every request: changes apply immediately.
 Keep it short, every line is sent with every request.
@@ -163,6 +168,7 @@ conversations in **Logbook** and in **Settings → Voice assistants → ⋮ → 
 | History (days) | 90 | How long conversations stay in the panel. |
 | Recent exchanges | 20 | Last exchanges of every channel given to Claude with each request (0 = off). |
 | Recent exchanges (hours) | 24 | Only exchanges from the last hours. |
+| Log level | `info` | Detail of the app log: `debug`, `info`, `warning` or `error`. |
 
 ## Cost and speed
 
@@ -219,12 +225,4 @@ Please include the app version and the relevant lines of the log.
 
 ## License
 
-Proprietary, see the [license agreement](https://github.com/Pintjes/ha-addons/blob/main/voice_agent_bridge/LICENSE) (French, with an English translation). © 2026 Pintjes. All rights reserved.
-Versions before 1.1.3 were published under GPL-3.0-or-later and stay under that license.
-
-Claude Code, which this app downloads when its image is built, is proprietary
-software of Anthropic subject to Anthropic's terms. The agent's answers and
-actions come with no guarantee: do not rely on it for safety, alarm or access control.
-
-> Voice Agent Bridge is an independent project, not affiliated with or endorsed by
-> Anthropic. Claude is a trademark of Anthropic, PBC.
+See the [License section of the README](https://github.com/Pintjes/ha-addons/blob/main/voice_agent_bridge/README.md#license).

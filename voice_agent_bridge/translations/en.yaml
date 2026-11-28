@@ -58,5 +58,6 @@ configuration:
     description: Only exchanges from the last hours are given.
   log_level:
     name: Log level
+    description: Detail of the app log, from debug (most) to error (least).
 network:
   8791/tcp: OpenAI-compatible endpoint (only needed outside Home Assistant)

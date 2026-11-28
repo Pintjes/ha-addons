@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-informational" alt="Architectures">
   <img src="https://img.shields.io/badge/status-beta-orange" alt="Status: beta">
   <a href="https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml"><img src="https://github.com/Pintjes/ha-addons/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/Pintjes/ha-addons/blob/main/voice_agent_bridge/LICENSE"><img src="https://img.shields.io/badge/licence-propri%C3%A9taire-lightgrey" alt="Licence : propriétaire"></a>
+  <a href="https://github.com/Pintjes/ha-addons/blob/main/voice_agent_bridge/LICENSE"><img src="https://img.shields.io/badge/license-proprietary-lightgrey" alt="License: proprietary"></a>
 </p>
 
 > **Beta.** Voice Agent Bridge has been tested on one installation only. It relies
@@ -21,17 +21,16 @@ answers out loud and runs your home.
 
 ## Why this app
 
-**1. Your Claude plan, no API key.**
-Already on Claude Pro or Max? Use it. Requests are counted on your plan's Agent SDK
-credit: nothing else to pay, no API key to manage. (An Anthropic API key works too.)
+**1. Your Claude plan or an API key.**
+Uses your Claude Pro or Max plan's Agent SDK credit, or an Anthropic API key.
 
-**2. Claude really understands your home.**
-Not only "turn on / turn off". Claude runs the official Claude Code agent with the
-full [ha-mcp](https://github.com/homeassistant-ai/ha-mcp) toolset: history,
-statistics, automation traces, logs, calendars, apps… It chains several steps,
-loads only the tools it needs (fast and cheap) and keeps the thread of the
-conversation. Ask *"why did the office heating stop last night?"* and it finds out.
-Simple commands still go to local intents first: instant and free.
+**2. The Home Assistant toolset.**
+Claude runs the official Claude Code agent with the
+[ha-mcp](https://github.com/homeassistant-ai/ha-mcp) tools: history, statistics,
+automation traces, logs, calendars, apps… It can chain several steps, loads only
+the tools it needs and keeps the thread of the conversation, for questions such as
+*"why did the office heating stop last night?"*. Simple commands go to local
+intents first and do not reach Claude.
 
 **3. Everything in one panel.**
 A **Claude** panel in the sidebar shows every conversation, whatever the source
@@ -57,12 +56,11 @@ Please include the app version and the relevant lines of the log.
 
 ## License
 
-Proprietary, see the [license agreement](https://github.com/Pintjes/ha-addons/blob/main/voice_agent_bridge/LICENSE) (French, with an English translation). © 2026 Pintjes. All rights reserved.
-Versions before 1.1.3 were published under GPL-3.0-or-later and stay under that license.
+Proprietary, © 2026 Pintjes: see the [EULA](https://github.com/Pintjes/ha-addons/blob/main/voice_agent_bridge/LICENSE)
+(French text prevails, English translation included). Versions before 1.1.3 were
+published under GPL-3.0-or-later and keep that license.
 
-Claude Code, which this app downloads when its image is built, is proprietary
-software of Anthropic subject to Anthropic's terms. The agent's answers and
-actions come with no guarantee: do not rely on it for safety, alarm or access control.
-
-> Voice Agent Bridge is an independent project, not affiliated with or endorsed by
-> Anthropic. Claude is a trademark of Anthropic, PBC.
+Claude Code, downloaded when the image is built, is Anthropic software under
+Anthropic's terms. The agent's answers and actions come with no guarantee: do not
+use it for safety, alarm or access control. Voice Agent Bridge is not affiliated
+with or endorsed by Anthropic; Claude is a trademark of Anthropic, PBC.

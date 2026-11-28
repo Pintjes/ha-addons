@@ -733,7 +733,7 @@ class Handler(BaseHTTPRequestHandler):
                     text = ""
                 shown = ("/config/" + str(notes.relative_to(HA_CONFIG_DIR))
                          if HA_CONFIG_DIR in notes.parents else
-                         "/addon_configs/<hostname>/" + notes.name)
+                         "/addon_configs/<app ID>/" + notes.name)
                 self._json(200, {"path": shown, "text": text})
             return
         if path == "/health":

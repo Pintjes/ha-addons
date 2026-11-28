@@ -1,10 +1,10 @@
 name: Voice Agent Bridge
-version: "1.1.6"
+version: "1.1.7"
 slug: voice_agent_bridge
 url: https://github.com/Pintjes/ha-addons
 description: >-
   Talk to Claude through Assist and your voice satellites, with your Claude
-  plan (no API key) and the full Home Assistant toolset. Beta.
+  plan or an API key and the Home Assistant tools of ha-mcp. Beta.
 arch:
   - amd64
   - aarch64

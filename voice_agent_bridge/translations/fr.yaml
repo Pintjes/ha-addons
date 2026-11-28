@@ -58,5 +58,6 @@ configuration:
     description: Seuls les échanges des dernières heures sont donnés.
   log_level:
     name: Niveau de journal
+    description: Niveau de détail du journal de l'app, de debug (le plus) à error (le moins).
 network:
   8791/tcp: Point d'accès compatible OpenAI (utile seulement hors de Home Assistant)
